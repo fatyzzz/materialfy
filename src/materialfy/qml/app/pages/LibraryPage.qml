@@ -148,6 +148,13 @@ Item {
     }
 
     // ---- Действия ----
+    // Наведение на карточку: страница строится в фоне, клик открывает мгновенно.
+    function prewarmEntry(e) {
+        if (!e || e.kind !== "playlist")
+            return
+        router.prewarmKeyed("playlist", { playlistId: e.id, playlistTitle: e.title ?? "", cover: e.cover ?? "" })
+    }
+
     function open(e) {
         const k = e.kind ?? ""
         if (k === "liked")
@@ -572,6 +579,7 @@ Item {
                                 onClicked: page.open(e)
                                 onPlayClicked: page._isPlaying(e) ? Player.togglePlay() : page.play(e)
                                 onMenuRequested: p => page.showMenu(e, p)
+                                onHoveredChanged: if (hovered) page.prewarmEntry(e)
                             }
                         }
                     }

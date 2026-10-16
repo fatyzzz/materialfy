@@ -312,6 +312,11 @@ Window {
 
                     Router {
                         id: router
+                        // settings/releases/liked строятся один раз и живут: первый вход инкубирует
+                        // (600–1200 мс), все следующие мгновенны. Параметрические (плейлисты,
+                        // артисты) — LRU-слоты в keepAliveSlots.
+                        keepAlive: ["home", "settings", "releases", "liked"]
+                        keepAliveSlots: 10
                         pages: ({
                             home: Qt.resolvedUrl("app/pages/HomePage.qml"),
                             search: Qt.resolvedUrl("app/pages/SearchPage.qml"),

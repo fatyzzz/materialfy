@@ -450,6 +450,7 @@ Page {
                         onClicked: page.openEntry(e)
                         onPlayClicked: page.playEntry(e)
                         onMenuRequested: p => page.showMenu(e, p)
+                        onHoveredChanged: if (hovered && e.kind === "playlist") router.prewarmKeyed("playlist", { playlistId: e.id, playlistTitle: e.title ?? "", cover: e.cover ?? "" })
                     }
                 }
                 Component {

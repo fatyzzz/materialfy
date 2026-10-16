@@ -231,7 +231,7 @@ Page {
             Layout.alignment: Qt.AlignLeft
             Layout.topMargin: 4
             visible: page.radarTracks !== null && page.radarTracks.count > page.shownTracks
-            text: page.allTracks ? I18n.t("Show less") : I18n.n(page.radarTracks.count, "All {0} track", "All {0} tracks")
+            text: page.radarTracks === null ? "" : page.allTracks ? I18n.t("Show less") : I18n.n(page.radarTracks.count, "All {0} track", "All {0} tracks")
             style: "text"
             onClicked: page.allTracks = !page.allTracks
         }

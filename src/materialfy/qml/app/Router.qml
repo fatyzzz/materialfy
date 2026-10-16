@@ -15,10 +15,16 @@ Item {
     readonly property string rootName: stack.length ? stack[0].name : ""
     readonly property Item currentItem: current ? current.item : null
 
-    // Страницы, которые живут между посещениями (без параметров): главная тяжёлая — сотни обложек,
-    // пересоздавать её при каждом возврате в раздел дорого и теряется прокрутка.
+    // Страницы, которые живут между посещениями. "home" — без параметров (главная тяжёлая — сотни
+    // обложек, терять прокрутку и пересоздавать её на каждый возврат дорого). keepAliveSlots — сколько
+    // страниц С параметрами (плейлисты, артисты) держать живыми по принципу LRU: повторное открытие
+    // того же плейлиста «туда-сюда» мгновенно и сохраняет прокрутку, без перестройки строк.
     property var keepAlive: ["home"]
-    property var _kept: ({})                // имя → живой экземпляр из keepAlive
+    // Строятся синхронно при первом входе (стартовый экран); остальные keepAlive — асинхронно.
+    property var keepAliveSync: ["home"]
+    property int keepAliveSlots: 6
+    property var _kept: ({})                // имя → живой экземпляр из keepAlive (без параметров)
+    property var _keptKeyed: []             // LRU: [{ key, name, item }], младшие в конце
 
     property var _components: ({})
     // Прогрев компиляции страниц: первое открытие каждой страницы компилирует её QML-цепочку
@@ -26,11 +32,15 @@ Item {
     // после старта, пока юзер на главной; при реальной навигации пауза, догрев после неё.
     // Один тик = одна страница: скролл главной не дёргается.
     property bool _prewarmed: false
+    // Порядок: сначала компиляция тяжёлых страниц (плейлист, библиотека), затем тихая сборка
+    // тех, что живут вечно (settings/liked/...): их экземпляры сразу переиспользуются при входе.
+    // Параметрические (плейлист, артист) инкубировать без props нельзя — держим только компиляцию.
     function _prewarm() {
         if (_prewarmed)
             return
         _prewarmed = true
-        prewarmTimer.names = Object.keys(pages).filter(n => keepAlive.indexOf(n) < 0)
+        const names = Object.keys(pages).filter(n => keepAlive.indexOf(n) < 0)
+        prewarmTimer.names = names.concat(keepAlive.filter(n => n !== "home" && _kept[n] === undefined))
         prewarmTimer.at = 0
         prewarmTimer.restart()
     }
@@ -50,13 +60,27 @@ Item {
                 return
             }
             const name = names[at++]
-            if (_components[name])
-                return
-            const comp = Qt.createComponent(pages[name])
-            if (comp.status === Component.Error)
-                console.error("Router prewarm:", comp.errorString())
-            else
-                _components[name] = comp
+            if (keepAlive.indexOf(name) >= 0 && _kept[name] === undefined) {
+                let comp = _components[name]
+                if (!comp) {
+                    comp = Qt.createComponent(pages[name])
+                    _components[name] = comp
+                }
+                if (comp.status === Component.Error) {
+                    console.error("Router prewarm:", comp.errorString())
+                    return
+                }
+                // Тихая сборка вечной страницы: невидимая, без push, сразу в _kept.
+                const item = comp.createObject(container, { router: root, width: container.width, height: container.height })
+                if (!item) {
+                    console.error("Router prewarm:", comp.errorString())
+                    return
+                }
+                item.width = Qt.binding(() => container.width)
+                item.height = Qt.binding(() => container.height)
+                item.visible = false
+                _kept[name] = item
+            }
         }
     }
     property var _leaving: []               // элементы, которые уничтожить после анимации
@@ -141,12 +165,21 @@ Item {
             kept.opacity = 0
             return { name: name, props: {}, item: kept }
         }
+        // keepAlive без живого экземпляра: home — синхронно (старт), остальные асинхронно —
+        // единственная сборка не должна фризить, дальше страница живёт вечно
+        // Страницы с параметрами: ключ = имя + props. Живой экземпляр с тем же ключом переиспользуем
+        // (инstant-возврат, скролл на месте); иначе строим инкубацией и кладём в LRU.
+        const key = name + "|" + JSON.stringify(props ?? {})
+        const keptKeyed = _takeKeptKeyed(key)
+        if (keptKeyed && !stack.some(e => e.item === keptKeyed)) {
+            keptKeyed.opacity = 0
+            return { name: name, props: props ?? {}, item: keptKeyed }
+        }
         // Размер — сразу при создании: страница, созданная нулевой ширины, тут же «дорастала» до настоящей,
         // и Behavior шапки (обложка, отступы), колонки альбома у строк и раскладки полсекунды анимировались
         // и перекладывались в каждом кадре перехода. Инкубации это касается так же — начальные width/height
         // и непрозрачность 0, чтобы недостроенная страница не мигнула, а binding цепляем уже на Ready.
-        if (keep) {
-            // Главная строится синхронно: одна дорогая сборка против асинхронной на каждый вход
+        if (keep && keepAliveSync.indexOf(name) >= 0) {
             const item = comp.createObject(container, Object.assign({ router: root, width: container.width, height: container.height },
                                                                     props ?? {}))
             if (!kept)
@@ -166,7 +199,7 @@ Item {
             container,
             Object.assign({ router: root, width: container.width, height: container.height }, props ?? {}, { opacity: 0 }),
             Qt.Asynchronous)
-        _pending = { name: name, props: props ?? {}, comp: comp, incubator: incubator, prev: currentItem, kind: kind }
+        _pending = { name: name, props: props ?? {}, comp: comp, incubator: incubator, prev: currentItem, kind: kind, keep: keepAlive.indexOf(name) >= 0 && Object.keys(props ?? {}).length === 0 }
         incubator.onStatusChanged = function() { _onIncubated(incubator) }
     }
 
@@ -191,7 +224,16 @@ Item {
         item.width = Qt.binding(() => container.width)
         item.height = Qt.binding(() => container.height)
         item.opacity = 0
+        if (p.keep && _kept[p.name] === undefined)
+            _kept[p.name] = item
+        _rememberKeyed(p, item)
         const entry = { name: p.name, props: p.props, item: item }
+        if (p.kind === "prewarm") {
+            // Тихий прогрев: страница скрыта в LRU, никакого стека и анимации.
+            item.visible = false
+            item.z = 0
+            return
+        }
         if (p.kind === "forward") {
             stack = stack.concat([entry])
             _animate(p.prev, item, "forward")
@@ -201,6 +243,49 @@ Item {
                 _leaving = _leaving.concat([p.prev])
             stack = [entry]
             _animate(p.prev, item, "fade")
+        }
+    }
+
+    // Прогрев параметрической страницы (наведение на карточку): строим инкубацией без push,
+    // результат сразу в LRU. Клик по карточке найдёт живой экземпляр — переход мгновенный.
+    function prewarmKeyed(name, props) {
+        if (_components[name] === undefined)
+            return
+        if (_pendingSame(name, props) || stack.some(e => _same(e, name, props)))
+            return
+        const key = name + "|" + JSON.stringify(props ?? {})
+        if (_takeKeptKeyed(key))
+            return
+        if (_pending !== null)
+            return                          // не перебиваем настоящий переход
+        const comp = _components[name] || Qt.createComponent(pages[name])
+        if (comp.status === Component.Error || comp.status === Component.Loading)
+            return
+        _components[name] = comp
+        _incubate(comp, name, props, "prewarm")
+    }
+
+    function _takeKeptKeyed(key) {
+        for (let i = 0; i < _keptKeyed.length; i++) {
+            if (_keptKeyed[i].key === key) {
+                const e = _keptKeyed[i]
+                _keptKeyed.splice(i, 1)
+                _keptKeyed.push(e)          // LRU: недавний — в конец
+                return e.item
+            }
+        }
+        return null
+    }
+
+    function _rememberKeyed(p, item) {
+        const key = p.name + "|" + JSON.stringify(p.props)
+        if (_takeKeptKeyed(key))
+            return                          // уже в LRU (не должно случиться, но безопасно)
+        _keptKeyed.push({ key: key, name: p.name, item: item })
+        while (_keptKeyed.length > keepAliveSlots) {
+            const evicted = _keptKeyed.shift()
+            if (!stack.some(e => e.item === evicted.item))
+                evicted.item.destroy()
         }
     }
 
@@ -291,7 +376,7 @@ Item {
                 root._out.y = 0
                 root._out.scale = 1
             }
-            const kept = Object.values(root._kept)
+            const kept = Object.values(root._kept).concat(root._keptKeyed.map(e => e.item))
             for (const item of root._leaving) {
                 if (kept.indexOf(item) < 0) {
                     item.destroy()
