@@ -3044,6 +3044,20 @@ impl Core {
         }
         let previous_uri = self.remote.as_ref().and_then(|remote| remote.state.item.as_ref().map(|item| item.uri.clone()));
         let previous_shuffle = self.remote.as_ref().map(|remote| remote.state.shuffle);
+        // трек без данных (сессия не ответила) — из уже известного: очередь или прошлый опрос его знают
+        let state = state.map(|mut state| {
+            if let Some(item) = state.item.as_mut()
+                && item.title.is_empty()
+                && let Some(known) = self.tracks.get(&item.uri).filter(|known| !known.title.is_empty())
+            {
+                let duration = item.duration_ms;
+                *item = known.clone();
+                if item.duration_ms <= 0 {
+                    item.duration_ms = duration;
+                }
+            }
+            state
+        });
         self.remote = state.map(|state| RemoteSnapshot { state, received_at: Instant::now() });
         if let (Some(previous), Some(current)) = (previous_shuffle, self.remote.as_ref().map(|remote| remote.state.shuffle))
             && previous != current
