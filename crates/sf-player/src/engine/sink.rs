@@ -155,6 +155,17 @@ struct AudioTarget {
     /// What the current output has queued but not played yet, for the audible clock.
     queued: Weak<Queued>,
     sample_rate: u32,
+    /// Latency the device reports for what it already took (mixer, Bluetooth), past our own queue.
+    clock: fastframe_audio::Clock,
+}
+
+/// The most device latency the audible position takes in, so an odd backend value cannot throw the lyrics far back.
+const DEVICE_LATENCY_CAP_MS: f64 = 400.0;
+
+/// Queued output plus what the device still holds, in track time (`speed` seconds of track per output second).
+fn backlog_in_track_time(output_ms: u64, device: Duration, speed: f64) -> u32 {
+    let device_ms = (device.as_secs_f64() * 1000.0).min(DEVICE_LATENCY_CAP_MS);
+    u32::try_from(((output_ms as f64 + device_ms) * speed.max(0.0)) as u64).unwrap_or(u32::MAX)
 }
 
 impl AudioControl {
@@ -292,6 +303,10 @@ impl AudioControl {
         target.sample_rate = sample_rate;
     }
 
+    fn register_clock(&self, clock: fastframe_audio::Clock) {
+        self.target.lock().unwrap_or_else(PoisonError::into_inner).clock = clock;
+    }
+
     /// How far the sound being heard is behind the packet librespot reports, in milliseconds.
     pub(crate) fn backlog_ms(&self) -> u32 {
         // диджей играет на 1.0×, без растяжения
@@ -311,7 +326,7 @@ impl AudioControl {
             return 0;
         }
         let output_ms = queued.frames().saturating_mul(1000) / rate;
-        u32::try_from((output_ms as f64 * speed.max(0.0)) as u64).unwrap_or(u32::MAX)
+        backlog_in_track_time(output_ms, target.clock.latency(), speed)
     }
 
     /// The outgoing track of a crossfade, for a skip or seek to stop too.
@@ -1254,6 +1269,7 @@ fn open_output(
         tail: None,
     };
     output.attach((mixer, sample_rate), control);
+    control.register_clock(output.device.clock());
     Ok(output)
 }
 
@@ -1982,6 +1998,15 @@ mod tests {
 
     /// The queue counts output frames; the track position moves `speed` seconds per
     /// output second, and the queue is the audio still to be heard.
+    #[test]
+    fn the_device_latency_adds_to_the_backlog_up_to_a_cap() {
+        let ms = Duration::from_millis;
+        assert_eq!(backlog_in_track_time(1_000, ms(0), 1.0), 1_000);
+        assert_eq!(backlog_in_track_time(1_000, ms(150), 1.0), 1_150);
+        assert_eq!(backlog_in_track_time(1_000, ms(150), 2.0), 2_300, "scaled by the speed like the queue");
+        assert_eq!(backlog_in_track_time(0, ms(5_000), 1.0), 400, "capped");
+    }
+
     #[test]
     fn the_backlog_is_the_queued_audio_in_track_time() {
         let control = AudioControl::new(DEFAULT_BUFFER_MS);
