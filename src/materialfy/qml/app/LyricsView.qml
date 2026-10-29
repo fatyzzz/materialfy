@@ -993,6 +993,29 @@ Item {
         readonly property real textWidth: label.implicitWidth
         readonly property real dur: Math.max(0.001, (modelData.e ?? 0) - (modelData.s ?? 0))
         readonly property bool held: dur >= 0.95 && txt.length <= 14
+
+        // Spicy: долгое слово рисуется по буквам, каждая со сдвигом по времени поднимается, растёт и светится.
+        // Только простые скрипты без составных знаков: для RTL, комбинируемых акцентов и эмодзи
+        // раскладка по буквам ломает формирование и ширину — там остаётся обычный label.
+        // Не меняется посреди слова, поэтому раскладка не прыгает.
+        readonly property bool lettered: root.spicy && root.motion && !Theme.lowPower
+            && root.fillMode === "word" && held && txt.length >= 3
+            && /^[A-Za-z\u00C0-\u024F\u0400-\u04FF'\u2019-]+$/.test(txt)
+        readonly property var letters: lettered ? Array.from(txt) : []
+        // Сила растёт с длительностью (корень после 2 с, куб до неё), как в Spicy Lyrics
+        readonly property real waveAmount: {
+            const x = Math.max(1.0, dur) / 2.0
+            return Math.min(1.2, (x > 1 ? Math.sqrt(x) : x * x * x) * 0.6)
+        }
+        // Импульс буквы i, 0..1..0: стартует внутри первых 40% слова и не переживает слово больше чем на 0.3 с
+        function letterPulse(i, n) {
+            const start = (modelData.s ?? 0) + (n > 1 ? i / (n - 1) : 0) * dur * 0.4
+            const end = Math.min(start + Math.max(1.0, dur), (modelData.e ?? 0) + 0.3)
+            if (end <= start)
+                return 0
+            const x = (root.pos - start) / (end - start)
+            return (x <= 0 || x >= 1) ? 0 : Math.sin(Math.PI * x)
+        }
         // На активной строке и во время 340 мс плавного выхода предыдущей строки (lineOutgoing)
         // заливка доходит до конца без мгновенного скачка при смене строки.
         readonly property real progress: {
@@ -1108,6 +1131,8 @@ Item {
             color: root.textColor
             // Неспетое слово на активной/выходящей строке затемняется нативно; спетое — полностью непрозрачно
             opacity: word.useWordShader ? (word.sweeping ? 1.0 : (word.progress >= 1 ? 1.0 : word.shaderDimAlpha)) : 1.0
+            // невидимый, но по-прежнему меряет: ширина слова не должна ждать Repeater букв
+            visible: !word.lettered
             transformOrigin: Item.Center
             scale: word.sungScale
 
@@ -1121,7 +1146,7 @@ Item {
                 }
             }
 
-            layer.enabled: word.sweeping
+            layer.enabled: word.sweeping && !word.lettered
             layer.smooth: true
             layer.effect: ShaderEffect {
                 readonly property real featherPx: word.fontSize * (root.spicy ? 0.72 : (root.karaoke ? 0.14 : 0.45))
@@ -1135,6 +1160,82 @@ Item {
                 property real dimAlpha: word.shaderDimAlpha
                 property real glow: word.glow
                 fragmentShader: root.fillShader
+            }
+        }
+        // Кернинг даёт advanceWidth префикса, а не сумма ширин отдельных букв
+        FontMetrics {
+            id: letterMetrics
+            font: label.font
+        }
+
+        Item {
+            id: lettersBox
+            visible: word.lettered
+            width: label.implicitWidth
+            height: word.rowH
+            anchors.verticalCenter: parent.verticalCenter
+            transformOrigin: Item.Center
+            scale: word.sungScale
+            transform: Translate {
+                y: word.sungLiftEm * word.fontSize
+                Behavior on y {
+                    enabled: !word.wordAnimating && root.motion && !Theme.lowPower
+                    NumberAnimation { duration: 105; easing.type: Easing.OutCubic }
+                }
+            }
+
+            Repeater {
+                model: word.letters
+
+                Text {
+                    id: letter
+                    required property string modelData
+                    required property int index
+                    readonly property real pulse: word.lettered && word.wordAnimating ? word.letterPulse(index, word.letters.length) : 0
+                    readonly property real centered: index - (word.letters.length - 1) / 2
+                    readonly property real overscan: Math.ceil(word.fontSize * 0.25)
+                    readonly property real fullWidth: Math.max(1, label.implicitWidth)
+                    readonly property real a: x / fullWidth
+                    readonly property real b: (x + implicitWidth) / fullWidth
+                    readonly property bool sweepingLetter: word.useWordShader
+                        && ((word.progress > 0 && word.progress < 1) || pulse > 0.005)
+
+                    x: letterMetrics.advanceWidth(word.txt.slice(0, index + 1)) - letterMetrics.advanceWidth(modelData)
+                    y: -overscan
+                    height: word.rowH + 2 * overscan
+                    topPadding: overscan
+                    bottomPadding: overscan
+                    verticalAlignment: Text.AlignVCenter
+                    text: modelData
+                    font.family: Theme.fontFamily
+                    font.pixelSize: word.fontSize
+                    font.weight: Theme.variableFont ? Font.Normal : Font.Bold
+                    font.variableAxes: Theme.fontAxes(word.fontSize, 700)
+                    color: root.textColor
+                    opacity: word.useWordShader ? (sweepingLetter ? 1.0 : (word.progress >= 1 ? 1.0 : word.shaderDimAlpha)) : 1.0
+                    transformOrigin: Item.Center
+                    scale: 1.0 + 0.07 * word.waveAmount * root.wordBounce * pulse
+
+                    transform: Translate {
+                        // Разлёт не больше ~0.07 em у края слова, чтобы не съедать пробел до следующего
+                        x: 0.07 * Math.min(1, word.waveAmount) * word.fontSize * (letter.centered / Math.max(1, word.letters.length / 2)) * letter.pulse
+                        y: -0.025 * word.waveAmount * word.fontSize * root.wordBounce * letter.pulse
+                    }
+
+                    layer.enabled: sweepingLetter
+                    layer.smooth: true
+                    layer.effect: ShaderEffect {
+                        // Та же граница, что у слова целиком, пересчитанная в локальные координаты буквы
+                        readonly property real featherWord: Math.max(0.005, Math.max(0.34, Math.min(0.62, word.fontSize * 0.72 / letter.fullWidth)) * root.highlightMultiplier)
+                        readonly property real edge: -featherWord + word.progress * (1 + 2 * featherWord)
+                        readonly property real span: Math.max(0.001, letter.b - letter.a)
+                        property real progress: (edge - letter.a) / span
+                        property real feather: featherWord / span
+                        property real dimAlpha: word.shaderDimAlpha
+                        property real glow: Math.max(word.glow, letter.pulse * 0.9 * word.waveAmount * root.highlightMultiplier)
+                        fragmentShader: root.fillShader
+                    }
+                }
             }
         }
     }
