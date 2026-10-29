@@ -614,7 +614,9 @@ Page {
         Label {
             Layout.fillWidth: true
             text: Auth.tokenStorage === "keyring"
-                  ? I18n.t("Permissions are stored in Windows Credential Manager. “Sign out” removes all three; the cache stays.")
+                  ? (Qt.platform.os === "windows"
+                        ? I18n.t("Permissions are stored in Windows Credential Manager. “Sign out” removes all three; the cache stays.")
+                        : I18n.t("Permissions are stored in the system keychain. “Sign out” removes all three; the cache stays."))
                   : I18n.t("Secret storage is unavailable: permissions last until the app closes. “Sign out” removes all three; the cache stays.")
             type: "bodySmall"
             color: Theme.fgSurfaceVariant
