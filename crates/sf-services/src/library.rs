@@ -561,12 +561,14 @@ impl State {
         if item.track_count > 0 {
             subtitle.push_str(&format!(" · {}", mf_i18n::n(item.track_count, "{0} track", "{0} tracks")));
         }
+        // DJ — не плейлист: у него нет списка треков, он только запускается (как кнопка)
+        let dj = item.uri == crate::data::home_feed::DJ_URI;
         LibraryEntry {
-            kind: "playlist".to_owned(),
+            kind: if dj { "dj".to_owned() } else { "playlist".to_owned() },
             id: item.playlist_id.clone(),
             uri: item.uri.clone(),
-            title: item.title.clone(),
-            subtitle,
+            title: if dj { "DJ".to_owned() } else { item.title.clone() },
+            subtitle: if dj { mf_i18n::t("Music and commentary picked for you").to_owned() } else { subtitle },
             cover: item.cover.clone(),
             covers: if item.cover.is_empty() { Vec::new() } else { vec![item.cover.clone()] },
             owner: item.owner.clone(),
@@ -3293,6 +3295,30 @@ mod tests {
 
     fn entry(kind: &str, title: &str, uri: &str) -> LibraryEntry {
         LibraryEntry { kind: kind.into(), title: title.into(), uri: uri.into(), ..Default::default() }
+    }
+
+    #[test]
+    fn the_dj_is_a_button_not_a_playlist() {
+        let state = State::default();
+        let times = HashMap::new();
+        let dj = PlaylistItem {
+            playlist_id: "37i9dQZF1EYkqdzj48dyYq".into(),
+            uri: crate::data::home_feed::DJ_URI.into(),
+            title: "DJ".into(),
+            owner: "Spotify".into(),
+            ..Default::default()
+        };
+        let entry = state.playlist_entry(&dj, "", &times);
+        assert_eq!(entry.kind, "dj", "it has no track list, so it only plays");
+        assert_eq!(entry.uri, crate::data::home_feed::DJ_URI);
+
+        let ordinary = PlaylistItem {
+            playlist_id: "p".into(),
+            uri: "spotify:playlist:p".into(),
+            title: "Mine".into(),
+            ..Default::default()
+        };
+        assert_eq!(state.playlist_entry(&ordinary, "", &times).kind, "playlist");
     }
 
     #[test]

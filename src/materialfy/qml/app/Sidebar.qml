@@ -67,6 +67,9 @@ Item {
         closeDrawer()
         if (kind === "folder")
             router.reset("folder", { folderId: entry.id, folderTitle: entry.title ?? "" })
+        else if (kind === "dj")
+            // DJ не плейлист: у него нет страницы со списком треков — только запуск
+            Player.playContext(entry.uri ?? "", "")
         else if (kind === "liked")
             router.reset("liked")
         else if (kind === "playlist")
@@ -419,7 +422,8 @@ Item {
                       : kind === "album" ? "album"
                       : kind === "artist" ? "person"
                       : kind === "show" ? "podcasts"
-                      : kind === "liked" ? "favorite" : "queue_music"
+                      : kind === "liked" ? "favorite"
+                      : kind === "dj" ? "graphic_eq" : "queue_music"
                 imageSource: folder ? "" : (modelData.cover ?? "")
                 // у папки справа — своя кнопка-стрелка (ниже); закреплённый — булавка
                 trailingIcon: !folder && modelData.pinned === true ? "push_pin" : ""

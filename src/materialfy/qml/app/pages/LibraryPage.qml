@@ -163,7 +163,10 @@ Item {
 
     function open(e) {
         const k = e.kind ?? ""
-        if (k === "liked")
+        // DJ — не плейлист: у него нет страницы, плитка просто запускает его
+        if (k === "dj")
+            play(e)
+        else if (k === "liked")
             router.push("liked")
         else if (k === "folder")
             router.push("folder", { folderId: e.id, folderTitle: e.title ?? "" })
