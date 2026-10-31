@@ -142,6 +142,9 @@ Page {
     // ---- Сцена «Радио» ----
     RadioOrbit {
         id: orbit
+        // сцена «Радио» видна по умолчанию; в настройках её можно скрыть — страница «Радио» и
+        // «Радио по треку» остаются
+        visible: Settings.homeRadioHidden !== true
         Layout.fillWidth: true
         Layout.topMargin: 8
         Layout.preferredHeight: implicitHeight

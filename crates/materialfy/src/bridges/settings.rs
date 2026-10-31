@@ -84,6 +84,8 @@ pub mod qobject {
         #[qproperty(QString, library_view, cxx_name = "libraryView", READ, WRITE = set_library_view, NOTIFY = library_view_changed)]
         #[qproperty(QString, library_sort, cxx_name = "librarySort", READ, WRITE = set_library_sort, NOTIFY = library_sort_changed)]
         #[qproperty(QString, home_hidden, cxx_name = "homeHidden", READ, WRITE = set_home_hidden, NOTIFY = home_hidden_changed)]
+        /// сцена «Радио» на главной
+        #[qproperty(bool, home_radio_hidden, cxx_name = "homeRadioHidden", READ, WRITE = set_home_radio_hidden, NOTIFY = home_radio_hidden_changed)]
         #[qproperty(i32, bitrate, READ, WRITE = set_bitrate, NOTIFY = bitrate_changed)]
         #[qproperty(bool, normalisation, READ, WRITE = set_normalisation, NOTIFY = normalisation_changed)]
         #[qproperty(bool, gapless, READ, WRITE = set_gapless, NOTIFY = gapless_changed)]
@@ -180,6 +182,7 @@ pub mod qobject {
         fn set_library_view(self: Pin<&mut Settings>, value: QString);
         fn set_library_sort(self: Pin<&mut Settings>, value: QString);
         fn set_home_hidden(self: Pin<&mut Settings>, value: QString);
+        fn set_home_radio_hidden(self: Pin<&mut Settings>, value: bool);
         fn set_bitrate(self: Pin<&mut Settings>, value: i32);
         fn set_normalisation(self: Pin<&mut Settings>, value: bool);
         fn set_gapless(self: Pin<&mut Settings>, value: bool);
@@ -347,6 +350,9 @@ pub mod qobject {
         #[qsignal]
         #[cxx_name = "homeHiddenChanged"]
         fn home_hidden_changed(self: Pin<&mut Settings>);
+        #[qsignal]
+        #[cxx_name = "homeRadioHiddenChanged"]
+        fn home_radio_hidden_changed(self: Pin<&mut Settings>);
         #[qsignal]
         #[cxx_name = "bitrateChanged"]
         fn bitrate_changed(self: Pin<&mut Settings>);
@@ -666,6 +672,7 @@ settings! {
     library_view: QString = LibraryView, set_library_view, library_view_changed;
     library_sort: QString = LibrarySort, set_library_sort, library_sort_changed;
     home_hidden: QString = HomeHidden, set_home_hidden, home_hidden_changed;
+    home_radio_hidden: bool = HomeRadioHidden, set_home_radio_hidden, home_radio_hidden_changed;
     bitrate: i32 = Bitrate, set_bitrate, bitrate_changed;
     normalisation: bool = Normalisation, set_normalisation, normalisation_changed;
     gapless: bool = Gapless, set_gapless, gapless_changed;

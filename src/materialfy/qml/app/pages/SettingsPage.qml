@@ -956,6 +956,12 @@ Page {
         }
 
         SettingRow {
+            title: I18n.t("Radio on Home")
+            description: I18n.t("The station scene at the top of Home. The Radio page and “Radio from this track” keep working")
+            Switch { checked: Settings.homeRadioHidden === false; onToggled: c => Settings.homeRadioHidden = !c }
+        }
+
+        SettingRow {
             title: I18n.t("Minimize to tray on close")
             description: I18n.t("Closing the window hides it in the tray and the music keeps playing. Quit from the tray menu or with Ctrl+Q")
             Switch { checked: Settings.closeToTray; onToggled: c => Settings.closeToTray = c }

@@ -369,5 +369,7 @@
   "Size of text and controls. Takes effect after restarting the app": "Размер текста и элементов. Применяется после перезапуска приложения",
   "Restart to apply the scale": "Перезапустить, чтобы применить масштаб",
   "The interface scale is read when the app starts. Apply now reopens the app at the new size.": "Масштаб интерфейса читается при запуске. «Применить» перезапустит приложение с новым размером.",
-  "Apply now": "Применить"
+  "Apply now": "Применить",
+  "Radio on Home": "«Радио» на главной",
+  "The station scene at the top of Home. The Radio page and “Radio from this track” keep working": "Сцена станций сверху главной. Страница «Радио» и «Радио по треку» продолжат работать"
 }

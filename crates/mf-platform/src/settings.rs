@@ -99,6 +99,8 @@ pub enum SettingKey {
     LibrarySort,
     /// скрытые полки главной через запятую (quick,recent,madeForYou,podcasts,topArtists,topTracks)
     HomeHidden,
+    /// сцена «Радио» на главной
+    HomeRadioHidden,
     // Воспроизведение (librespot)
     /// 96 | 160 | 320 кбит/с (смена — перезапуск движка)
     Bitrate,
@@ -185,7 +187,7 @@ pub enum SettingType {
 }
 
 impl SettingKey {
-    pub const ALL: [SettingKey; 82] = [
+    pub const ALL: [SettingKey; 83] = [
         SettingKey::ThemeMode,
         SettingKey::SchemeVariant,
         SettingKey::AccentFromCover,
@@ -233,6 +235,7 @@ impl SettingKey {
         SettingKey::LibraryView,
         SettingKey::LibrarySort,
         SettingKey::HomeHidden,
+        SettingKey::HomeRadioHidden,
         SettingKey::Bitrate,
         SettingKey::Normalisation,
         SettingKey::Gapless,
@@ -321,6 +324,7 @@ impl SettingKey {
             LibraryView => "libraryView",
             LibrarySort => "librarySort",
             HomeHidden => "homeHidden",
+            HomeRadioHidden => "homeRadioHidden",
             Bitrate => "bitrate",
             Normalisation => "normalisation",
             Gapless => "gapless",
@@ -423,6 +427,7 @@ impl SettingKey {
             LibraryView => Str("grid".into()),
             LibrarySort => Str("recent".into()),
             HomeHidden => Str(String::new()),
+            HomeRadioHidden => Bool(false),
             Bitrate => Int(320),
             Normalisation => Bool(true),
             Gapless => Bool(true),
@@ -1546,7 +1551,7 @@ mod tests {
             "animations", "lowPowerMode", "gpuPreference", "rightPanelOpen", "rightPanelTab", "sidebarCollapsed", "windowWidth",
             "windowHeight", "windowX", "windowY", "windowMaximized", "closeToTray", "wheelStep", "floatingPlayer", "floatingPlayerStyle",
             "taskbarWidgetPos", "floatingKeyHints", "libraryView",
-            "librarySort", "homeHidden", "bitrate", "normalisation", "gapless", "autoplay", "volume", "audioDevice",
+            "librarySort", "homeHidden", "homeRadioHidden", "bitrate", "normalisation", "gapless", "autoplay", "volume", "audioDevice",
             "audioCache", "audioCacheMb", "playbackAuthorized", "deviceName", "webClientId", "apiLimitTipDismissed", "proxyMode", "proxyHost",
             "proxyPort", "proxyUsername", "coversBypassProxy", "pins", "hiddenTracks", "radioSeeds", "language", "uiScale", "autoUpdateCheck",
             "updateChannel", "skippedVersion",
