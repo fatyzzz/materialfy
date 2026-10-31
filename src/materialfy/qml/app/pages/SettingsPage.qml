@@ -958,7 +958,21 @@ Page {
         SettingRow {
             title: I18n.t("Radio on Home")
             description: I18n.t("The station scene at the top of Home. The Radio page and “Radio from this track” keep working")
-            Switch { checked: Settings.homeRadioHidden === false; onToggled: c => Settings.homeRadioHidden = !c }
+            Switch { checked: Settings.homeRadioHidden !== true; onToggled: c => Settings.homeRadioHidden = !c }
+        }
+
+        SettingRow {
+            title: I18n.t("Sidebar list")
+            description: Settings.sidebarLibrary === true
+                         ? I18n.t("What you added or played last: playlists, albums, artists, podcasts and Liked Songs")
+                         : I18n.t("Your playlist tree, folders included")
+            ButtonGroup {
+                model: [I18n.t("Playlists"), I18n.t("Library")]
+                autoSelect: false
+                size: page.compact ? "xs" : "s"
+                currentIndex: Settings.sidebarLibrary === true ? 1 : 0
+                onActivated: i => Settings.sidebarLibrary = i === 1
+            }
         }
 
         SettingRow {

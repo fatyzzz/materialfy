@@ -371,5 +371,8 @@
   "The interface scale is read when the app starts. Apply now reopens the app at the new size.": "A escala da interface é lida quando o app inicia. Aplicar reabre o app no novo tamanho.",
   "Apply now": "Aplicar agora",
   "Radio on Home": "Rádio na tela inicial",
-  "The station scene at the top of Home. The Radio page and “Radio from this track” keep working": "A cena de estações no topo da tela inicial. A página Rádio e “Rádio desta faixa” continuam funcionando"
+  "The station scene at the top of Home. The Radio page and “Radio from this track” keep working": "A cena de estações no topo da tela inicial. A página Rádio e “Rádio desta faixa” continuam funcionando",
+  "Sidebar list": "Lista da barra lateral",
+  "What you added or played last: playlists, albums, artists, podcasts and Liked Songs": "O que você adicionou ou ouviu por último: playlists, álbuns, artistas, podcasts e Músicas curtidas",
+  "Your playlist tree, folders included": "Sua árvore de playlists, com pastas"
 }

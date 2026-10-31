@@ -38,6 +38,23 @@ Item {
         closeTimer.restart()
     }
     function go(name, props) { closeDrawer(); router.reset(name, props) }
+    // Строка боковой панели: плейлист/папка — страницей приложения, остальное — карточкой каталога
+    function openEntry(entry) {
+        const kind = entry.kind ?? ""
+        closeDrawer()
+        if (kind === "folder")
+            router.reset("folder", { folderId: entry.id, folderTitle: entry.title ?? "" })
+        else if (kind === "liked")
+            router.reset("liked")
+        else if (kind === "playlist")
+            router.reset("playlist", { playlistId: entry.id, playlistTitle: entry.title ?? "", cover: entry.cover ?? "" })
+        else if (kind === "album")
+            Catalog.openAlbum(entry.id)
+        else if (kind === "artist")
+            Catalog.openArtist(entry.id)
+        else if (kind === "show")
+            Catalog.openShow(entry.id)
+    }
     onDrawerChanged: { drawerOpen = false; closing = false }
     onCompactChanged: if (!compact && !drawer) { drawerOpen = false; closing = false }
     Timer { id: closeTimer; interval: Theme.motion.spatialDefault + 40; onTriggered: root.closing = false }
@@ -59,8 +76,13 @@ Item {
     // Плейлисты и папки верхнего уровня rootlist (порядок Spotify; закреплённые — первыми, их ставит сервис).
     // Раскрытая папка (стрелка справа) показывает свои плейлисты и вложенные папки прямо в списке, с отступом;
     // клик по самой папке открывает её страницей (FolderPage). Раскрытые папки помнятся, пока открыто приложение.
-    readonly property var _source: signedIn ? Library.items("playlists", "all", "spotify") : null
+    // Режим «Библиотека»: вместо дерева плейлистов — последние добавленные/обновлённые строки всех
+    // разделов (плейлисты, альбомы, исполнители, подкасты и «Любимые»). Папок в этой сводке нет.
+    readonly property bool libraryMode: Settings.sidebarLibrary === true
+    readonly property var _recent: signedIn && libraryMode ? Library.recentEntries(40) : null
+    readonly property var _source: signedIn && !libraryMode ? Library.items("playlists", "all", "spotify") : null
     property var playlists: []
+    property var recentItems: []
     property var expandedFolders: ({})      // id папки → true
     readonly property int indentStep: 16
     readonly property int maxDepth: 4         // глубже — без доп. отступа (подпись не должна исчезнуть)
@@ -74,6 +96,14 @@ Item {
         _rebuild()
     }
     function _rebuild() {
+        if (libraryMode) {
+            const rows = []
+            const recent = _recent
+            for (let i = 0; recent && i < recent.count; i++)
+                rows.push(Object.assign({}, recent.get(i), { depth: 0 }))
+            recentItems = rows
+            return
+        }
         const out = []
         const m = _source
         // «Любимые» — отдельным пунктом выше; дети папок — внутри папки (если папки в списке есть)
@@ -116,6 +146,15 @@ Item {
         function onModelReset() { root._rebuild() }
         function onDataChanged() { root._rebuild() }
     }
+    Connections {
+        target: root._recent
+        ignoreUnknownSignals: true
+        function onCountChanged() { root._rebuild() }
+        function onModelReset() { root._rebuild() }
+        function onDataChanged() { root._rebuild() }
+    }
+    // режим переключили в настройках — список меняется целиком
+    onLibraryModeChanged: _rebuild()
     // содержимое папок меняется вместе с деревом (обложки, названия, перенос в Spotify)
     Connections {
         target: Library
@@ -262,13 +301,14 @@ Item {
                 id: sectionLabel
                 x: root.iconInset
                 anchors.verticalCenter: parent.verticalCenter
-                text: I18n.t("Playlists")
+                text: root.libraryMode ? I18n.t("Recently added") : I18n.t("Playlists")
                 type: "labelMedium"
                 color: Theme.fgSurfaceVariant
             }
             WavyDivider {
                 x: root.rail ? root.iconInset : sectionLabel.x + sectionLabel.implicitWidth + 10
-                width: parent.width - x - (root.rail ? root.iconInset : 40)
+                // в режиме «Библиотека» кнопки «+» нет — линия идёт до самого края
+                width: parent.width - x
                 anchors.verticalCenter: parent.verticalCenter
                 Behavior on x { NumberAnimation { duration: Theme.motion.spatialDefault; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.motion.emphasized } }
             }
@@ -280,7 +320,8 @@ Item {
                 iconColor: Theme.primary
                 enabled: root.signedIn
                 onClicked: root.newPlaylistRequested()
-                opacity: root.rail ? 0 : 1
+                // в режиме «Библиотека» список не плейлистов: кнопка «новый плейлист» тут не к месту
+                opacity: root.rail || root.libraryMode ? 0 : 1
                 visible: opacity > 0
                 Behavior on opacity { NumberAnimation { duration: Theme.motion.effectsFast } }
             }
@@ -291,7 +332,7 @@ Item {
             Layout.preferredWidth: root.labelWidth + 28 + 8
             Layout.leftMargin: root.iconInset
             Layout.topMargin: 4
-            text: I18n.t("Sign in to see your playlists")
+            text: root.libraryMode ? I18n.t("Sign in to see your library") : I18n.t("Sign in to see your playlists")
             type: "bodySmall"
             color: Theme.fgSurfaceVariant
             wrapMode: Text.WordWrap
@@ -300,7 +341,8 @@ Item {
             lineHeight: 1.2
         }
         FadeLabel {
-            visible: opacity > 0 && root.signedIn && root._source !== null && !root._source.loading && root.playlists.length === 0
+            visible: opacity > 0 && root.signedIn && !root.libraryMode
+                     && root._source !== null && !root._source.loading && root.playlists.length === 0
             Layout.preferredWidth: root.labelWidth + 28 + 8
             Layout.leftMargin: root.iconInset
             Layout.topMargin: 4
@@ -313,13 +355,14 @@ Item {
             lineHeight: 1.2
         }
         LoadingIndicator {
-            visible: root.signedIn && root._source !== null && root._source.loading && root.playlists.length === 0
+            visible: root.signedIn && !root.libraryMode
+                     && root._source !== null && root._source.loading && root.playlists.length === 0
             Layout.leftMargin: 40 - root.margin - size / 2
             Layout.topMargin: 8
             size: 32
         }
 
-        // Плейлисты пользователя: своя прокрутка, если их много
+        // Плейлисты пользователя (или сводка «Библиотеки»): своя прокрутка, если строк много
         ListView {
             id: playlistList
             visible: root.signedIn && count > 0
@@ -330,11 +373,12 @@ Item {
             spacing: 2
             boundsBehavior: Flickable.StopAtBounds
             acceptedButtons: Qt.NoButton
-            model: root.playlists
+            model: root.libraryMode ? root.recentItems : root.playlists
             delegate: NavItem {
                 id: row
                 required property var modelData
-                readonly property bool folder: modelData.kind === "folder"
+                readonly property string kind: modelData.kind ?? ""
+                readonly property bool folder: kind === "folder"
                 readonly property bool expanded: folder && root.expandedFolders[modelData.id] === true
                 readonly property real indent: Math.min(modelData.depth ?? 0, root.maxDepth) * root.indentStep
                 width: ListView.view.width
@@ -342,15 +386,24 @@ Item {
                 iconInset: root.iconInset + indent
                 labelWidth: root.labelWidth - indent - (folder ? 28 : 0)
                 text: modelData.title ?? ""
-                icon: folder ? (expanded ? "folder_open" : "folder") : "queue_music"
+                // в сводке у каждой строки свой значок: обложки у альбомов и подкастов тоже есть
+                icon: folder ? (expanded ? "folder_open" : "folder")
+                      : kind === "album" ? "album"
+                      : kind === "artist" ? "person"
+                      : kind === "show" ? "podcasts"
+                      : kind === "liked" ? "favorite" : "queue_music"
                 imageSource: folder ? "" : (modelData.cover ?? "")
                 // у папки справа — своя кнопка-стрелка (ниже); закреплённый — булавка
                 trailingIcon: !folder && modelData.pinned === true ? "push_pin" : ""
                 trailingColor: Theme.primary
                 selected: folder ? root.router.currentName === "folder" && (root.router.current.props.folderId ?? "") === modelData.id
-                                 : root.router.currentName === "playlist" && (root.router.current.props.playlistId ?? "") === modelData.id
-                onClicked: folder ? root.go("folder", { folderId: modelData.id, folderTitle: modelData.title ?? "" })
-                                  : root.go("playlist", { playlistId: modelData.id, playlistTitle: modelData.title ?? "", cover: modelData.cover ?? "" })
+                          : kind === "playlist"
+                            ? root.router.currentName === "playlist" && (root.router.current.props.playlistId ?? "") === modelData.id
+                          : kind === "album" ? root.router.currentName === "album" && (root.router.current.props.albumId ?? "") === modelData.id
+                          : kind === "artist" ? root.router.currentName === "artist" && (root.router.current.props.artistId ?? "") === modelData.id
+                          : kind === "show" ? root.router.currentName === "show" && (root.router.current.props.showId ?? "") === modelData.id
+                          : kind === "liked" ? root.router.rootName === "liked" : false
+                onClicked: root.openEntry(modelData)
 
                 // Стрелка папки: раскрыть/свернуть прямо в списке (поворот на 90° — MD3 expand)
                 IconButton {

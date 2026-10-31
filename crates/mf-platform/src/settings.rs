@@ -101,6 +101,8 @@ pub enum SettingKey {
     HomeHidden,
     /// сцена «Радио» на главной
     HomeRadioHidden,
+    /// в боковой панели вместо списка плейлистов — последние добавленные/обновлённые
+    SidebarLibrary,
     // Воспроизведение (librespot)
     /// 96 | 160 | 320 кбит/с (смена — перезапуск движка)
     Bitrate,
@@ -187,7 +189,7 @@ pub enum SettingType {
 }
 
 impl SettingKey {
-    pub const ALL: [SettingKey; 83] = [
+    pub const ALL: [SettingKey; 84] = [
         SettingKey::ThemeMode,
         SettingKey::SchemeVariant,
         SettingKey::AccentFromCover,
@@ -236,6 +238,7 @@ impl SettingKey {
         SettingKey::LibrarySort,
         SettingKey::HomeHidden,
         SettingKey::HomeRadioHidden,
+        SettingKey::SidebarLibrary,
         SettingKey::Bitrate,
         SettingKey::Normalisation,
         SettingKey::Gapless,
@@ -325,6 +328,7 @@ impl SettingKey {
             LibrarySort => "librarySort",
             HomeHidden => "homeHidden",
             HomeRadioHidden => "homeRadioHidden",
+            SidebarLibrary => "sidebarLibrary",
             Bitrate => "bitrate",
             Normalisation => "normalisation",
             Gapless => "gapless",
@@ -428,6 +432,7 @@ impl SettingKey {
             LibrarySort => Str("recent".into()),
             HomeHidden => Str(String::new()),
             HomeRadioHidden => Bool(false),
+            SidebarLibrary => Bool(false),
             Bitrate => Int(320),
             Normalisation => Bool(true),
             Gapless => Bool(true),
@@ -1203,7 +1208,7 @@ mod tests {
 
     #[test]
     fn schema() {
-        assert_eq!(SettingKey::ALL.len(), 82);
+        assert_eq!(SettingKey::ALL.len(), 84);
         for key in SettingKey::ALL {
             assert_eq!(SettingKey::from_name(key.name()), Some(key));
             assert_eq!(key.default_value().value_type(), key.value_type());
@@ -1552,6 +1557,7 @@ mod tests {
             "windowHeight", "windowX", "windowY", "windowMaximized", "closeToTray", "wheelStep", "floatingPlayer", "floatingPlayerStyle",
             "taskbarWidgetPos", "floatingKeyHints", "libraryView",
             "librarySort", "homeHidden", "homeRadioHidden", "bitrate", "normalisation", "gapless", "autoplay", "volume", "audioDevice",
+            "librarySort", "homeHidden", "sidebarLibrary", "bitrate", "normalisation", "gapless", "autoplay", "volume", "audioDevice",
             "audioCache", "audioCacheMb", "playbackAuthorized", "deviceName", "webClientId", "apiLimitTipDismissed", "proxyMode", "proxyHost",
             "proxyPort", "proxyUsername", "coversBypassProxy", "pins", "hiddenTracks", "radioSeeds", "language", "uiScale", "autoUpdateCheck",
             "updateChannel", "skippedVersion",
