@@ -346,16 +346,30 @@ Item {
                     opacity: left.infoIn
                     transform: Translate { y: (1 - left.infoIn) * 14 }
                 }
+                ArtistLinks {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredWidth: Math.min(naturalWidth, left.colWidth)
+                    Layout.maximumWidth: left.colWidth
+                    Layout.topMargin: -6
+                    centered: true
+                    visible: Player.isEpisode !== true
+                    refs: Player.track ? (Player.track.artistRefs ?? []) : []
+                    text: Player.artist
+                    opacity: Math.max(0, left.infoIn * 1.3 - 0.3)    // чуть позже названия
+                    transform: Translate { y: (1 - left.infoIn) * 18 }
+                    type: "titleMedium"
+                    color: Theme.fgSurfaceVariant
+                }
                 LinkLabel {
                     Layout.alignment: Qt.AlignHCenter
                     Layout.maximumWidth: left.colWidth
                     Layout.topMargin: -6
                     horizontalAlignment: Text.AlignHCenter
+                    visible: Player.isEpisode === true
                     // у выпуска подкаста под названием — подкаст: ссылка на его страницу
-                    linkEnabled: Player.isEpisode ? (Player.track.showId ?? "") !== "" : (Player.track.artistRefs ?? []).length > 0
-                    previewArtistId: !Player.isEpisode && (Player.track.artistRefs ?? []).length === 1 ? Player.track.artistRefs[0].id : ""
-                    onClicked: Player.isEpisode ? Catalog.openShow(Player.track.showId ?? "") : Catalog.openArtists(Player.track.artistRefs ?? [])
-                    opacity: Math.max(0, left.infoIn * 1.3 - 0.3)    // чуть позже названия
+                    linkEnabled: (Player.track.showId ?? "") !== ""
+                    onClicked: Catalog.openShow(Player.track.showId ?? "")
+                    opacity: Math.max(0, left.infoIn * 1.3 - 0.3)
                     transform: Translate { y: (1 - left.infoIn) * 18 }
                     text: Player.artist
                     type: "titleMedium"

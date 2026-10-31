@@ -124,14 +124,22 @@ Item {
                 }
                 Item { Layout.fillWidth: true }
             }
-            LinkLabel {
+            ArtistLinks {
                 Layout.fillWidth: true
-                text: root.track.isEpisode ? (root.track.album || root.track.artists || "") : (root.track.artists ?? "")
+                visible: !root.track.isEpisode
+                refs: root.track.artistRefs ?? []
+                text: root.track.artists ?? ""
                 type: "bodyMedium"
                 color: Theme.fgSurfaceVariant
-                linkEnabled: (root.track.artistRefs ?? []).length > 0 || (root.track.isEpisode && (root.track.showId ?? "") !== "")
-                previewArtistId: !root.track.isEpisode && (root.track.artistRefs ?? []).length === 1 ? root.track.artistRefs[0].id : ""
-                onClicked: root.track.isEpisode ? Catalog.openShow(root.track.showId) : Catalog.openArtists(root.track.artistRefs)
+            }
+            LinkLabel {
+                Layout.fillWidth: true
+                visible: root.track.isEpisode
+                text: root.track.album || root.track.artists || ""
+                type: "bodyMedium"
+                color: Theme.fgSurfaceVariant
+                linkEnabled: (root.track.showId ?? "") !== ""
+                onClicked: Catalog.openShow(root.track.showId)
             }
         }
 
