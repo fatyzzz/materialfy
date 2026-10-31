@@ -389,6 +389,24 @@ fn a_click_fetches_the_track_it_does_not_know() {
     assert!(info_calls(&mut core).is_empty(), "the row is cached now");
 }
 
+/// Строка очереди бывает безымянной заглушкой: такая запись не считается известной, метаданные всё равно
+/// спрашиваются — иначе экран так и остался бы с пустым названием.
+#[test]
+fn a_nameless_cached_row_still_asks_for_metadata() {
+    let mut core = headless();
+    playing(&mut core, "spotify:track:old");
+    core.remember(&song("spotify:track:stub"));
+    core.play_uris(vec!["spotify:track:stub".into()], 0, PlayContext::new("tracks"));
+    let calls = info_calls(&mut core);
+    assert!(
+        matches!(calls.as_slice(), [ApiCall::TrackInfo { uri, .. }] if uri == "spotify:track:stub"),
+        "asked for the nameless row: {calls:?}"
+    );
+    let ApiCall::TrackInfo { request, uri } = calls[0].clone() else { unreachable!() };
+    core.handle_api(ApiReply::TrackInfo { request, uri: uri.clone(), result: Ok(named(&uri, "Loaded")) });
+    assert_eq!(core.cached(&uri).map(|track| track.title.as_str()), Some("Loaded"), "the row is upgraded");
+}
+
 /// Устаревший ответ не перебивает строку, которую уже принесли с другой стороны.
 #[test]
 fn a_stale_metadata_reply_is_dropped_once_the_row_is_known() {

@@ -660,8 +660,10 @@ impl Core {
 
     /// Метки выбранного трека нужны сразу, а у списков Web API их нет в кэше: экран тогда переключался на
     /// безымянную строку только вместе со звуком. Один запрос на URI, повторный только после ответа.
+    /// Строка очереди может быть безымянной заглушкой — такую спрашиваем, как и отсутствующую.
     fn want_track_info(&mut self, uri: &str) {
-        if uri.is_empty() || self.tracks.contains_key(uri) || self.info_requests.contains_key(uri) {
+        let known = self.tracks.get(uri).is_some_and(|track| !track.title.is_empty());
+        if uri.is_empty() || known || self.info_requests.contains_key(uri) {
             return;
         }
         let request = self.serial.wrapping_add(1);
