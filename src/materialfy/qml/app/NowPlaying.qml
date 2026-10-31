@@ -427,6 +427,7 @@ Item {
                     PlayButton {
                         size: root.layoutCompact ? 72 : 96
                         playing: Player.playing
+                        loading: Player.buffering
                         spin: Player.isLocal === true
                         containerColor: Theme.primaryContainer
                         iconColor: Theme.fgPrimaryContainer

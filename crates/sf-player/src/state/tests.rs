@@ -283,6 +283,93 @@ fn an_update_of_the_previous_track_keeps_the_chosen_one_on_screen() {
     assert!(core.intent_track.is_some());
 }
 
+/// Клик по строке переключает экран сразу: выбранный трек показан и грузится, движок ещё молчит.
+#[test]
+fn a_chosen_track_is_shown_before_the_engine_reports_it() {
+    let mut core = headless();
+    playing(&mut core, "spotify:track:old");
+    let items = vec![named("spotify:track:old", "Old"), named("spotify:track:new", "New")];
+    core.play_items(items, 1, PlayContext::new("search"));
+    let now = core.now_playing().expect("выбранный трек показан сразу");
+    assert_eq!(now.track.uri, "spotify:track:new");
+    assert!(now.loading, "до ответа движка — спиннер");
+    assert!(now.playing, "нажатие уже считалось нажатым");
+    assert_eq!(core.current_track_uri().as_deref(), Some("spotify:track:new"));
+}
+
+/// Пока движок грузит выбранный трек, экран держит его, а не предыдущий: холодный старт бывает дольше 6 с.
+#[test]
+fn a_slow_load_keeps_the_chosen_track_on_screen() {
+    let mut core = headless();
+    core.local.connected = true;
+    playing(&mut core, "spotify:track:old");
+    let items = vec![named("spotify:track:old", "Old"), named("spotify:track:new", "New")];
+    core.play_items(items, 1, PlayContext::new("search"));
+    let mut loading = core.local.clone();
+    loading.loading = true;
+    core.handle_local(loading);
+    core.age_intent(PLAYBACK_HOLD + Duration::from_secs(1));
+    core.tick();
+    assert_eq!(core.current_track_uri().as_deref(), Some("spotify:track:new"));
+    // движок отдал выбранный трек — намерение снято, дальше источник истины он сам
+    let mut started = core.local.clone();
+    started.loading = false;
+    started.track = local_track("spotify:track:new");
+    started.track_sequence += 1;
+    core.handle_local(started);
+    assert!(core.intent_track.is_none());
+}
+
+/// Загрузка, которая не кончается, отдаёт экран реальному состоянию: спиннер не висит вечно.
+#[test]
+fn a_load_that_never_finishes_gives_up_at_the_ceiling() {
+    let mut core = headless();
+    core.local.connected = true;
+    playing(&mut core, "spotify:track:old");
+    let items = vec![named("spotify:track:old", "Old"), named("spotify:track:new", "New")];
+    core.play_items(items, 1, PlayContext::new("search"));
+    let mut loading = core.local.clone();
+    loading.loading = true;
+    core.handle_local(loading);
+    core.age_intent(INTENT_CEILING + Duration::from_secs(1));
+    core.tick();
+    assert!(core.intent_track.is_none());
+    assert_eq!(core.current_track_uri().as_deref(), Some("spotify:track:old"));
+}
+
+/// Второй клик отменяет первый: на экране последний выбранный, в движок последним ушёл он же.
+#[test]
+fn a_second_click_replaces_the_pending_track() {
+    let mut core = headless();
+    core.local.connected = true;
+    playing(&mut core, "spotify:track:old");
+    let items = vec![named("spotify:track:a", "A"), named("spotify:track:b", "B")];
+    core.play_items(items.clone(), 0, PlayContext::new("search"));
+    core.play_items(items, 1, PlayContext::new("search"));
+    assert_eq!(core.current_track_uri().as_deref(), Some("spotify:track:b"));
+    let loads: Vec<PlayerCommand> = engine_commands(&mut core)
+        .into_iter()
+        .filter(|command| matches!(command, PlayerCommand::Load(_)))
+        .collect();
+    assert!(
+        matches!(loads.as_slice(), [_, PlayerCommand::Load(load)] if load.offset_index == Some(1)),
+        "последним в движок ушёл выбранный трек"
+    );
+}
+
+/// Список знает только URI: запомненная заранее строка всё равно показывается сразу.
+#[test]
+fn a_remembered_track_shows_up_for_a_uri_list_play() {
+    let mut core = headless();
+    core.local.connected = true;
+    playing(&mut core, "spotify:track:old");
+    core.remember(&named("spotify:track:new", "New"));
+    core.play_uris(vec!["spotify:track:new".into()], 0, PlayContext::new("tracks"));
+    let now = core.now_playing().expect("строка нашлась в кэше");
+    assert_eq!(now.track.title, "New");
+    assert!(now.loading);
+}
+
 /// Отказ в ключе — испорченная сессия: переподключиться сразу, но не чаще раза в 30 с.
 #[test]
 fn a_refused_audio_key_reconnects_the_session() {

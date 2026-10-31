@@ -32,6 +32,8 @@ Item {
     property bool _playsRoom: width > 600
     property bool liked: false
     property bool current: false       // играет сейчас
+    // выбранный трек ещё грузится (движок не отдал его): строка уже его, а звука пока нет
+    property bool loading: Player.buffering
     property bool showAlbum: true
     property bool wide: showAlbum && _wideAuto
     // колонка альбома появляется с запасом ±20 px, чтобы не мигать у самой границы при растягивании
@@ -204,14 +206,25 @@ Item {
             horizontalAlignment: Text.AlignRight
         }
 
-        MorphImage {
+        // выбранный трек ещё грузится — индикатор MD3 поверх обложки; строка уже переключилась на него
+        Item {
             Layout.preferredWidth: 48
             Layout.preferredHeight: 48
-            source: root.cover
-            fallbackKind: root.album !== "" ? "album" : "track"
-            fallbackArtist: root.artists.split(", ")[0]
-            fallbackTitle: root.album !== "" ? root.album : root.title
-            shape: root.current && !root.editable ? "cookie9" : "softSquare"
+            MorphImage {
+                anchors.fill: parent
+                source: root.cover
+                fallbackKind: root.album !== "" ? "album" : "track"
+                fallbackArtist: root.artists.split(", ")[0]
+                fallbackTitle: root.album !== "" ? root.album : root.title
+                shape: root.current && !root.editable ? "cookie9" : "softSquare"
+            }
+            LoadingIndicator {
+                anchors.centerIn: parent
+                size: 34
+                color: Theme.primary
+                visible: root.current && root.loading
+                running: visible && root.visible
+            }
         }
 
         ColumnLayout {

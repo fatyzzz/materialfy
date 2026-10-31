@@ -158,6 +158,7 @@ Item {
                         visible: root.isCurrent
                         size: 40
                         playing: Player.playing
+                        loading: Player.buffering
                         pausedShape: "circle"
                         spin: false
                         onClicked: root.play()

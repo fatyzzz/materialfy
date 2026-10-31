@@ -13,9 +13,9 @@ use super::map;
 use super::session::SessionData;
 use crate::engine::{LoadSpec, LocalState, Playback, PlayerCommand, RepeatMode};
 use crate::{
-    ASSUMED_CONTEXT_HOLD_MS, LocalPlayback, OPTIMISTIC_HOLD_MS, PLAYBACK_HOLD_MS, QUEUE_ADD_DEBOUNCE_MS,
-    QUEUE_RECHECK_MS, QUEUE_STALE_RETRIES, REMOTE_POLL_ACTIVE_S, REMOTE_POLL_IDLE_S, REMOTE_POLL_UNSEEN_S,
-    REMOTE_RECHECK_MS, RESTART_BEFORE_PREVIOUS_MS, Target, TrackEnded, TrackStarted,
+    ASSUMED_CONTEXT_HOLD_MS, INTENT_CEILING_MS, LocalPlayback, OPTIMISTIC_HOLD_MS, PLAYBACK_HOLD_MS,
+    QUEUE_ADD_DEBOUNCE_MS, QUEUE_RECHECK_MS, QUEUE_STALE_RETRIES, REMOTE_POLL_ACTIVE_S, REMOTE_POLL_IDLE_S,
+    REMOTE_POLL_UNSEEN_S, REMOTE_RECHECK_MS, RESTART_BEFORE_PREVIOUS_MS, Target, TrackEnded, TrackStarted,
 };
 
 pub(crate) const REMOTE_POLL_ACTIVE: Duration = Duration::from_secs(REMOTE_POLL_ACTIVE_S);
@@ -24,6 +24,7 @@ pub(crate) const REMOTE_POLL_UNSEEN: Duration = Duration::from_secs(REMOTE_POLL_
 pub(crate) const REMOTE_FRESH: Duration = Duration::from_secs(45);
 pub(crate) const OPTIMISTIC_HOLD: Duration = Duration::from_millis(OPTIMISTIC_HOLD_MS);
 pub(crate) const PLAYBACK_HOLD: Duration = Duration::from_millis(PLAYBACK_HOLD_MS);
+pub(crate) const INTENT_CEILING: Duration = Duration::from_millis(INTENT_CEILING_MS);
 pub(crate) const ASSUMED_CONTEXT_HOLD: Duration = Duration::from_millis(ASSUMED_CONTEXT_HOLD_MS);
 pub(crate) const REMOTE_RECHECK: Duration = Duration::from_millis(REMOTE_RECHECK_MS);
 pub(crate) const QUEUE_RECHECK: Duration = Duration::from_millis(QUEUE_RECHECK_MS);
@@ -588,6 +589,13 @@ impl Core {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn age_intent(&mut self, by: Duration) {
+        if let Some(intent) = &mut self.intent_track {
+            intent.at = intent.at.checked_sub(by).unwrap_or(intent.at);
+        }
+    }
+
     /// Контекст, показанный как играющий, включая ещё не подтверждённый запуск.
     pub fn playing_context_uri(&self) -> Option<String> {
         let remote = self.remote.as_ref().and_then(|remote| remote.state.context_uri.clone());
@@ -609,12 +617,22 @@ impl Core {
 
     /// Трек, показанный текущим, включая недавний неподтверждённый запуск.
     pub fn current_track_uri(&self) -> Option<String> {
-        if let Some(intent) = &self.intent_track
-            && (intent.at.elapsed() < PLAYBACK_HOLD || self.queued_play.is_some())
+        if self.intent_held()
+            && let Some(intent) = &self.intent_track
         {
             return Some(intent.uri.clone());
         }
         self.now_playing().map(|now| now.track.uri)
+    }
+
+    /// Намерение ещё держится: короткое удержание, а пока движок грузит выбранный трек — до потолка (холодный
+    /// старт бывает дольше шести секунд, и на экране появлялся прошлый трек, будто клик не сработал).
+    fn intent_held(&self) -> bool {
+        let Some(intent) = &self.intent_track else { return false };
+        if self.queued_play.is_some() || intent.at.elapsed() < PLAYBACK_HOLD {
+            return true;
+        }
+        intent.at.elapsed() < INTENT_CEILING && matches!(self.target(), Target::Local) && self.local.loading
     }
 
     pub(crate) fn expect_track(&mut self, uri: String, position_ms: u32) {
@@ -681,10 +699,10 @@ impl Core {
     }
 
     fn requested_track_preview(&self) -> Option<NowPlaying> {
-        let intent = self.intent_track.as_ref()?;
-        if intent.at.elapsed() >= PLAYBACK_HOLD && self.queued_play.is_none() {
+        if !self.intent_held() {
             return None;
         }
+        let intent = self.intent_track.as_ref()?;
         let mut now = self.cached_track_preview(&intent.uri, intent.position_ms)?;
         let actual = self.now_playing_live();
         now.local = matches!(intent.confirmation, TrackConfirmation::Local);
@@ -1309,10 +1327,9 @@ impl Core {
         {
             self.optimistic_playing = None;
         }
-        if let Some(intent) = &self.intent_track
-            && intent.at.elapsed() >= PLAYBACK_HOLD
-            && self.queued_play.is_none()
-        {
+        // Выбранный трек держится на экране, пока движок его грузит, а не 6 с по часам: холодный старт дольше,
+        // и на экране появлялся прошлый трек, будто клик не сработал. Потолок — чтобы спиннер не висел вечно.
+        if self.intent_track.is_some() && !self.intent_held() {
             self.intent_track = None;
         }
         if self.pending_local_position.is_some_and(|(_, at)| at.elapsed() >= OPTIMISTIC_HOLD) {

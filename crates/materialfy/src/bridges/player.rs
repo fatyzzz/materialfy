@@ -334,6 +334,14 @@ impl Default for PlayerRust {
 /// Пауза перед записью громкости в настройки.
 const VOLUME_SAVE_DELAY: Duration = Duration::from_millis(400);
 
+/// Списки присылают только URI, а выбранный трек нужен ядру, чтобы показать его сразу — до ответа движка.
+/// Метаданные уже лежат в общем кэше каталога (его наполняют те же списки).
+fn remember_track(uri: &str) {
+    if let Some(track) = sf_services::data::known::get(uri) {
+        ctx().services.player.remember(track);
+    }
+}
+
 /// {type, uri, title, cover} — карточка «Играет из …»; {} — контекста нет.
 fn context_map(context: &PlayContext) -> QVariantMap {
     let mut map = QVariantMap::default();
@@ -569,6 +577,7 @@ impl qobject::Player {
         }
         let kind = sf_api::util::uri_kind(&uri).unwrap_or_default().to_owned();
         let offset = offset_uri.to_string();
+        remember_track(&offset);
         let context = PlayContext::with_uri(&kind, uri);
         ctx().services.player.play_context(context, (!offset.is_empty()).then_some(offset), None);
     }
@@ -587,11 +596,13 @@ impl qobject::Player {
         if let Ok(index) = usize::try_from(index)
             && index < uris.len()
         {
+            remember_track(&uris[index]);
             ctx().services.player.play_uris(uris, index, PlayContext::new(md3_model::contexts::TRACKS));
         }
     }
 
     fn play_episode(&self, uri: &QString, position_ms: i32) {
+        remember_track(&uri.to_string());
         ctx().services.player.play_episode(uri.to_string(), i64::from(position_ms.max(0)));
     }
 
