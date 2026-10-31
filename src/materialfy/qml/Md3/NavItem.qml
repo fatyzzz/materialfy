@@ -17,6 +17,8 @@ Item {
     property string imageSource
 
     signal clicked()
+    // ПКМ по пункту: меню действий строки (закрепить и т. п.)
+    signal rightClicked(var point)
 
     implicitHeight: 48
     implicitWidth: 240
@@ -95,7 +97,13 @@ Item {
         anchors.fill: parent
         radius: height / 2
         color: Theme.fgSurface
-        onClicked: root.clicked()
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        onClicked: mouse => {
+            if (mouse.button === Qt.RightButton)
+                root.rightClicked(mouse)
+            else
+                root.clicked()
+        }
     }
 
     // В рейле подписей нет — подсказка MD3 справа от пункта после короткой задержки. Живёт в корне окна:

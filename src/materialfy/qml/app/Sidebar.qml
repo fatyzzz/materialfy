@@ -38,6 +38,29 @@ Item {
         closeTimer.restart()
     }
     function go(name, props) { closeDrawer(); router.reset(name, props) }
+    // Меню строки (ПКМ): закрепить/открепить в «Библиотеке». Закреплённые — первыми в списках.
+    property var _menuEntry: null
+    function openRowMenu(entry, point) {
+        _menuEntry = entry
+        const uri = entry.uri ?? ""
+        if (uri === "" || entry.kind === "folder")
+            return
+        const pinned = Library.pinsRevision >= 0 && Library.isPinned(uri)
+        rowMenu.open([{ id: "pin", text: pinned ? I18n.t("Unpin") : I18n.t("Pin to top"), icon: "push_pin" }],
+                     rowMenu.mapFromItem(null, point.x, point.y))
+    }
+    function _menuAction(id) {
+        const entry = _menuEntry
+        if (!entry || id !== "pin")
+            return
+        const uri = entry.uri ?? ""
+        const was = Library.isPinned(uri)
+        Library.togglePin(uri)
+        const w = root.Window.window
+        if (w && typeof w.notify === "function")
+            w.notify(was ? I18n.t("Unpinned") : I18n.t("Pinned — in this app only"))
+    }
+
     // Строка боковой панели: плейлист/папка — страницей приложения, остальное — карточкой каталога
     function openEntry(entry) {
         const kind = entry.kind ?? ""
@@ -158,7 +181,12 @@ Item {
     // содержимое папок меняется вместе с деревом (обложки, названия, перенос в Spotify)
     Connections {
         target: Library
-        function onEntriesChanged() { if (Object.keys(root.expandedFolders).length > 0) root._rebuild() }
+        function onEntriesChanged() {
+            if (root.libraryMode || Object.keys(root.expandedFolders).length > 0)
+                root._rebuild()
+        }
+        // закрепили/открепили строку — сводка переставляется
+        function onPinsChanged() { if (root.libraryMode) root._rebuild() }
     }
 
     implicitWidth: drawer ? 0 : compact ? railWidth : expandedWidth
@@ -306,8 +334,8 @@ Item {
                 color: Theme.fgSurfaceVariant
             }
             WavyDivider {
-                x: root.rail ? root.iconInset : sectionLabel.x + sectionLabel.implicitWidth + 10
                 // в режиме «Библиотека» кнопки «+» нет — линия идёт до самого края
+                x: root.rail ? root.iconInset : sectionLabel.x + sectionLabel.implicitWidth + 10
                 width: parent.width - x
                 anchors.verticalCenter: parent.verticalCenter
                 Behavior on x { NumberAnimation { duration: Theme.motion.spatialDefault; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.motion.emphasized } }
@@ -404,6 +432,7 @@ Item {
                           : kind === "show" ? root.router.currentName === "show" && (root.router.current.props.showId ?? "") === modelData.id
                           : kind === "liked" ? root.router.rootName === "liked" : false
                 onClicked: root.openEntry(modelData)
+                onRightClicked: point => root.openRowMenu(modelData, point)
 
                 // Стрелка папки: раскрыть/свернуть прямо в списке (поворот на 90° — MD3 expand)
                 IconButton {
@@ -518,5 +547,13 @@ Item {
             }
         }
     }
+    }
+
+    // ПКМ по строке: закрепить/открепить
+    Menu {
+        id: rowMenu
+        anchors.fill: parent
+        z: 60
+        onTriggered: (id, item) => root._menuAction(id)
     }
 }
