@@ -406,6 +406,10 @@ impl WaveService {
         let uris: Vec<String> = tracks.iter().map(TrackItem::play_uri).collect();
         let cover = tracks.first().map(|t| t.cover.clone()).unwrap_or_default();
         let context = PlayContext::with_uri(contexts::RADIO, station).titled(title).with_cover(cover);
+        // первая строка — сразу: экран переключается на неё, пока грузится звук
+        if let Some(first) = tracks.first() {
+            self.player.remember(first.clone());
+        }
         self.player.play_uris(uris, 0, context);
     }
 

@@ -88,6 +88,8 @@ pub enum ApiCall {
     AddMany { request: u64, uris: Vec<String>, device: Option<String> },
     /// все треки альбома по порядку (все страницы) или ошибка
     AlbumTracks { request: u64, id: String },
+    /// строка трека/выпуска по URI: списки Web API не всегда кладут её в кэш ядра, а кликнутый трек нужен сразу
+    TrackInfo { request: u64, uri: String },
 }
 
 #[derive(Clone, Debug)]
@@ -98,6 +100,7 @@ pub enum ApiReply {
     Transferred { device: String, name: Option<String>, result: Result<(), ApiError> },
     QueueBatchAdded { request: u64, added: usize, result: Result<(), ApiError> },
     AlbumTracks { request: u64, result: Result<Vec<TrackItem>, ApiError> },
+    TrackInfo { request: u64, uri: String, result: Result<TrackItem, ApiError> },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -411,6 +414,8 @@ pub struct Core {
     // --- прочее ---
     tracks: HashMap<String, TrackItem>,
     track_order: Vec<String>,
+    /// Запрошенные строки по URI (последний запрос побеждает: старый ответ уже не нужен).
+    info_requests: HashMap<String, u64>,
     pub error_text: String,
     pub levels_wanted: bool,
     pub direction: i32,
@@ -494,6 +499,7 @@ impl Core {
             persist,
             tracks: HashMap::new(),
             track_order: Vec::new(),
+            info_requests: HashMap::new(),
             error_text: String::new(),
             levels_wanted: false,
             direction: 1,
@@ -535,6 +541,8 @@ impl Core {
         if track.uri.is_empty() {
             return;
         }
+        // пришла строка из Web API — запрос больше не нужен
+        self.info_requests.remove(&track.uri);
         let known = self.tracks.get(&track.uri);
         // строка-заглушка без имени не вытесняет известные данные
         if known.is_some_and(|known| !known.title.is_empty()) && track.title.is_empty() {
@@ -636,6 +644,7 @@ impl Core {
     }
 
     pub(crate) fn expect_track(&mut self, uri: String, position_ms: u32) {
+        self.want_track_info(&uri);
         let confirmation = match self.target() {
             Target::Local => TrackConfirmation::Local,
             Target::Remote(_) => TrackConfirmation::Remote { after_poll: self.remote_poll_seq, mismatches: 0 },
@@ -647,6 +656,30 @@ impl Core {
             confirmation,
             from_uri: self.local.track.as_ref().map(|track| track.uri.clone()),
         });
+    }
+
+    /// Метки выбранного трека нужны сразу, а у списков Web API их нет в кэше: экран тогда переключался на
+    /// безымянную строку только вместе со звуком. Один запрос на URI, повторный только после ответа.
+    fn want_track_info(&mut self, uri: &str) {
+        if uri.is_empty() || self.tracks.contains_key(uri) || self.info_requests.contains_key(uri) {
+            return;
+        }
+        let request = self.serial.wrapping_add(1);
+        self.serial = request;
+        self.info_requests.insert(uri.to_owned(), request);
+        self.api(ApiCall::TrackInfo { request, uri: uri.to_owned() });
+    }
+
+    fn handle_track_info(&mut self, request: u64, uri: String, result: Result<TrackItem, ApiError>) {
+        // пока ждали, трек уже пришёл с другой стороны — ответ не нужен
+        if self.info_requests.get(&uri).copied() != Some(request) {
+            return;
+        }
+        self.info_requests.remove(&uri);
+        match result {
+            Ok(track) => self.remember(&track),
+            Err(error) => tracing::debug!("track {uri} is not described: {error}"),
+        }
     }
 
     /// Локальный движок — источник истины: настоящая смена трека побеждает догадку очереди. Настоящая — это
@@ -2849,6 +2882,7 @@ impl Core {
                 self.refresh_queue(true);
             }
             ApiReply::AlbumTracks { request, result } => self.receive_album_queue(request, result),
+            ApiReply::TrackInfo { request, uri, result } => self.handle_track_info(request, uri, result),
         }
     }
 

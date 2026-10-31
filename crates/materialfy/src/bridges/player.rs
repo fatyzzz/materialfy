@@ -186,6 +186,10 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "addUriToQueue"]
         fn add_uri_to_queue(self: &Player, uri: &QString);
+        /// Запомнить строку до запуска списка по URI: экран переключается на неё сразу, без круга в Web API.
+        #[qinvokable]
+        #[cxx_name = "rememberTrack"]
+        fn remember_track(self: &Player, track: &QMap_QString_QVariant);
         /// Вставка в «Далее в очереди» (только isLocal; иначе — в конец).
         #[qinvokable]
         #[cxx_name = "insertManual"]
@@ -609,6 +613,12 @@ impl qobject::Player {
     fn add_to_queue(&self, track: &QVariantMap) {
         if let Some(track) = track_from_map(track) {
             ctx().services.player.add_to_queue(vec![track]);
+        }
+    }
+
+    fn remember_track(&self, track: &QVariantMap) {
+        if let Some(track) = track_from_map(track) {
+            ctx().services.player.remember(track);
         }
     }
 

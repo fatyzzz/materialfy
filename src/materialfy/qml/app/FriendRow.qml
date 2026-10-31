@@ -20,6 +20,12 @@ Item {
         const track = friend.trackUri ?? ""
         if (track === "")
             return
+        // метаданные есть тут же: строка переключается сразу, не дожидаясь ни Web API, ни звука
+        Player.rememberTrack({
+            uri: track, trackId: track.split(":").pop(), title: friend.track ?? "",
+            artists: friend.artist ?? "", album: friend.album ?? "", albumId: (friend.albumUri ?? "").split(":").pop() ?? "",
+            cover: friend.cover ?? "", isEpisode: friend.isEpisode === true
+        })
         const context = friend.contextUri ?? ""
         if (context !== "" && !friend.isEpisode)
             Player.playContext(context, track)

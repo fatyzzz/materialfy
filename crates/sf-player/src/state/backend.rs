@@ -8,6 +8,7 @@ use std::sync::Arc;
 use md3_model::TrackItem;
 use sf_api::models::{Page, Track};
 use sf_api::{ApiError, ApiGateway, Operation};
+use sf_api::util::{uri_id, uri_kind};
 
 use super::core::{ApiCall, ApiReply, FetchedQueue, RemoteAction, RemoteState};
 use super::map;
@@ -79,7 +80,7 @@ impl WebBackend for SpotifyBackend {
 
 async fn run(api: Arc<ApiGateway>, call: ApiCall) -> ApiReply {
     let operation = match call {
-        ApiCall::AlbumTracks { .. } => Operation::Catalog,
+        ApiCall::AlbumTracks { .. } | ApiCall::TrackInfo { .. } => Operation::Catalog,
         _ => Operation::Playback,
     };
     let client = api.client_for(operation).await;
@@ -167,6 +168,25 @@ async fn run(api: Arc<ApiGateway>, call: ApiCall) -> ApiReply {
                 Err(error) => Err(error),
             };
             ApiReply::AlbumTracks { request, result }
+        }
+        ApiCall::TrackInfo { request, uri } => {
+            let result = match client {
+                Ok(client) => {
+                    let id = uri_id(&uri).unwrap_or_default().to_owned();
+                    let fetched = if uri_kind(&uri) == Some("episode") {
+                        client.episode(&id).await.map(|episode| sf_api::map::episode_track(&episode))
+                    } else {
+                        client.track(&id).await.map(|track| sf_api::map::track_item(&track))
+                    };
+                    fetched.map(|mut item| {
+                        // ответ мог прийти с другим URI (рынок/точная версия) — оставляем тот, что играет
+                        item.uri = uri.clone();
+                        item
+                    })
+                }
+                Err(error) => Err(error),
+            };
+            ApiReply::TrackInfo { request, uri, result }
         }
     }
 }

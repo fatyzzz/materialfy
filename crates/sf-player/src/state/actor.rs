@@ -397,7 +397,7 @@ impl Actor {
     pub(crate) fn api(&mut self, call: ApiCall) {
         match call {
             // чтения — параллельно
-            ApiCall::Playback { .. } | ApiCall::Queue { .. } | ApiCall::AlbumTracks { .. } => {
+            ApiCall::Playback { .. } | ApiCall::Queue { .. } | ApiCall::AlbumTracks { .. } | ApiCall::TrackInfo { .. } => {
                 let backend = self.backend.clone();
                 let tx = self.tx.clone();
                 tokio::spawn(async move {
