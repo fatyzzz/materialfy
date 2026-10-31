@@ -516,10 +516,15 @@ impl qobject::Library {
     fn recent_entries(mut self: Pin<&mut Self>, limit: i32) -> *mut cxx_qt::QObject {
         let limit = usize::try_from(limit.max(1)).unwrap_or(20).min(200);
         let key = format!("recent|{limit}");
-        let rows = to_rows(&ctx().services.library.recent_entries(limit));
+        let library = &ctx().services.library;
+        let rows = to_rows(&library.recent_entries(limit));
+        let loading = library.playlists_loading();
         let this = self.as_mut().rust_mut().get_mut();
         let model = this.entry_models.entry(key).or_insert_with(|| DictListModel::create(ModelKind::Library));
-        with_model(model, |m| m.sync_rows(rows, ENTRY_KEY));
+        with_model(model, |mut m| {
+            m.as_mut().sync_rows(rows, ENTRY_KEY);
+            m.set_loading(loading);
+        });
         model_ptr(model)
     }
 
@@ -585,7 +590,11 @@ impl qobject::Library {
             if let Some(limit) = key.strip_prefix("recent|") {
                 let limit = limit.parse::<usize>().unwrap_or(20);
                 let rows = to_rows(&library.recent_entries(limit));
-                with_model(model, |m| m.sync_rows(rows, ENTRY_KEY));
+                let loading = library.playlists_loading();
+                with_model(model, |mut m| {
+                    m.as_mut().sync_rows(rows, ENTRY_KEY);
+                    m.set_loading(loading);
+                });
                 continue;
             }
             let mut parts = key.splitn(3, '|');

@@ -302,7 +302,7 @@ pub struct QueueRow {
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct LibraryEntry {
-    /// liked | playlist | folder | album | artist | show (| radio — только в полках главной)
+    /// liked | playlist | dj | folder | album | artist | show (| radio — только в полках главной)
     pub kind: String,
     pub id: String,
     pub uri: String,

@@ -337,9 +337,9 @@ Item {
                 color: Theme.fgSurfaceVariant
             }
             WavyDivider {
-                // в режиме «Библиотека» кнопки «+» нет — линия идёт до самого края
+                // в режиме «Библиотека» и в рейле кнопки «+» нет — линия идёт до самого края
                 x: root.rail ? root.iconInset : sectionLabel.x + sectionLabel.implicitWidth + 10
-                width: parent.width - x
+                width: parent.width - x - (root.rail || root.libraryMode ? 0 : 44)
                 anchors.verticalCenter: parent.verticalCenter
                 Behavior on x { NumberAnimation { duration: Theme.motion.spatialDefault; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.motion.emphasized } }
             }
@@ -391,6 +391,21 @@ Item {
             Layout.leftMargin: 40 - root.margin - size / 2
             Layout.topMargin: 8
             size: 32
+        }
+        FadeLabel {
+            // сводка «Библиотеки» пуста и уже загружена: пока идёт загрузка, пустота ничего не значит
+            visible: opacity > 0 && root.signedIn && root.libraryMode && root.recentItems.length === 0
+                     && root._recent !== null && root._recent.loading !== true
+            Layout.preferredWidth: root.labelWidth + 28 + 8
+            Layout.leftMargin: root.iconInset
+            Layout.topMargin: 4
+            text: I18n.t("Nothing in your library yet")
+            type: "bodySmall"
+            color: Theme.fgSurfaceVariant
+            wrapMode: Text.WordWrap
+            elide: Text.ElideNone
+            lineHeightMode: Text.ProportionalHeight
+            lineHeight: 1.2
         }
 
         // Плейлисты пользователя (или сводка «Библиотеки»): своя прокрутка, если строк много

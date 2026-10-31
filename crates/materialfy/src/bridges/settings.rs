@@ -356,6 +356,7 @@ pub mod qobject {
         #[qsignal]
         #[cxx_name = "homeRadioHiddenChanged"]
         fn home_radio_hidden_changed(self: Pin<&mut Settings>);
+        #[qsignal]
         #[cxx_name = "sidebarLibraryChanged"]
         fn sidebar_library_changed(self: Pin<&mut Settings>);
         #[qsignal]

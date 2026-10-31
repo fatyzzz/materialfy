@@ -17,7 +17,7 @@ Item {
     property string imageSource
 
     signal clicked()
-    // ПКМ по пункту: меню действий строки (закрепить и т. п.)
+    // ПКМ по пункту: меню действий строки (закрепить и т. п.); точка — в координатах сцены
     signal rightClicked(var point)
 
     implicitHeight: 48
@@ -100,7 +100,7 @@ Item {
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         onClicked: mouse => {
             if (mouse.button === Qt.RightButton)
-                root.rightClicked(mouse)
+                root.rightClicked(root.mapToItem(null, mouse.x, mouse.y))
             else
                 root.clicked()
         }
