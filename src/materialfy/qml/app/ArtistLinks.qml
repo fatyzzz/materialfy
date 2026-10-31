@@ -51,6 +51,7 @@ Item {
         type: root.type
         color: root.color
         elide: Text.ElideRight
+        horizontalAlignment: root.centered ? Text.AlignHCenter : Text.AlignLeft
     }
 
     Row {
