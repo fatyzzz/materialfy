@@ -2555,7 +2555,7 @@ dependencies = [
 
 [[package]]
 name = "materialfy"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "clap",
@@ -2593,7 +2593,7 @@ dependencies = [
 
 [[package]]
 name = "md3-model"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "mf-i18n",
  "serde",
@@ -2632,7 +2632,7 @@ dependencies = [
 
 [[package]]
 name = "mf-i18n"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -2640,7 +2640,7 @@ dependencies = [
 
 [[package]]
 name = "mf-lyrics"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "aes 0.8.4",
  "ecb",
@@ -2660,7 +2660,7 @@ dependencies = [
 
 [[package]]
 name = "mf-platform"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "dirs",
  "libc",
@@ -2677,7 +2677,7 @@ dependencies = [
 
 [[package]]
 name = "mf-theme"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "image",
  "material-colors",
@@ -3979,7 +3979,7 @@ dependencies = [
 
 [[package]]
 name = "sf-api"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -4005,7 +4005,7 @@ dependencies = [
 
 [[package]]
 name = "sf-auth"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "apple-native-keyring-store",
@@ -4033,7 +4033,7 @@ dependencies = [
 
 [[package]]
 name = "sf-player"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "aes 0.8.4",
  "anyhow",
@@ -4074,7 +4074,7 @@ dependencies = [
 
 [[package]]
 name = "sf-services"
-version = "0.5.0"
+version = "0.5.1"
 dependencies = [
  "anyhow",
  "fastframe-now-playing",
