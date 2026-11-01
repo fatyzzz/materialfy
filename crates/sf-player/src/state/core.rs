@@ -541,8 +541,6 @@ impl Core {
         if track.uri.is_empty() {
             return;
         }
-        // пришла строка из Web API — запрос больше не нужен
-        self.info_requests.remove(&track.uri);
         let known = self.tracks.get(&track.uri);
         // строка-заглушка без имени не вытесняет известные данные
         if known.is_some_and(|known| !known.title.is_empty()) && track.title.is_empty() {
@@ -556,6 +554,10 @@ impl Core {
                     self.tracks.remove(&uri);
                 }
             }
+        }
+        // пришла настоящая строка — запрос больше не нужен; безымянная заглушка его не отменяет
+        if !track.title.is_empty() {
+            self.info_requests.remove(&track.uri);
         }
         self.tracks.insert(track.uri.clone(), track.clone());
     }

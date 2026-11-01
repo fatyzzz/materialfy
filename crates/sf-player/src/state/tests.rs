@@ -407,6 +407,18 @@ fn a_nameless_cached_row_still_asks_for_metadata() {
     assert_eq!(core.cached(&uri).map(|track| track.title.as_str()), Some("Loaded"), "the row is upgraded");
 }
 
+/// Безымянная строка очереди, пришедшая, пока ждём ответ, не отменяет запрос: иначе ответ выбросили бы.
+#[test]
+fn a_nameless_row_does_not_cancel_the_pending_metadata_request() {
+    let mut core = headless();
+    playing(&mut core, "spotify:track:old");
+    core.play_uris(vec!["spotify:track:y".into()], 0, PlayContext::new("tracks"));
+    let ApiCall::TrackInfo { request, uri } = info_calls(&mut core)[0].clone() else { unreachable!() };
+    core.remember(&song(&uri));
+    core.handle_api(ApiReply::TrackInfo { request, uri: uri.clone(), result: Ok(named(&uri, "Loaded")) });
+    assert_eq!(core.cached(&uri).map(|track| track.title.as_str()), Some("Loaded"));
+}
+
 /// Устаревший ответ не перебивает строку, которую уже принесли с другой стороны.
 #[test]
 fn a_stale_metadata_reply_is_dropped_once_the_row_is_known() {

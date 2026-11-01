@@ -181,6 +181,7 @@ async fn run(api: Arc<ApiGateway>, call: ApiCall) -> ApiReply {
                     fetched.map(|mut item| {
                         // ответ мог прийти с другим URI (рынок/точная версия) — оставляем тот, что играет
                         item.uri = uri.clone();
+                        item.track_id = id.clone();
                         item
                     })
                 }
