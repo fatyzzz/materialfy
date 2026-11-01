@@ -14,6 +14,9 @@ Item {
     property string type: "bodyMedium"
     property color color: Theme.fgSurfaceVariant
     property bool centered: false
+    // Карточка исполнителя по наведению. В нижней панели она не нужна: там имя — просто путь на его
+    // страницу, а карточка всплывала бы над плеером и перекрывала строку, по которой велит кликнуть
+    property bool preview: true
 
     readonly property var _refs: refs ?? []
     readonly property bool fits: width <= 0 || _names.advanceWidth <= width
@@ -79,7 +82,7 @@ Item {
                     type: root.type
                     color: root.color
                     linkEnabled: (modelData.id ?? "") !== ""
-                    previewArtistId: modelData.id ?? ""
+                    previewArtistId: root.preview ? (modelData.id ?? "") : ""
                     onClicked: Catalog.openArtist(modelData.id ?? "")
                 }
             }
