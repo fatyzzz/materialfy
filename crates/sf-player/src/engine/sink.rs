@@ -1996,8 +1996,6 @@ mod tests {
         assert_eq!(queued.wake_at.load(Ordering::SeqCst), 0);
     }
 
-    /// The queue counts output frames; the track position moves `speed` seconds per
-    /// output second, and the queue is the audio still to be heard.
     #[test]
     fn the_device_latency_adds_to_the_backlog_up_to_a_cap() {
         let ms = Duration::from_millis;
@@ -2007,6 +2005,8 @@ mod tests {
         assert_eq!(backlog_in_track_time(0, ms(5_000), 1.0), 400, "capped");
     }
 
+    /// The queue counts output frames; the track position moves `speed` seconds per
+    /// output second, and the queue is the audio still to be heard.
     #[test]
     fn the_backlog_is_the_queued_audio_in_track_time() {
         let control = AudioControl::new(DEFAULT_BUFFER_MS);
