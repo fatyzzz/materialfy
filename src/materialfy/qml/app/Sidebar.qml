@@ -164,6 +164,8 @@ Item {
         playlists = out
     }
     on_SourceChanged: _rebuild()
+    // при входе модель появляется раньше, чем Connections на неё переключится
+    on_RecentChanged: _rebuild()
     onRailChanged: _rebuild()
     Connections {
         target: root._source

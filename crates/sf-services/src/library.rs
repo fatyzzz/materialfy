@@ -386,7 +386,7 @@ fn merge_recent(mut all: Vec<LibraryEntry>, limit: usize, pins: &[String]) -> Ve
             .position(|uri| *uri == entry.uri)
             .map_or(if entry.pinned { 0 } else { usize::MAX }, |rank| rank + 1)
     };
-    all.sort_by(|a, b| pin_rank(a).cmp(&pin_rank(b)).then_with(|| touched(b).cmp(&touched(a))));
+    all.sort_by_cached_key(|entry| (pin_rank(entry), std::cmp::Reverse(touched(entry))));
     // у плейлистов не бывает added_at, поэтому они всегда последние и могли выпасть из обрезки целиком:
     // сперва берём закреплённые и самую свежую строку каждого вида, остальное добираем по времени
     let mut picked: Vec<LibraryEntry> = Vec::new();
