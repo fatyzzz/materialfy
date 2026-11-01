@@ -33,6 +33,8 @@ pub const REMOTE_POLL_UNSEEN_S: u64 = 30;
 /// Удержания оптимистичного состояния (AGENTS.md), мс.
 pub const OPTIMISTIC_HOLD_MS: u64 = 2500;
 pub const PLAYBACK_HOLD_MS: u64 = 6000;
+/// Сколько выбранный трек держится на экране, пока движок его грузит (холодный старт бывает дольше 6 с).
+pub const INTENT_CEILING_MS: u64 = 20_000;
 pub const ASSUMED_CONTEXT_HOLD_MS: u64 = 8000;
 pub const REMOTE_RECHECK_MS: u64 = 1200;
 pub const QUEUE_RECHECK_MS: u64 = 700;

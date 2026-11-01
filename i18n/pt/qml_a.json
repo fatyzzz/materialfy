@@ -199,6 +199,7 @@
   "Save": "Salvar",
   "Remove": "Remover",
   "Permissions are stored in Windows Credential Manager. “Sign out” removes all three; the cache stays.": "As permissões são guardadas no Gerenciador de Credenciais do Windows. “Sair” remove todas as três; o cache fica.",
+  "Permissions are stored in the system keychain. “Sign out” removes all three; the cache stays.": "As permissões são guardadas no chaveiro do sistema. “Sair” remove todas as três; o cache fica.",
   "Secret storage is unavailable: permissions last until the app closes. “Sign out” removes all three; the cache stays.": "O armazenamento de segredos não está disponível: as permissões duram até o app fechar. “Sair” remove todas as três; o cache fica.",
   "Audio restart needed": "É preciso reiniciar o áudio",
   "New settings take effect after a restart; the track will resume from the same spot.": "As novas configurações passam a valer depois de reiniciar; a faixa continua do mesmo ponto.",

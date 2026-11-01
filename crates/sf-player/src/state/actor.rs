@@ -39,6 +39,8 @@ pub(crate) enum Command {
     ShuffleFrom { items: Vec<TrackItem>, context: PlayContext },
     PlayContext { context: PlayContext, offset: Option<String>, shuffle: Option<bool> },
     PlayUris { uris: Vec<String>, index: usize, context: PlayContext },
+    /// Строка для оптимистичной сверки: списки присылают только URI.
+    Remember(Box<TrackItem>),
     PlayEpisode { uri: String, position_ms: i64 },
     PlayIndex(usize),
     PlayQueueRow(u64),
@@ -274,6 +276,7 @@ impl Actor {
             Command::ShuffleFrom { items, context } => core.shuffle_from(items, context),
             Command::PlayContext { context, offset, shuffle } => core.play_context(context, offset, shuffle),
             Command::PlayUris { uris, index, context } => core.play_uris(uris, index, context),
+            Command::Remember(item) => core.remember(&item),
             Command::PlayEpisode { uri, position_ms } => core.play_episode(uri, position_ms),
             Command::PlayIndex(index) => {
                 // индекс строки Player.queue: 0 — текущая
@@ -394,7 +397,7 @@ impl Actor {
     pub(crate) fn api(&mut self, call: ApiCall) {
         match call {
             // чтения — параллельно
-            ApiCall::Playback { .. } | ApiCall::Queue { .. } | ApiCall::AlbumTracks { .. } => {
+            ApiCall::Playback { .. } | ApiCall::Queue { .. } | ApiCall::AlbumTracks { .. } | ApiCall::TrackInfo { .. } => {
                 let backend = self.backend.clone();
                 let tx = self.tx.clone();
                 tokio::spawn(async move {

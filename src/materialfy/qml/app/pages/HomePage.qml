@@ -306,7 +306,11 @@ Page {
                         available: modelData.available ?? true
                         liked: Library.likesRevision >= 0 && Library.isLiked(trackId)
                         current: trackId !== "" && trackId === Player.trackId
-                        onActivated: Player.playUris(tracksCol.tracks.map(t => t.uri), index)
+                        onActivated: {
+                            // строка главной приходит из Web API, а не из каталога: без неё экран ждал бы звука
+                            Player.rememberTrack(modelData)
+                            Player.playUris(tracksCol.tracks.map(t => t.uri), index)
+                        }
                         onLikeClicked: Library.toggleLike(modelData)
                     }
                 }

@@ -79,6 +79,11 @@ fn engine_commands(core: &mut Core) -> Vec<PlayerCommand> {
     commands
 }
 
+/// Только запросы метаданных трека.
+fn info_calls(core: &mut Core) -> Vec<ApiCall> {
+    api_calls(core).into_iter().filter(|call| matches!(call, ApiCall::TrackInfo { .. })).collect()
+}
+
 fn api_calls(core: &mut Core) -> Vec<ApiCall> {
     let effects = std::mem::take(&mut core.effects);
     let mut calls = Vec::new();
@@ -281,6 +286,166 @@ fn an_update_of_the_previous_track_keeps_the_chosen_one_on_screen() {
     core.handle_local(refreshed);
     assert_eq!(core.current_track_uri().as_deref(), Some("spotify:track:next"));
     assert!(core.intent_track.is_some());
+}
+
+/// Клик по строке переключает экран сразу: выбранный трек показан и грузится, движок ещё молчит.
+#[test]
+fn a_chosen_track_is_shown_before_the_engine_reports_it() {
+    let mut core = headless();
+    playing(&mut core, "spotify:track:old");
+    let items = vec![named("spotify:track:old", "Old"), named("spotify:track:new", "New")];
+    core.play_items(items, 1, PlayContext::new("search"));
+    let now = core.now_playing().expect("выбранный трек показан сразу");
+    assert_eq!(now.track.uri, "spotify:track:new");
+    assert!(now.loading, "до ответа движка — спиннер");
+    assert!(now.playing, "нажатие уже считалось нажатым");
+    assert_eq!(core.current_track_uri().as_deref(), Some("spotify:track:new"));
+}
+
+/// Пока движок грузит выбранный трек, экран держит его, а не предыдущий: холодный старт бывает дольше 6 с.
+#[test]
+fn a_slow_load_keeps_the_chosen_track_on_screen() {
+    let mut core = headless();
+    core.local.connected = true;
+    playing(&mut core, "spotify:track:old");
+    let items = vec![named("spotify:track:old", "Old"), named("spotify:track:new", "New")];
+    core.play_items(items, 1, PlayContext::new("search"));
+    let mut loading = core.local.clone();
+    loading.loading = true;
+    core.handle_local(loading);
+    core.age_intent(PLAYBACK_HOLD + Duration::from_secs(1));
+    core.tick();
+    assert_eq!(core.current_track_uri().as_deref(), Some("spotify:track:new"));
+    // движок отдал выбранный трек — намерение снято, дальше источник истины он сам
+    let mut started = core.local.clone();
+    started.loading = false;
+    started.track = local_track("spotify:track:new");
+    started.track_sequence += 1;
+    core.handle_local(started);
+    assert!(core.intent_track.is_none());
+}
+
+/// Загрузка, которая не кончается, отдаёт экран реальному состоянию: спиннер не висит вечно.
+#[test]
+fn a_load_that_never_finishes_gives_up_at_the_ceiling() {
+    let mut core = headless();
+    core.local.connected = true;
+    playing(&mut core, "spotify:track:old");
+    let items = vec![named("spotify:track:old", "Old"), named("spotify:track:new", "New")];
+    core.play_items(items, 1, PlayContext::new("search"));
+    let mut loading = core.local.clone();
+    loading.loading = true;
+    core.handle_local(loading);
+    core.age_intent(INTENT_CEILING + Duration::from_secs(1));
+    core.tick();
+    assert!(core.intent_track.is_none());
+    assert_eq!(core.current_track_uri().as_deref(), Some("spotify:track:old"));
+}
+
+/// Второй клик отменяет первый: на экране последний выбранный, в движок последним ушёл он же.
+#[test]
+fn a_second_click_replaces_the_pending_track() {
+    let mut core = headless();
+    core.local.connected = true;
+    playing(&mut core, "spotify:track:old");
+    let items = vec![named("spotify:track:a", "A"), named("spotify:track:b", "B")];
+    core.play_items(items.clone(), 0, PlayContext::new("search"));
+    core.play_items(items, 1, PlayContext::new("search"));
+    assert_eq!(core.current_track_uri().as_deref(), Some("spotify:track:b"));
+    let loads: Vec<PlayerCommand> = engine_commands(&mut core)
+        .into_iter()
+        .filter(|command| matches!(command, PlayerCommand::Load(_)))
+        .collect();
+    assert!(
+        matches!(loads.as_slice(), [_, PlayerCommand::Load(load)] if load.offset_index == Some(1)),
+        "последним в движок ушёл выбранный трек"
+    );
+}
+
+/// Списки Web API не кладут строки в кэш ядра: клик по такому треку догружает его метаданные, и экран
+/// переключается на него ещё до звука, а не на безымянную заглушку.
+#[test]
+fn a_click_fetches_the_track_it_does_not_know() {
+    let mut core = headless();
+    playing(&mut core, "spotify:track:old");
+    // список из Web API: uri есть, в кэше ядра строки нет
+    core.play_uris(vec!["spotify:track:home".into(), "spotify:track:other".into()], 0, PlayContext::new("tracks"));
+    let calls = info_calls(&mut core);
+    assert!(
+        matches!(calls.as_slice(), [ApiCall::TrackInfo { uri, .. }] if uri == "spotify:track:home"),
+        "asked for the clicked track: {calls:?}"
+    );
+    let ApiCall::TrackInfo { request, uri } = calls[0].clone() else { unreachable!() };
+    core.handle_api(ApiReply::TrackInfo {
+        request,
+        uri: uri.clone(),
+        result: Ok(TrackItem { title: "Loaded".into(), artists: "Band".into(), ..named(&uri, "Loaded") }),
+    });
+    let now = core.now_playing().expect("строка показана");
+    assert_eq!(now.track.title, "Loaded", "метаданные доехали, пока грузился звук");
+    assert!(now.loading);
+    // повторно за тот же трек не спрашиваем
+    core.play_uris(vec!["spotify:track:home".into()], 0, PlayContext::new("tracks"));
+    assert!(info_calls(&mut core).is_empty(), "the row is cached now");
+}
+
+/// Строка очереди бывает безымянной заглушкой: такая запись не считается известной, метаданные всё равно
+/// спрашиваются — иначе экран так и остался бы с пустым названием.
+#[test]
+fn a_nameless_cached_row_still_asks_for_metadata() {
+    let mut core = headless();
+    playing(&mut core, "spotify:track:old");
+    core.remember(&song("spotify:track:stub"));
+    core.play_uris(vec!["spotify:track:stub".into()], 0, PlayContext::new("tracks"));
+    let calls = info_calls(&mut core);
+    assert!(
+        matches!(calls.as_slice(), [ApiCall::TrackInfo { uri, .. }] if uri == "spotify:track:stub"),
+        "asked for the nameless row: {calls:?}"
+    );
+    let ApiCall::TrackInfo { request, uri } = calls[0].clone() else { unreachable!() };
+    core.handle_api(ApiReply::TrackInfo { request, uri: uri.clone(), result: Ok(named(&uri, "Loaded")) });
+    assert_eq!(core.cached(&uri).map(|track| track.title.as_str()), Some("Loaded"), "the row is upgraded");
+}
+
+/// Безымянная строка очереди, пришедшая, пока ждём ответ, не отменяет запрос: иначе ответ выбросили бы.
+#[test]
+fn a_nameless_row_does_not_cancel_the_pending_metadata_request() {
+    let mut core = headless();
+    playing(&mut core, "spotify:track:old");
+    core.play_uris(vec!["spotify:track:y".into()], 0, PlayContext::new("tracks"));
+    let ApiCall::TrackInfo { request, uri } = info_calls(&mut core)[0].clone() else { unreachable!() };
+    core.remember(&song(&uri));
+    core.handle_api(ApiReply::TrackInfo { request, uri: uri.clone(), result: Ok(named(&uri, "Loaded")) });
+    assert_eq!(core.cached(&uri).map(|track| track.title.as_str()), Some("Loaded"));
+}
+
+/// Устаревший ответ не перебивает строку, которую уже принесли с другой стороны.
+#[test]
+fn a_stale_metadata_reply_is_dropped_once_the_row_is_known() {
+    let mut core = headless();
+    playing(&mut core, "spotify:track:old");
+    core.play_uris(vec!["spotify:track:x".into()], 0, PlayContext::new("tracks"));
+    let ApiCall::TrackInfo { request, uri } = info_calls(&mut core)[0].clone() else { unreachable!() };
+    core.remember(&named(&uri, "Fresh"));
+    core.handle_api(ApiReply::TrackInfo {
+        request,
+        uri: uri.clone(),
+        result: Ok(named(&uri, "Stale")),
+    });
+    assert_eq!(core.cached(&uri).map(|track| track.title.as_str()), Some("Fresh"));
+}
+
+/// Список знает только URI: запомненная заранее строка всё равно показывается сразу.
+#[test]
+fn a_remembered_track_shows_up_for_a_uri_list_play() {
+    let mut core = headless();
+    core.local.connected = true;
+    playing(&mut core, "spotify:track:old");
+    core.remember(&named("spotify:track:new", "New"));
+    core.play_uris(vec!["spotify:track:new".into()], 0, PlayContext::new("tracks"));
+    let now = core.now_playing().expect("строка нашлась в кэше");
+    assert_eq!(now.track.title, "New");
+    assert!(now.loading);
 }
 
 /// Отказ в ключе — испорченная сессия: переподключиться сразу, но не чаще раза в 30 с.
@@ -1633,7 +1798,12 @@ fn shuffle_targets_active_remote_playback_without_a_device_id() {
 fn playing_with_no_device_asks_for_one() {
     let mut core = Core::new(0.5, false);
     core.play_uris(vec!["spotify:track:a".into()], 0, PlayContext::new("tracks"));
-    assert!(api_calls(&mut core).is_empty(), "Spotify is never asked to play “nowhere”");
+    // метаданные строки — чтение, устройство им не нужно; играть «нигде» не просим
+    let plays: Vec<ApiCall> = api_calls(&mut core)
+        .into_iter()
+        .filter(|call| matches!(call, ApiCall::Play { .. } | ApiCall::Remote { .. }))
+        .collect();
+    assert!(plays.is_empty(), "Spotify is never asked to play “nowhere”");
     assert_eq!(notices(&core), ["Choose a device or turn on playback on this computer"]);
     // движок подключается — запрос ждёт его
     let mut core = Core::new(0.5, false);
@@ -2132,6 +2302,9 @@ mod actor {
                         ApiReply::QueueBatchAdded { request, added: uris.len(), result: Ok(()) }
                     }
                     ApiCall::AlbumTracks { request, .. } => ApiReply::AlbumTracks { request, result: Ok(Vec::new()) },
+                    ApiCall::TrackInfo { request, uri, .. } => {
+                        ApiReply::TrackInfo { request, uri, result: Err(sf_api::ApiError::Network("no metadata".into())) }
+                    }
                 }
             })
         }
@@ -2159,6 +2332,9 @@ mod actor {
                         ApiReply::QueueBatchAdded { request, added: uris.len(), result: Ok(()) }
                     }
                     ApiCall::Remote { action, .. } => ApiReply::Remote { action, result: Ok(()) },
+                    ApiCall::TrackInfo { request, uri, .. } => {
+                        ApiReply::TrackInfo { request, uri, result: Err(sf_api::ApiError::Network("no metadata".into())) }
+                    }
                     other => panic!("unexpected call {other:?}"),
                 }
             })
