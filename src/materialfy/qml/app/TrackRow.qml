@@ -260,14 +260,12 @@ Item {
                 }
                 Item { Layout.fillWidth: true }
             }
-            LinkLabel {
+            ArtistLinks {
                 Layout.fillWidth: true
+                refs: root.artistRefs ?? []
                 text: root.artists
                 type: "bodyMedium"
                 color: Theme.fgSurfaceVariant
-                linkEnabled: (root.artistRefs ?? []).length > 0
-                previewArtistId: (root.artistRefs ?? []).length === 1 ? root.artistRefs[0].id : ""
-                onClicked: Catalog.openArtists(root.artistRefs)
             }
         }
 
