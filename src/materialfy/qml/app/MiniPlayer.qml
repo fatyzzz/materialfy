@@ -100,16 +100,10 @@ Item {
                 anchors.fill: parent
                 size: 52
                 playing: Player.playing
+                loading: Player.buffering
                 spin: Player.isLocal === true      // пульт не перерисовывает окно каждый кадр
                 enabled: Player.hasTrack
                 onClicked: Player.togglePlay()
-            }
-            LoadingIndicator {
-                anchors.centerIn: parent
-                size: 60
-                color: Theme.primary
-                visible: Player.buffering
-                opacity: 0.5
             }
         }
         IconButton { icon: "skip_next"; iconColor: Theme.fgSurface; enabled: Player.hasTrack; onClicked: Player.next() }

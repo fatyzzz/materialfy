@@ -175,6 +175,11 @@ impl PlayerHandle {
         self.send(Command::PlayUris { uris, index, context });
     }
 
+    /// Запомнить строку: выбранный трек показывается сразу, даже когда список знает только его URI.
+    pub fn remember(&self, track: TrackItem) {
+        self.send(Command::Remember(Box::new(track)));
+    }
+
     /// Выпуск подкаста с позиции (resume_ms).
     pub fn play_episode(&self, uri: String, position_ms: i64) {
         self.send(Command::PlayEpisode { uri, position_ms });
