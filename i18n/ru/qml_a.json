@@ -199,6 +199,7 @@
   "Save": "Сохранить",
   "Remove": "Удалить",
   "Permissions are stored in Windows Credential Manager. “Sign out” removes all three; the cache stays.": "Разрешения хранятся в Диспетчере учётных данных Windows. «Выйти» удаляет все три; кэш остаётся.",
+  "Permissions are stored in the system keychain. “Sign out” removes all three; the cache stays.": "Разрешения хранятся в связке ключей системы. «Выйти» удаляет все три; кэш остаётся.",
   "Secret storage is unavailable: permissions last until the app closes. “Sign out” removes all three; the cache stays.": "Хранилище секретов недоступно: разрешения живут до закрытия приложения. «Выйти» удаляет все три; кэш остаётся.",
   "Audio restart needed": "Нужен перезапуск звука",
   "New settings take effect after a restart; the track will resume from the same spot.": "Новые параметры начнут работать после перезапуска; трек продолжится с того же места.",
