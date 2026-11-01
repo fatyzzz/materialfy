@@ -41,7 +41,7 @@ Item {
             const dt = root._lastTick > 0 ? Math.min(0.1, (now - root._lastTick) / 1000) : 0.016
             root._lastTick = now
             root.position += dt
-            if (root.position > 11.8) {
+            if (root.position > 12.4) {
                 root.position = 0
                 view.layoutRevision++
             }
@@ -93,12 +93,12 @@ Item {
             ]
         },
         {
-            t: 9.6, e: 11.8, i: false,
+            t: 9.6, e: 12.2, i: false,
             w: [
                 { x: "It ", s: 9.6, e: 9.9 },
                 { x: "carries ", s: 9.9, e: 10.5 },
                 { x: "us ", s: 10.5, e: 10.9 },
-                { x: "away", s: 10.9, e: 11.8 }
+                { x: "away", s: 10.9, e: 12.2 }
             ]
         }
     ]

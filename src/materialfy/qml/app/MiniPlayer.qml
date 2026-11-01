@@ -225,7 +225,7 @@ Item {
                         }
                         LinkLabel {
                             Layout.fillWidth: true
-                            visible: !parent.artistLinks
+                            visible: !parent.artistLinks && !(remoteLabel.shown && !root.roomForMenu && Player.errorText === "")
                             // у выпуска подкаста — ссылка на подкаст
                             linkEnabled: Player.errorText === "" && Player.hasTrack && Player.isEpisode === true
                                          && (Player.track.showId ?? "") !== ""

@@ -126,7 +126,7 @@ Item {
             }
             ArtistLinks {
                 Layout.fillWidth: true
-                visible: !root.track.isEpisode
+                visible: root.track.isEpisode !== true
                 refs: root.track.artistRefs ?? []
                 text: root.track.artists ?? ""
                 type: "bodyMedium"
@@ -134,7 +134,7 @@ Item {
             }
             LinkLabel {
                 Layout.fillWidth: true
-                visible: root.track.isEpisode
+                visible: root.track.isEpisode === true
                 text: root.track.album || root.track.artists || ""
                 type: "bodyMedium"
                 color: Theme.fgSurfaceVariant

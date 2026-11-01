@@ -21,7 +21,7 @@ Item {
     readonly property bool _matches: text === "" || _names.text === text
     readonly property bool linked: _refs.length > 0 && fits && _matches
     // ширина содержимого — без оглядки на width: иначе в раскладке получается петля биндингов
-    readonly property real naturalWidth: _refs.length > 0 ? _names.advanceWidth : _label.advanceWidth
+    readonly property real naturalWidth: _refs.length > 0 && _matches ? _names.advanceWidth : _label.advanceWidth
 
     implicitWidth: naturalWidth
     implicitHeight: Math.ceil(_probe.implicitHeight)
