@@ -444,6 +444,11 @@ impl qobject::Catalog {
         match kind {
             "artist" => self.open_artist(&id),
             "album" => self.open_album(&id),
+            // DJ выглядит плейлистом, но списка треков у него нет: ссылка на него только запускает его
+            "playlist" if uri == sf_services::data::home_feed::DJ_URI => {
+                let context = PlayContext::with_uri("playlist", uri.clone());
+                ctx().services.player.play_context(context, None, None);
+            }
             "playlist" => {
                 let pairs = [
                     ("playlistId", Value::from(id.to_string())),

@@ -103,12 +103,20 @@ pub fn made_for_you(term: &str, playlists: Vec<PlaylistItem>) -> Vec<PlaylistIte
 }
 
 pub fn playlist_entry(p: &PlaylistItem) -> LibraryEntry {
+    // DJ — не плейлист: у него нет списка треков, он только запускается (как кнопка)
+    let dj = p.uri == crate::data::home_feed::DJ_URI;
     LibraryEntry {
-        kind: "playlist".into(),
+        kind: if dj { "dj".into() } else { "playlist".into() },
         id: p.playlist_id.clone(),
         uri: if p.uri.is_empty() { format!("spotify:playlist:{}", p.playlist_id) } else { p.uri.clone() },
-        title: p.title.clone(),
-        subtitle: if p.owner.is_empty() { mf_i18n::t("Playlist") } else { mf_i18n::tf("Playlist · {0}", &[&p.owner]) },
+        title: if dj { "DJ".into() } else { p.title.clone() },
+        subtitle: if dj {
+            mf_i18n::t("Music and commentary picked for you")
+        } else if p.owner.is_empty() {
+            mf_i18n::t("Playlist")
+        } else {
+            mf_i18n::tf("Playlist · {0}", &[&p.owner])
+        },
         cover: p.cover.clone(),
         covers: if p.cover.is_empty() { Vec::new() } else { vec![p.cover.clone()] },
         owner: p.owner.clone(),
@@ -380,6 +388,24 @@ mod tests {
         assert_eq!((tiles[0].kind.as_str(), tiles[0].subtitle.as_str()), ("liked", "21 tracks"));
         assert_eq!(tiles[1].uri, "spotify:playlist:0");
         assert!(tiles[1].read_only);
+    }
+
+    #[test]
+    fn the_dj_row_is_a_button_not_a_playlist() {
+        let dj = PlaylistItem {
+            playlist_id: "37i9dQZF1EYkqdzj48dyYq".into(),
+            uri: crate::data::home_feed::DJ_URI.into(),
+            title: "DJ".into(),
+            owner: "Spotify".into(),
+            ..Default::default()
+        };
+        let entry = playlist_entry(&dj);
+        assert_eq!((entry.kind.as_str(), entry.title.as_str()), ("dj", "DJ"), "у DJ нет списка треков, он только играет");
+        assert_eq!(entry.subtitle, mf_i18n::t("Music and commentary picked for you"));
+        assert_eq!(entry.uri, crate::data::home_feed::DJ_URI);
+        assert_eq!(entry.owner, "Spotify", "остальные поля не тронуты");
+
+        assert_eq!(playlist_entry(&playlist("p", "Мой плейлист", "me")).kind, "playlist");
     }
 
     #[test]

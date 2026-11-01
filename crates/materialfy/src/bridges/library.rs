@@ -171,6 +171,10 @@ pub mod qobject {
         /// kind: playlists|albums|artists|shows; owner: all|mine|followed|collab; sort — как Settings.librarySort.
         #[qinvokable]
         fn items(self: Pin<&mut Library>, kind: &QString, owner: &QString, sort: &QString) -> *mut QObject;
+        /// Последние добавленные/обновлённые строки всех разделов (для боковой панели), limit — сколько.
+        #[qinvokable]
+        #[cxx_name = "recentEntries"]
+        fn recent_entries(self: Pin<&mut Library>, limit: i32) -> *mut QObject;
         #[qinvokable]
         #[cxx_name = "folderChildren"]
         fn folder_children(self: Pin<&mut Library>, folder_id: &QString) -> *mut QObject;
@@ -509,6 +513,21 @@ impl qobject::Library {
         model_ptr(model)
     }
 
+    fn recent_entries(mut self: Pin<&mut Self>, limit: i32) -> *mut cxx_qt::QObject {
+        let limit = usize::try_from(limit.max(1)).unwrap_or(20).min(200);
+        let key = format!("recent|{limit}");
+        let library = &ctx().services.library;
+        let rows = to_rows(&library.recent_entries(limit));
+        let loading = library.playlists_loading();
+        let this = self.as_mut().rust_mut().get_mut();
+        let model = this.entry_models.entry(key).or_insert_with(|| DictListModel::create(ModelKind::Library));
+        with_model(model, |mut m| {
+            m.as_mut().sync_rows(rows, ENTRY_KEY);
+            m.set_loading(loading);
+        });
+        model_ptr(model)
+    }
+
     fn folder_children(mut self: Pin<&mut Self>, folder_id: &QString) -> *mut cxx_qt::QObject {
         let id = folder_id.to_string();
         let rows = to_rows(&ctx().services.library.folder_children(&id));
@@ -567,6 +586,17 @@ impl qobject::Library {
         let library = &ctx().services.library;
         let this = self.as_mut().rust_mut().get_mut();
         for (key, model) in this.entry_models.iter_mut() {
+            // "recent|<limit>" — сводка по всем разделам для боковой панели
+            if let Some(limit) = key.strip_prefix("recent|") {
+                let limit = limit.parse::<usize>().unwrap_or(20);
+                let rows = to_rows(&library.recent_entries(limit));
+                let loading = library.playlists_loading();
+                with_model(model, |mut m| {
+                    m.as_mut().sync_rows(rows, ENTRY_KEY);
+                    m.set_loading(loading);
+                });
+                continue;
+            }
             let mut parts = key.splitn(3, '|');
             let (kind, owner, sort) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""), parts.next().unwrap_or(""));
             let rows = to_rows(&library.entries(LibraryKind::from_name(kind), owner, sort));
