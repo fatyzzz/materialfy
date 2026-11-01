@@ -210,15 +210,26 @@ Item {
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 8
+                        // Исполнители — по ссылке на каждого (карточка по наведению). Выпуск, ошибка, пустой
+                        // плеер и тесная пилюля с чужим устройством остаются одной подписью
+                        readonly property bool artistLinks: Player.errorText === "" && Player.hasTrack
+                                                            && Player.isEpisode !== true
+                                                            && !(remoteLabel.shown && !root.roomForMenu)
+                        ArtistLinks {
+                            Layout.fillWidth: true
+                            visible: parent.artistLinks
+                            refs: Player.track ? (Player.track.artistRefs ?? []) : []
+                            text: Player.artist
+                            type: "bodySmall"
+                            color: Theme.fgSurfaceVariant
+                        }
                         LinkLabel {
                             Layout.fillWidth: true
-                            // в тесной пилюле при игре на другом устройстве вместо исполнителя — «Играет на …»
-                            visible: !(remoteLabel.shown && !root.roomForMenu && Player.errorText === "")
+                            visible: !parent.artistLinks && !(remoteLabel.shown && !root.roomForMenu && Player.errorText === "")
                             // у выпуска подкаста — ссылка на подкаст
-                            linkEnabled: Player.errorText === "" && Player.hasTrack
-                                         && (Player.isEpisode ? (Player.track.showId ?? "") !== "" : (Player.track.artistRefs ?? []).length > 0)
-                            previewArtistId: !Player.isEpisode && (Player.track.artistRefs ?? []).length === 1 ? Player.track.artistRefs[0].id : ""
-                            onClicked: Player.isEpisode ? Catalog.openShow(Player.track.showId ?? "") : Catalog.openArtists(Player.track.artistRefs ?? [])
+                            linkEnabled: Player.errorText === "" && Player.hasTrack && Player.isEpisode === true
+                                         && (Player.track.showId ?? "") !== ""
+                            onClicked: Catalog.openShow(Player.track.showId ?? "")
                             text: Player.errorText !== "" ? Player.errorText
                                 : Player.hasTrack ? Player.artist : I18n.t("Play a track, album or playlist")
                             type: "bodySmall"
