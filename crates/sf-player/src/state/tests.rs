@@ -289,6 +289,7 @@ fn an_update_of_the_previous_track_keeps_the_chosen_one_on_screen() {
 }
 
 /// Клик по строке переключает экран сразу: выбранный трек показан и грузится, движок ещё молчит.
+/// «Играет» при этом не показываем: звука ещё нет, и полоса не должна идти вперёд.
 #[test]
 fn a_chosen_track_is_shown_before_the_engine_reports_it() {
     let mut core = headless();
@@ -298,8 +299,25 @@ fn a_chosen_track_is_shown_before_the_engine_reports_it() {
     let now = core.now_playing().expect("выбранный трек показан сразу");
     assert_eq!(now.track.uri, "spotify:track:new");
     assert!(now.loading, "до ответа движка — спиннер");
-    assert!(now.playing, "нажатие уже считалось нажатым");
+    assert!(!now.playing, "трек ещё грузится — «играет» было бы враньём");
     assert_eq!(core.current_track_uri().as_deref(), Some("spotify:track:new"));
+    // движок отдал этот трек — теперь он и правда играет
+    let mut started = core.local.clone();
+    started.track = local_track("spotify:track:new");
+    started.playback = Playback::Playing;
+    started.track_sequence += 1;
+    core.handle_local(started);
+    let now = core.now_playing().expect("трек на экране");
+    assert!(now.playing && !now.loading, "после старта — играет, спиннер снят");
+}
+
+/// Пауза и продолжение того же трека остаются мгновенными: оптимистичный ответ нужен именно им.
+#[test]
+fn pausing_the_playing_track_stays_instant() {
+    let mut core = headless();
+    playing(&mut core, "spotify:track:a");
+    core.toggle_play();
+    assert!(!core.believed_playing(), "пауза видна сразу, не дожидаясь движка");
 }
 
 /// Пока движок грузит выбранный трек, экран держит его, а не предыдущий: холодный старт бывает дольше 6 с.
@@ -446,6 +464,19 @@ fn a_remembered_track_shows_up_for_a_uri_list_play() {
     let now = core.now_playing().expect("строка нашлась в кэше");
     assert_eq!(now.track.title, "New");
     assert!(now.loading);
+}
+
+/// Недоступный трек librespot пропускает сам: сообщение называет трек, иначе смена песни выглядит
+/// самовольной.
+#[test]
+fn an_unavailable_track_is_named_in_the_notice() {
+    let mut core = headless();
+    core.remember(&named("spotify:track:gone", "Gone"));
+    playing(&mut core, "spotify:track:gone");
+    let mut failed = core.local.clone();
+    failed.error = Some(format!("{}: spotify:track:gone", crate::engine::player::UNAVAILABLE));
+    core.handle_local(failed);
+    assert_eq!(notices(&core), [mf_i18n::tf("“{0}” isn't available — moving on", &[&"Gone".to_owned()])]);
 }
 
 /// Отказ в ключе — испорченная сессия: переподключиться сразу, но не чаще раза в 30 с.

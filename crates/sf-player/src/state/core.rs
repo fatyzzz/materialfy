@@ -743,9 +743,17 @@ impl Core {
         let mut now = self.cached_track_preview(&intent.uri, intent.position_ms)?;
         let actual = self.now_playing_live();
         now.local = matches!(intent.confirmation, TrackConfirmation::Local);
-        now.playing = match self.optimistic_playing {
-            Some((playing, at)) if at.elapsed() < PLAYBACK_HOLD => playing,
-            _ => self.queued_play.is_some() || actual.as_ref().is_some_and(|now| now.playing),
+        // Смена трека на этом ПК: пока движок его не отдал, играет не он — и показывать «играет» нельзя,
+        // иначе строка идёт вперёд, а звука нет. Оптимистичный ответ нужен только паузе/продолжению
+        // того же трека, который уже звучит.
+        let switching = now.local && actual.as_ref().is_none_or(|live| live.track.uri != intent.uri);
+        now.playing = if switching {
+            false
+        } else {
+            match self.optimistic_playing {
+                Some((playing, at)) if at.elapsed() < PLAYBACK_HOLD => playing,
+                _ => self.queued_play.is_some() || actual.as_ref().is_some_and(|now| now.playing),
+            }
         };
         now.loading = true;
         now.resuming = false;
@@ -1029,7 +1037,20 @@ impl Core {
         if let Some(error) = &state.error
             && self.local.error.as_deref() != Some(error.as_str())
         {
-            let text = engine_error_text(error);
+            // Недоступный трек librespot пропускает сам (spirc: Unavailable текущего → следующий), и без
+            // объяснения это выглядит как самовольная смена песни. Называем трек и говорим, что дальше.
+            let text = match error.strip_prefix(crate::engine::player::UNAVAILABLE) {
+                Some(uri) => {
+                    let uri = uri.trim().trim_start_matches(':').trim();
+                    let title = self.cached(uri).map(|track| track.title.clone()).unwrap_or_default();
+                    if title.is_empty() {
+                        mf_i18n::t("This track isn't available — moving on")
+                    } else {
+                        mf_i18n::tf("“{0}” isn't available — moving on", &[&title])
+                    }
+                }
+                None => engine_error_text(error),
+            };
             self.notice(text);
             // Испорченная сессия librespot лечится новой (воспроизведение подхватывается с той же позиции):
             // ключ не выдан — сразу (Spotify перестаёт выдавать ключи этой сессии, у новой они есть: в РФ без
