@@ -252,10 +252,30 @@ pub fn artist_page(
     ArtistPage {
         info: map::artist_info(artist, followed),
         popular,
-        albums: albums.iter().map(map::album_item).collect(),
+        albums: latest_release_first(albums),
         also_albums: also.iter().map(map::album_item).collect(),
         similar: similar.iter().map(map::artist_item).collect(),
     }
+}
+
+/// Первым — последний релиз, остальные в том порядке, в каком их отдал Spotify: раздел «Альбомы и синглы»
+/// подписывает первую плитку, и она должна быть именно свежей. Дат нет — порядок не трогаем.
+fn latest_release_first(albums: &[Album]) -> Vec<AlbumItem> {
+    // полная дата есть только здесь: у AlbumItem остаётся один год, и релизы одного года им не различить
+    let newest = albums
+        .iter()
+        .enumerate()
+        .filter(|(_, album)| album.release_date.as_deref().is_some_and(|date| !date.is_empty()))
+        .max_by(|(left_index, left), (right_index, right)| {
+            left.release_date.cmp(&right.release_date).then(right_index.cmp(left_index))
+        })
+        .map(|(index, _)| index);
+    let mut mapped: Vec<AlbumItem> = albums.iter().map(map::album_item).collect();
+    if let Some(newest) = newest {
+        let latest = mapped.remove(newest);
+        mapped.insert(0, latest);
+    }
+    mapped
 }
 
 /// Окно «О треке» из того, что успело прийти: метаданные сессии, ответ getTrack, страница альбома.
@@ -998,6 +1018,39 @@ mod tests {
         assert!(page.info.followed);
         assert_eq!(page.popular.len(), 1);
         assert!(page.similar.is_empty());
+    }
+
+    #[test]
+    fn the_artist_page_leads_with_the_latest_release_and_keeps_the_rest_in_order() {
+        let release = |id: &str, date: &str| Album {
+            id: id.into(),
+            name: format!("Release {id}"),
+            release_date: Some(date.into()),
+            ..Default::default()
+        };
+        // Spotify отдаёт альбомы, потом синглы: свежий сингл стоит в конце списка
+        let albums = [
+            release("old-album", "2017-06-23"),
+            release("album", "2022-11-05"),
+            release("undated", ""),
+            release("single", "2026-01-01"),
+        ];
+        let page = artist_page(&artist("Muse"), false, &[], &albums, &[], &[]);
+        let ids: Vec<&str> = page.albums.iter().map(|album| album.album_id.as_str()).collect();
+        assert_eq!(
+            ids,
+            ["single", "old-album", "album", "undated"],
+            "the latest release leads, the rest keep Spotify's order"
+        );
+        assert_eq!(page.albums[0].year, 2026, "the caption in QML keys off the year");
+    }
+
+    #[test]
+    fn an_artist_without_dated_releases_keeps_its_order() {
+        let album = |id: &str| Album { id: id.into(), name: id.into(), ..Default::default() };
+        let page = artist_page(&artist("Muse"), false, &[], &[album("a"), album("b")], &[], &[]);
+        let ids: Vec<&str> = page.albums.iter().map(|album| album.album_id.as_str()).collect();
+        assert_eq!(ids, ["a", "b"], "nothing to lead with, nothing moved");
     }
 
     #[test]

@@ -295,7 +295,11 @@ Page {
                     coverArtist: page.info.name ?? ""
                     coverTitle: slot.model.title
                     title: slot.model.title
-                    subtitle: [slot.model.year || "", slot.model.kind ? I18n.any(slot.model.kind) : ""].filter(x => x).join(" · ")
+                    // первая плитка — самый свежий релиз (сервис ставит его первым): подпись объясняет,
+                    // почему он первый. Без года подписи нет — значит свежего релиза у исполнителя и нет
+                    subtitle: [slot.index === 0 && slot.model.year > 0 ? I18n.t("Latest release") : "",
+                               slot.model.year || "",
+                               slot.model.kind ? I18n.any(slot.model.kind) : ""].filter(x => x).join(" · ")
                     explicit: slot.model.explicit
                     // «Слушать» по наведению, как на главной: играющий альбом ставится на паузу
                     readonly property string albumUri: slot.model.uri || ("spotify:album:" + slot.model.albumId)
