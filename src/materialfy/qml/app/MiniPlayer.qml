@@ -212,6 +212,8 @@ Item {
                         ArtistLinks {
                             Layout.fillWidth: true
                             visible: parent.artistLinks
+                            // карточки по наведению тут нет: клик по имени сразу открывает исполнителя
+                            preview: false
                             refs: Player.track ? (Player.track.artistRefs ?? []) : []
                             text: Player.artist
                             type: "bodySmall"
