@@ -312,6 +312,37 @@ on_unhandled_exception(EXCEPTION_POINTERS* info)
   return EXCEPTION_CONTINUE_SEARCH; // дальше — как обычно (отчёт Windows, журнал событий)
 }
 } // namespace
+#elif defined(Q_OS_LINUX)
+#include <execinfo.h>
+#include <fcntl.h>
+#include <signal.h>
+#include <unistd.h>
+
+#include <cstdio>
+#include <cstring>
+
+namespace {
+char crash_log_path[4096] = {};
+
+// Обработчик сигнала: только open/write/backtrace, без Qt и без выделения памяти в куче
+void
+on_fatal_signal(int signal_number)
+{
+  const int fd = open(crash_log_path, O_WRONLY | O_CREAT | O_APPEND, 0644);
+  if (fd >= 0) {
+    char header[96];
+    const int length = snprintf(header, sizeof header, "=== native crash · Materialfy · signal %d\n", signal_number);
+    const auto written = write(fd, header, length > 0 ? static_cast<size_t>(length) : 0);
+    Q_UNUSED(written);
+    void* frames[64];
+    const int count = backtrace(frames, 64);
+    backtrace_symbols_fd(frames, count, fd);
+    close(fd);
+  }
+  // SA_RESETHAND уже вернул обработчик по умолчанию: повтор сигнала даёт обычное падение и дамп
+  raise(signal_number);
+}
+} // namespace
 #endif
 
 void
@@ -320,6 +351,19 @@ install_native_crash_log(const QString& path)
 #if defined(Q_OS_WIN)
   wcsncpy_s(crash_log_path, reinterpret_cast<const wchar_t*>(path.utf16()), _TRUNCATE);
   SetUnhandledExceptionFilter(on_unhandled_exception);
+#elif defined(Q_OS_LINUX)
+  const QByteArray utf8 = path.toUtf8();
+  std::strncpy(crash_log_path, utf8.constData(), sizeof crash_log_path - 1);
+  // первый вызов backtrace подгружает libgcc_s и может выделить память: делаем это до падения
+  void* warmup[1];
+  backtrace(warmup, 1);
+  struct sigaction action {};
+  action.sa_handler = on_fatal_signal;
+  sigemptyset(&action.sa_mask);
+  action.sa_flags = SA_RESETHAND;
+  for (const int signal_number : {SIGSEGV, SIGBUS, SIGABRT, SIGFPE, SIGILL}) {
+    sigaction(signal_number, &action, nullptr);
+  }
 #else
   Q_UNUSED(path);
 #endif
