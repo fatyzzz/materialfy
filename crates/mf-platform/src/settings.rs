@@ -157,6 +157,12 @@ pub enum SettingKey {
     TaskbarWidgetPos,
     /// сколько раз под раскрытым островком показана подсказка с клавишами (до 3)
     FloatingKeyHints,
+    FloatingHideFullscreen,
+    FloatingHideMaximized,
+    FloatingOffsetX,
+    FloatingEdge,
+    FloatingFreeX,
+    FloatingFreeY,
     /// мониторы для островка: "" / "0" (основной) | "0,1" | "all"
     FloatingIslandScreens,
     /// мониторы для панели задач: "" / "0" (основной) | "0,1" | "all"
@@ -189,7 +195,7 @@ pub enum SettingType {
 }
 
 impl SettingKey {
-    pub const ALL: [SettingKey; 84] = [
+    pub const ALL: [SettingKey; 90] = [
         SettingKey::ThemeMode,
         SettingKey::SchemeVariant,
         SettingKey::AccentFromCover,
@@ -268,6 +274,12 @@ impl SettingKey {
         SettingKey::FloatingPlayerStyle,
         SettingKey::TaskbarWidgetPos,
         SettingKey::FloatingKeyHints,
+        SettingKey::FloatingHideFullscreen,
+        SettingKey::FloatingHideMaximized,
+        SettingKey::FloatingOffsetX,
+        SettingKey::FloatingEdge,
+        SettingKey::FloatingFreeX,
+        SettingKey::FloatingFreeY,
         SettingKey::FloatingIslandScreens,
         SettingKey::TaskbarScreens,
         SettingKey::TaskbarPositions,
@@ -358,6 +370,12 @@ impl SettingKey {
             FloatingPlayerStyle => "floatingPlayerStyle",
             TaskbarWidgetPos => "taskbarWidgetPos",
             FloatingKeyHints => "floatingKeyHints",
+            FloatingHideFullscreen => "floatingHideFullscreen",
+            FloatingHideMaximized => "floatingHideMaximized",
+            FloatingOffsetX => "floatingOffsetX",
+            FloatingEdge => "floatingEdge",
+            FloatingFreeX => "floatingFreeX",
+            FloatingFreeY => "floatingFreeY",
             FloatingIslandScreens => "floatingIslandScreens",
             TaskbarScreens => "taskbarScreens",
             TaskbarPositions => "taskbarPositions",
@@ -462,6 +480,12 @@ impl SettingKey {
             FloatingPlayerStyle => Str("black".into()),
             TaskbarWidgetPos => Str("tray".into()),
             FloatingKeyHints => Int(0),
+            FloatingHideFullscreen => Bool(true),
+            FloatingHideMaximized => Bool(false),
+            FloatingOffsetX => Int(0),
+            FloatingEdge => Str("top".into()),
+            FloatingFreeX => Int(WINDOW_POS_UNSET),
+            FloatingFreeY => Int(WINDOW_POS_UNSET),
             FloatingIslandScreens => Str(String::new()),
             TaskbarScreens => Str(String::new()),
             TaskbarPositions => Str(String::new()),
@@ -566,6 +590,16 @@ impl SettingKey {
                     _ => "off",
                 }.into())
             }
+            (SettingKey::FloatingEdge, SettingValue::Str(s)) => SettingValue::Str(
+                match s.as_str() {
+                    "bottom" => "bottom",
+                    "left" => "left",
+                    "right" => "right",
+                    "free" => "free",
+                    _ => "top",
+                }
+                .into(),
+            ),
             (SettingKey::FloatingPlayerStyle, SettingValue::Str(s)) => {
                 SettingValue::Str(if s == "color" { "color" } else { "black" }.into())
             }
@@ -1208,7 +1242,7 @@ mod tests {
 
     #[test]
     fn schema() {
-        assert_eq!(SettingKey::ALL.len(), 84);
+        assert_eq!(SettingKey::ALL.len(), 90);
         for key in SettingKey::ALL {
             assert_eq!(SettingKey::from_name(key.name()), Some(key));
             assert_eq!(key.default_value().value_type(), key.value_type());
@@ -1246,6 +1280,8 @@ mod tests {
         assert_eq!(SettingKey::FloatingPlayer.normalize(Str("notch".into())), Str("off".into()));
         assert_eq!(SettingKey::FloatingPlayerStyle.normalize(Str("color".into())), Str("color".into()));
         assert_eq!(SettingKey::FloatingPlayerStyle.normalize(Str("pink".into())), Str("black".into()));
+        assert_eq!(SettingKey::FloatingEdge.normalize(Str("left".into())), Str("left".into()));
+        assert_eq!(SettingKey::FloatingEdge.normalize(Str("up".into())), Str("top".into()));
         assert_eq!(SettingKey::TaskbarWidgetPos.normalize(Str("appsRight".into())), Str("appsRight".into()));
         assert_eq!(SettingKey::TaskbarWidgetPos.normalize(Str("0.5".into())), Str("0.5000".into()));
         assert_eq!(SettingKey::TaskbarWidgetPos.normalize(Str("7".into())), Str("1.0000".into()));
@@ -1555,7 +1591,7 @@ mod tests {
             "lyricsLineSpacing", "lyricsAnimate", "lyricsShowSource", "lyricsSyncMs",
             "animations", "lowPowerMode", "gpuPreference", "rightPanelOpen", "rightPanelTab", "sidebarCollapsed", "windowWidth",
             "windowHeight", "windowX", "windowY", "windowMaximized", "closeToTray", "wheelStep", "floatingPlayer", "floatingPlayerStyle",
-            "taskbarWidgetPos", "floatingKeyHints", "libraryView",
+            "taskbarWidgetPos", "floatingKeyHints", "floatingHideFullscreen", "floatingHideMaximized", "floatingOffsetX", "floatingEdge", "floatingFreeX", "floatingFreeY", "libraryView",
             "librarySort", "homeHidden", "homeRadioHidden", "sidebarLibrary", "bitrate", "normalisation", "gapless", "autoplay", "volume", "audioDevice",
             "audioCache", "audioCacheMb", "playbackAuthorized", "deviceName", "webClientId", "apiLimitTipDismissed", "proxyMode", "proxyHost",
             "proxyPort", "proxyUsername", "coversBypassProxy", "pins", "hiddenTracks", "radioSeeds", "language", "uiScale", "autoUpdateCheck",

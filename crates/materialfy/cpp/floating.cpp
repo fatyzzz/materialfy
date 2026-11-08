@@ -11,6 +11,7 @@
 // которым владеет сама панель: Windows держит его над ней и опускает вместе с ней под полноэкранное приложение.
 #include "floating.h"
 
+#include <QtCore/QEvent>
 #include <QtGui/QCursor>
 #include <QtGui/QGuiApplication>
 #include <QtGui/QPainterPath>
@@ -196,6 +197,16 @@ covers_monitor(HWND hwnd, HMONITOR monitor)
     GetWindowRect(hwnd, &r);
   const RECT& m = info.rcMonitor;
   return r.left <= m.left && r.top <= m.top && r.right >= m.right && r.bottom >= m.bottom;
+}
+
+// Развёрнутое окно на этом мониторе (кнопка «развернуть»: занимает рабочую область, панель задач остаётся)
+bool
+maximized_on_monitor(HWND hwnd, HMONITOR monitor)
+{
+  hwnd = hwnd ? GetAncestor(hwnd, GA_ROOT) : nullptr;
+  if (!hwnd || !IsWindowVisible(hwnd) || IsIconic(hwnd) || is_shell_window(hwnd) || !IsZoomed(hwnd))
+    return false;
+  return MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL) == monitor;
 }
 
 // ---- Панель задач и места на ней (физические пиксели экрана) ----
@@ -590,6 +601,21 @@ floating_fullscreen_on(QObject* object)
   return covers_monitor(WindowFromPoint(center), monitor);
 }
 
+bool
+floating_maximized_on(QObject* object)
+{
+  const HMONITOR monitor = monitor_for(target_screen(qobject_cast<QWindow*>(object)));
+  if (maximized_on_monitor(GetForegroundWindow(), monitor))
+    return true;
+  // переднее окно может быть на другом мониторе — смотрим, что видно в центре нашего
+  MONITORINFO info{};
+  info.cbSize = sizeof(info);
+  if (!GetMonitorInfoW(monitor, &info))
+    return false;
+  const POINT center{ (info.rcMonitor.left + info.rcMonitor.right) / 2, (info.rcMonitor.top + info.rcMonitor.bottom) / 2 };
+  return maximized_on_monitor(WindowFromPoint(center), monitor);
+}
+
 int
 floating_cursor_in(QObject* object, int x, int y, int w, int h)
 {
@@ -775,16 +801,44 @@ floating_key_hook(QObject* object, bool on)
 namespace mf {
 
 #if !defined(__APPLE__) // macOS — floating_mac.mm
-bool
-floating_tool_window(QObject* window)
+namespace {
+// Wayland не отдаёт глобальный курсор: после ухода мыши QCursor::pos() остаётся на последней точке внутри окна.
+// Вход и выход указателя ловим сами и кладём в свойство окна, его читает floating_cursor_in.
+class PointerTracker : public QObject
 {
-  (void)window;
-  return false;
+public:
+  using QObject::QObject;
+  bool eventFilter(QObject* watched, QEvent* event) override
+  {
+    if (event->type() == QEvent::Enter)
+      watched->setProperty("mfPointerIn", true);
+    else if (event->type() == QEvent::Leave)
+      watched->setProperty("mfPointerIn", false);
+    return false;
+  }
+};
+} // namespace
+
+bool
+floating_tool_window(QObject* object)
+{
+  auto* window = qobject_cast<QWindow*>(object);
+  if (!window || !QGuiApplication::platformName().startsWith(QLatin1String("wayland")))
+    return false;
+  window->installEventFilter(new PointerTracker(window));
+  return true;
 }
 #endif
 
 bool
 floating_fullscreen_on(QObject* window)
+{
+  (void)window;
+  return false;
+}
+
+bool
+floating_maximized_on(QObject* window)
 {
   (void)window;
   return false;
@@ -796,7 +850,9 @@ floating_cursor_in(QObject* object, int x, int y, int w, int h)
   auto* window = qobject_cast<QWindow*>(object);
   if (!window || w <= 0 || h <= 0)
     return 0;
-  // X11 и macOS отдают глобальный курсор; Wayland — последний известный нам (островка там нет)
+  // X11 и macOS отдают глобальный курсор; Wayland — последний известный нам, поэтому вне окна он не в счёт
+  if (QGuiApplication::platformName().startsWith(QLatin1String("wayland")) && !window->property("mfPointerIn").toBool())
+    return 0;
   const QPoint p = window->mapFromGlobal(QCursor::pos(window->screen()));
   if (!QRect(x, y, w, h).contains(p))
     return 0;

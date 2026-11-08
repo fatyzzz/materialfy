@@ -23,6 +23,10 @@ void floating_set_mask_rounded(QObject* window, int x, int y, int w, int h, int 
 // Смотрит на окно на переднем плане именно этого монитора — игра на втором мониторе первый не трогает.
 bool floating_fullscreen_on(QObject* window);
 
+// На мониторе окна развёрнутое окно (кнопка «развернуть»): островок по настройке прячется и под ним. Windows —
+// переднее окно или то, что видно в центре монитора; на KDE Wayland это делает скрипт KWin (kwin.rs), вне их — false.
+bool floating_maximized_on(QObject* window);
+
 // Курсор над прямоугольником (логические px окна; окно может быть и прозрачным для мыши): 0 — нет,
 // 1 — да, 2 — да, но зажата кнопка мыши (тащат окно или выделяют — островок не вылезает).
 int floating_cursor_in(QObject* window, int x, int y, int w, int h);

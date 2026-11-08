@@ -2,6 +2,7 @@
 //! MPRIS (Linux) и «единственный экземпляр» (Linux — D-Bus, Windows — именованный канал, macOS — unix-сокет).
 //! Секреты Spotify здесь не хранятся — это sf-auth (keyring-core).
 pub mod dirs;
+pub mod kwin;
 pub mod mpris;
 pub mod settings;
 pub mod single_instance;
