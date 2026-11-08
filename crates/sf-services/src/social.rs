@@ -576,8 +576,10 @@ fn parse_buddylist(body: &[u8]) -> Option<Vec<FriendActivity>> {
         .iter()
         .filter_map(|friend| {
             let user_uri = text(friend, "/user/uri");
+            // трека может не быть: Spotify оставляет запись, где слушают только контекст (плейлист без
+            // конкретной песни), официальный клиент такие строки показывает — выбрасывать их нельзя
             let track_uri = text(friend, "/track/uri");
-            if user_uri.is_empty() || track_uri.is_empty() {
+            if user_uri.is_empty() {
                 return None;
             }
             let name = Some(text(friend, "/user/name"))
@@ -601,9 +603,6 @@ fn parse_buddylist(body: &[u8]) -> Option<Vec<FriendActivity>> {
             })
         })
         .collect();
-    // Spotify отдаёт в buddylist только тех, кто слушает прямо сейчас, и не всех подписчиков: строки без
-    // трека отфильтрованы выше. Число в логе позволяет отличить «прислали мало» от «нарисовали мало».
-    tracing::debug!("buddylist: {} raw, {} with a playing track", friends.len(), list.len());
     list.sort_by_key(|friend| std::cmp::Reverse(friend.timestamp));
     Some(list)
 }
@@ -729,7 +728,8 @@ mod tests {
          "track":{"uri":"spotify:episode:512ojhOuo1ktJprKbVcKyQ","name":"Episode","imageUrl":"",
            "album":{"uri":"spotify:show:2MAi0BvDc6GTFvKFPXnkCL","name":"Show"},
            "artist":{"uri":"spotify:show:2MAi0BvDc6GTFvKFPXnkCL","name":"Show"}}},
-        {"timestamp":1,"user":{"uri":"spotify:user:carol","name":"Carol"}}
+        {"timestamp":1791792000000,"user":{"uri":"spotify:user:carol","name":"Carol"},
+         "track":{"context":{"uri":"spotify:playlist:p","name":"Playlist"}}}
     ]}"#;
 
     /// Trimmed live answer of GET social-connect/v3/sessions/current (2026-10).
@@ -747,12 +747,17 @@ mod tests {
     #[test]
     fn friend_activity_reads_newest_first() {
         let friends = parse_buddylist(BUDDYLIST.as_bytes()).unwrap();
-        assert_eq!(friends.len(), 2, "an entry without a track is skipped");
-        let bob = &friends[0];
+        assert_eq!(friends.len(), 3, "a context-only entry stays");
+        let carol = &friends[0];
+        assert_eq!(carol.name, "Carol");
+        assert_eq!((carol.track.as_str(), carol.track_uri.as_str()), ("", ""), "nothing is playing");
+        assert_eq!((carol.context.as_str(), carol.context_uri.as_str()), ("Playlist", "spotify:playlist:p"),
+                   "what the buddylist carries instead of a track");
+        let bob = &friends[1];
         assert_eq!((bob.name.as_str(), bob.timestamp), ("bob", 1_791_791_000_000), "no name — the username");
         assert!(bob.is_episode);
         assert_eq!(bob.context, "");
-        let alice = &friends[1];
+        let alice = &friends[2];
         assert_eq!(alice.name, "Alice");
         assert_eq!(alice.avatar, "https://i.scdn.co/image/ab6775700000ee85a1");
         assert_eq!(alice.cover, "https://i.scdn.co/image/ab67616d00001e02b1", "covers go over https");
