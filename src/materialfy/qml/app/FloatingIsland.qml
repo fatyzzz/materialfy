@@ -148,8 +148,8 @@ Window {
     property bool _ready: false
     property bool _fullscreen: false
     // macOS: островок — только в вырезе экрана; экран без выреза его не показывает
-    // Окно приложения открыто на этом экране — островок дублирует плеер и перекрывает окно, прячем (не на Mac: там островок — вырез)
-    readonly property bool _appOnScreen: !mac && shotPath === "" && forcedState === "" && !!mainWindow && mainWindow.visible
+    // KDE Wayland: окно свёрнуто — клиент этого не видит, прячет скрипт KWin. Окно приложения открыто на этом экране — островок дублирует плеер и перекрывает окно, прячем (не на Mac: там островок — вырез)
+    readonly property bool _appOnScreen: !mac && !kwin && shotPath === "" && forcedState === "" && !!mainWindow && mainWindow.visible
         && mainWindow.visibility !== Window.Minimized && mainWindow.screen.name === _screen.name
     visible: _ready && !_appOnScreen && (!_fullscreen || shotPath !== "") && (Qt.platform.os !== "osx" || mac)
 

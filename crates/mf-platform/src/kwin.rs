@@ -27,6 +27,7 @@ mod imp {
         let title = title.as_str();
         let super::Spot { x, y, width, height, hide_fullscreen, hide_maximized, move_x, move_y } = spot;
         // Прячем островок (minimized), пока на его мониторе и рабочем столе есть окно на весь экран или развёрнутое.
+        // Окно самого приложения (тот же pid) тоже прячет островок: на Wayland клиент не знает, что его окно свернули.
         // Развёрнутым считаем окно, занявшее всю рабочую область (без панелей): у KWin нет одного свойства на это.
         // Тащат мышью (startSystemMove) — двигает сам KWin; мы держим окно на своей оси и в пределах монитора,
         // а куда отпустили — сообщаем приложению по D-Bus (REPORT_PATH). Держим и по frameGeometryChanged: пока окно
@@ -65,6 +66,7 @@ mod imp {
              \x20   if (w === isl || w.caption.startsWith(\"Materialfy Island\") || !w.normalWindow || w.minimized) return false;\n\
              \x20   if (w.output !== isl.output) return false;\n\
              \x20   if (!w.onAllDesktops && !w.desktops.includes(workspace.currentDesktop)) return false;\n\
+             \x20   if (w.pid === isl.pid) return true;\n\
              \x20   if (hideFullscreen && w.fullScreen) return true;\n\
              \x20   if (!hideMaximized) return false;\n\
              \x20   const area = workspace.clientArea(KWin.MaximizeArea, w);\n\
