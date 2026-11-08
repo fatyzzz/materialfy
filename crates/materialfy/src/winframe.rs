@@ -29,6 +29,7 @@ pub mod qobject {
         unsafe fn floating_set_mask(window: *mut QObject, x: i32, y: i32, w: i32, h: i32);
         unsafe fn floating_set_mask_rounded(window: *mut QObject, x: i32, y: i32, w: i32, h: i32, radius: i32);
         unsafe fn floating_fullscreen_on(window: *mut QObject) -> bool;
+        unsafe fn floating_maximized_on(window: *mut QObject) -> bool;
         unsafe fn floating_cursor_in(window: *mut QObject, x: i32, y: i32, w: i32, h: i32) -> i32;
         unsafe fn floating_taskbar_place(window: *mut QObject, width: i32, height: i32, embed: bool, pos: &QString) -> i32;
         unsafe fn floating_taskbar_drag(window: *mut QObject, width: i32, height: i32, phase: i32) -> QString;
@@ -61,10 +62,26 @@ pub mod qobject {
         #[cxx_name = "kwinAvailable"]
         fn kwin_available(self: &WindowShell) -> bool;
         /// KDE Wayland: скрипт KWin ставит окно с этим заголовком в (x, y, w, h) логических px рабочего стола,
-        /// поверх всех и вне панели задач
+        /// поверх всех и вне панели задач, и прячет его под полноэкранным / развёрнутым окном на том же мониторе.
+        /// Тащат мышью (startSystemMove) — окно ходит только по осям move_x / move_y, конец — сигнал kwinMoved
         #[qinvokable]
         #[cxx_name = "kwinPlace"]
-        fn kwin_place(self: &WindowShell, title: &QString, x: i32, y: i32, w: i32, h: i32);
+        fn kwin_place(
+            self: &WindowShell,
+            title: &QString,
+            x: i32,
+            y: i32,
+            w: i32,
+            h: i32,
+            hide_fullscreen: bool,
+            hide_maximized: bool,
+            move_x: bool,
+            move_y: bool,
+        );
+        /// KDE Wayland: окно с этим заголовком перетащили мышью и отпустили в (x, y) логических px рабочего стола
+        #[qsignal]
+        #[cxx_name = "kwinMoved"]
+        fn kwin_moved(self: Pin<&mut WindowShell>, title: QString, x: i32, y: i32);
         /// Выгрузить скрипт KWin этого окна
         #[qinvokable]
         #[cxx_name = "kwinRelease"]
@@ -81,6 +98,10 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "fullscreenOn"]
         unsafe fn fullscreen_on(self: &WindowShell, window: *mut QObject) -> bool;
+        /// На мониторе окна развёрнутое окно — Windows
+        #[qinvokable]
+        #[cxx_name = "maximizedOn"]
+        unsafe fn maximized_on(self: &WindowShell, window: *mut QObject) -> bool;
         /// Курсор над прямоугольником окна (логические px), даже если окно прозрачно для мыши:
         /// 0 — нет, 1 — да, 2 — да, но зажата кнопка мыши
         #[qinvokable]
@@ -111,6 +132,8 @@ pub mod qobject {
         #[cxx_name = "windhawkActive"]
         fn windhawk_active(self: &WindowShell) -> bool;
     }
+
+    impl cxx_qt::Threading for WindowShell {}
 }
 
 #[derive(Default)]
@@ -132,10 +155,19 @@ impl qobject::WindowShell {
         mf_platform::kwin::available()
     }
 
-    fn kwin_place(&self, title: &QString, x: i32, y: i32, w: i32, h: i32) {
+    #[allow(clippy::too_many_arguments)]
+    fn kwin_place(&self, title: &QString, x: i32, y: i32, w: i32, h: i32, hide_fullscreen: bool, hide_maximized: bool, move_x: bool, move_y: bool) {
+        static REPORTS: std::sync::Once = std::sync::Once::new();
+        REPORTS.call_once(|| {
+            let thread = cxx_qt::Threading::qt_thread(self);
+            mf_platform::kwin::on_moved(Box::new(move |title, x, y| {
+                let _ = thread.queue(move |shell| shell.kwin_moved(QString::from(title.as_str()), x, y));
+            }));
+        });
         let title = title.to_string();
+        let spot = mf_platform::kwin::Spot { x, y, width: w, height: h, hide_fullscreen, hide_maximized, move_x, move_y };
         crate::context::ctx().rt.spawn(async move {
-            if let Err(error) = mf_platform::kwin::place(&title, x, y, w, h).await {
+            if let Err(error) = mf_platform::kwin::place(&title, spot).await {
                 tracing::warn!("KWin script for {title}: {error}");
             }
         });
@@ -163,6 +195,11 @@ impl qobject::WindowShell {
             // SAFETY: то же
             unsafe { qobject::floating_set_mask_rounded(window, x, y, w, h, radius) };
         }
+    }
+
+    unsafe fn maximized_on(&self, window: *mut cxx_qt::QObject) -> bool {
+        // SAFETY: то же
+        !window.is_null() && unsafe { qobject::floating_maximized_on(window) }
     }
 
     unsafe fn fullscreen_on(&self, window: *mut cxx_qt::QObject) -> bool {

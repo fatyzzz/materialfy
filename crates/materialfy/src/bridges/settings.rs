@@ -120,6 +120,14 @@ pub mod qobject {
         #[qproperty(QString, taskbar_widget_pos, cxx_name = "taskbarWidgetPos", READ, WRITE = set_taskbar_widget_pos, NOTIFY = taskbar_widget_pos_changed)]
         /// сколько раз показана подсказка с клавишами под островком (0..3)
         #[qproperty(i32, floating_key_hints, cxx_name = "floatingKeyHints", READ, WRITE = set_floating_key_hints, NOTIFY = floating_key_hints_changed)]
+        /// островок прячется, когда на его мониторе приложение на весь экран
+        #[qproperty(bool, floating_hide_fullscreen, cxx_name = "floatingHideFullscreen", READ, WRITE = set_floating_hide_fullscreen, NOTIFY = floating_hide_fullscreen_changed)]
+        /// островок прячется, когда на его мониторе окно развёрнуто
+        #[qproperty(QString, floating_edge, cxx_name = "floatingEdge", READ, WRITE = set_floating_edge, NOTIFY = floating_edge_changed)]
+        #[qproperty(i32, floating_free_x, cxx_name = "floatingFreeX", READ, WRITE = set_floating_free_x, NOTIFY = floating_free_x_changed)]
+        #[qproperty(i32, floating_free_y, cxx_name = "floatingFreeY", READ, WRITE = set_floating_free_y, NOTIFY = floating_free_y_changed)]
+        #[qproperty(i32, floating_offset_x, cxx_name = "floatingOffsetX", READ, WRITE = set_floating_offset_x, NOTIFY = floating_offset_x_changed)]
+        #[qproperty(bool, floating_hide_maximized, cxx_name = "floatingHideMaximized", READ, WRITE = set_floating_hide_maximized, NOTIFY = floating_hide_maximized_changed)]
         #[qproperty(QString, floating_island_screens, cxx_name = "floatingIslandScreens", READ, WRITE = set_floating_island_screens, NOTIFY = floating_island_screens_changed)]
         #[qproperty(QString, taskbar_screens, cxx_name = "taskbarScreens", READ, WRITE = set_taskbar_screens, NOTIFY = taskbar_screens_changed)]
         #[qproperty(QString, taskbar_positions, cxx_name = "taskbarPositions", READ, WRITE = set_taskbar_positions, NOTIFY = taskbar_positions_changed)]
@@ -208,6 +216,12 @@ pub mod qobject {
         fn set_floating_player_style(self: Pin<&mut Settings>, value: QString);
         fn set_taskbar_widget_pos(self: Pin<&mut Settings>, value: QString);
         fn set_floating_key_hints(self: Pin<&mut Settings>, value: i32);
+        fn set_floating_hide_fullscreen(self: Pin<&mut Settings>, value: bool);
+        fn set_floating_hide_maximized(self: Pin<&mut Settings>, value: bool);
+        fn set_floating_offset_x(self: Pin<&mut Settings>, value: i32);
+        fn set_floating_edge(self: Pin<&mut Settings>, value: QString);
+        fn set_floating_free_x(self: Pin<&mut Settings>, value: i32);
+        fn set_floating_free_y(self: Pin<&mut Settings>, value: i32);
         fn set_floating_island_screens(self: Pin<&mut Settings>, value: QString);
         fn set_taskbar_screens(self: Pin<&mut Settings>, value: QString);
         fn set_taskbar_positions(self: Pin<&mut Settings>, value: QString);
@@ -437,6 +451,24 @@ pub mod qobject {
         #[qsignal]
         #[cxx_name = "floatingKeyHintsChanged"]
         fn floating_key_hints_changed(self: Pin<&mut Settings>);
+        #[qsignal]
+        #[cxx_name = "floatingHideFullscreenChanged"]
+        fn floating_hide_fullscreen_changed(self: Pin<&mut Settings>);
+        #[qsignal]
+        #[cxx_name = "floatingHideMaximizedChanged"]
+        fn floating_hide_maximized_changed(self: Pin<&mut Settings>);
+        #[qsignal]
+        #[cxx_name = "floatingOffsetXChanged"]
+        fn floating_offset_x_changed(self: Pin<&mut Settings>);
+        #[qsignal]
+        #[cxx_name = "floatingEdgeChanged"]
+        fn floating_edge_changed(self: Pin<&mut Settings>);
+        #[qsignal]
+        #[cxx_name = "floatingFreeXChanged"]
+        fn floating_free_x_changed(self: Pin<&mut Settings>);
+        #[qsignal]
+        #[cxx_name = "floatingFreeYChanged"]
+        fn floating_free_y_changed(self: Pin<&mut Settings>);
         #[qsignal]
         #[cxx_name = "floatingIslandScreensChanged"]
         fn floating_island_screens_changed(self: Pin<&mut Settings>);
@@ -702,6 +734,12 @@ settings! {
     floating_player_style: QString = FloatingPlayerStyle, set_floating_player_style, floating_player_style_changed;
     taskbar_widget_pos: QString = TaskbarWidgetPos, set_taskbar_widget_pos, taskbar_widget_pos_changed;
     floating_key_hints: i32 = FloatingKeyHints, set_floating_key_hints, floating_key_hints_changed;
+    floating_hide_fullscreen: bool = FloatingHideFullscreen, set_floating_hide_fullscreen, floating_hide_fullscreen_changed;
+    floating_hide_maximized: bool = FloatingHideMaximized, set_floating_hide_maximized, floating_hide_maximized_changed;
+    floating_offset_x: i32 = FloatingOffsetX, set_floating_offset_x, floating_offset_x_changed;
+    floating_edge: QString = FloatingEdge, set_floating_edge, floating_edge_changed;
+    floating_free_x: i32 = FloatingFreeX, set_floating_free_x, floating_free_x_changed;
+    floating_free_y: i32 = FloatingFreeY, set_floating_free_y, floating_free_y_changed;
     floating_island_screens: QString = FloatingIslandScreens, set_floating_island_screens, floating_island_screens_changed;
     taskbar_screens: QString = TaskbarScreens, set_taskbar_screens, taskbar_screens_changed;
     taskbar_positions: QString = TaskbarPositions, set_taskbar_positions, taskbar_positions_changed;

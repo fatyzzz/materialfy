@@ -199,6 +199,16 @@ covers_monitor(HWND hwnd, HMONITOR monitor)
   return r.left <= m.left && r.top <= m.top && r.right >= m.right && r.bottom >= m.bottom;
 }
 
+// Развёрнутое окно на этом мониторе (кнопка «развернуть»: занимает рабочую область, панель задач остаётся)
+bool
+maximized_on_monitor(HWND hwnd, HMONITOR monitor)
+{
+  hwnd = hwnd ? GetAncestor(hwnd, GA_ROOT) : nullptr;
+  if (!hwnd || !IsWindowVisible(hwnd) || IsIconic(hwnd) || is_shell_window(hwnd) || !IsZoomed(hwnd))
+    return false;
+  return MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL) == monitor;
+}
+
 // ---- Панель задач и места на ней (физические пиксели экрана) ----
 
 struct Bar
@@ -591,6 +601,21 @@ floating_fullscreen_on(QObject* object)
   return covers_monitor(WindowFromPoint(center), monitor);
 }
 
+bool
+floating_maximized_on(QObject* object)
+{
+  const HMONITOR monitor = monitor_for(target_screen(qobject_cast<QWindow*>(object)));
+  if (maximized_on_monitor(GetForegroundWindow(), monitor))
+    return true;
+  // переднее окно может быть на другом мониторе — смотрим, что видно в центре нашего
+  MONITORINFO info{};
+  info.cbSize = sizeof(info);
+  if (!GetMonitorInfoW(monitor, &info))
+    return false;
+  const POINT center{ (info.rcMonitor.left + info.rcMonitor.right) / 2, (info.rcMonitor.top + info.rcMonitor.bottom) / 2 };
+  return maximized_on_monitor(WindowFromPoint(center), monitor);
+}
+
 int
 floating_cursor_in(QObject* object, int x, int y, int w, int h)
 {
@@ -807,6 +832,13 @@ floating_tool_window(QObject* object)
 
 bool
 floating_fullscreen_on(QObject* window)
+{
+  (void)window;
+  return false;
+}
+
+bool
+floating_maximized_on(QObject* window)
 {
   (void)window;
   return false;

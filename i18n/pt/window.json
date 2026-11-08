@@ -66,5 +66,17 @@
   "Done: requests now go through your app": "Pronto: as requisições agora passam pelo seu app",
   "Don’t show again": "Não mostrar de novo",
   "Covers bypass the proxy": "Capas sem proxy",
-  "Load covers and pictures directly: faster on a slow proxy and saves its traffic. Spotify sees your real address for these images": "Carregar capas e imagens diretamente: mais rápido com um proxy lento e economiza o tráfego dele. O Spotify vê seu endereço real para essas imagens"
+  "Load covers and pictures directly: faster on a slow proxy and saves its traffic. Spotify sees your real address for these images": "Carregar capas e imagens diretamente: mais rápido com um proxy lento e economiza o tráfego dele. O Spotify vê seu endereço real para essas imagens",
+  "Hide over fullscreen apps": "Esconder com apps em tela cheia",
+  "The island steps aside while a game, video or browser is fullscreen on its monitor": "A ilha sai do caminho enquanto um jogo, vídeo ou navegador está em tela cheia no monitor dela",
+  "Island edge": "Borda da ilha",
+  "Drag the island anywhere on the screen": "Arraste a ilha para qualquer lugar da tela",
+  "The screen edge the island sticks to": "A borda da tela onde a ilha fica",
+  "Top": "Em cima",
+  "Bottom": "Embaixo",
+  "Free": "Livre",
+  "Or drag the island along the edge. 0 is the center of the edge": "Ou arraste a ilha ao longo da borda. 0 é o centro da borda",
+  "Island position": "Posição da ilha",
+  "Hide over maximized windows": "Esconder com janelas maximizadas",
+  "The island steps aside while a maximized window fills its monitor": "A ilha sai do caminho enquanto uma janela maximizada ocupa o monitor dela"
 }

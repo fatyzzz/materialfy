@@ -902,6 +902,54 @@ Page {
         }
 
         SettingRow {
+            visible: floatingPicker.visible && (Settings.floatingPlayer === "island" || Settings.floatingPlayer === "both")
+                && (Qt.platform.os === "windows" || (Qt.platform.os === "linux" && WindowShell.kwinAvailable()))
+            title: I18n.t("Hide over fullscreen apps")
+            description: I18n.t("The island steps aside while a game, video or browser is fullscreen on its monitor")
+            Switch { checked: Settings.floatingHideFullscreen; onToggled: c => Settings.floatingHideFullscreen = c }
+        }
+
+        SettingRow {
+            visible: floatingPicker.visible && (Settings.floatingPlayer === "island" || Settings.floatingPlayer === "both")
+                && (Qt.platform.os === "windows" || (Qt.platform.os === "linux" && WindowShell.kwinAvailable()))
+            title: I18n.t("Hide over maximized windows")
+            description: I18n.t("The island steps aside while a maximized window fills its monitor")
+            Switch { checked: Settings.floatingHideMaximized; onToggled: c => Settings.floatingHideMaximized = c }
+        }
+
+        SettingRow {
+            visible: floatingPicker.visible && (Settings.floatingPlayer === "island" || Settings.floatingPlayer === "both") && Qt.platform.os !== "osx"
+            title: I18n.t("Island edge")
+            description: Settings.floatingEdge === "free" ? I18n.t("Drag the island anywhere on the screen")
+                : I18n.t("The screen edge the island sticks to")
+            ButtonGroup {
+                readonly property var keys: ["top", "bottom", "left", "right", "free"]
+                model: [I18n.t("Top"), I18n.t("Bottom"), I18n.t("Left"), I18n.t("Right"), I18n.t("Free")]
+                autoSelect: false
+                size: page.compact ? "xs" : "s"
+                currentIndex: Math.max(0, keys.indexOf(Settings.floatingEdge))
+                onActivated: i => Settings.floatingEdge = keys[i]
+            }
+        }
+
+        SettingRow {
+            visible: floatingPicker.visible && (Settings.floatingPlayer === "island" || Settings.floatingPlayer === "both") && Qt.platform.os !== "osx"
+                && Settings.floatingEdge !== "free"
+            title: I18n.t("Island position")
+            description: I18n.t("Or drag the island along the edge. 0 is the center of the edge")
+            Slider {
+                wheelEnabled: false
+                width: 220
+                from: -1000
+                to: 1000
+                stepSize: 10
+                value: Settings.floatingOffsetX
+                valueText: v => Math.round(v) + " px"
+                onMoved: v => Settings.floatingOffsetX = Math.round(v / 10) * 10
+            }
+        }
+
+        SettingRow {
             visible: floatingPicker.visible && (Settings.floatingPlayer === "taskbar" || Settings.floatingPlayer === "both") && page.screenCount > 1
             title: Settings.floatingPlayer === "both" ? I18n.t("Taskbar displays") : I18n.t("Displays")
             description: I18n.t("Choose which monitors display the taskbar player")
