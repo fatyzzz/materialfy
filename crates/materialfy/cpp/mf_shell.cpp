@@ -323,6 +323,8 @@ on_unhandled_exception(EXCEPTION_POINTERS* info)
 
 namespace {
 char crash_log_path[4096] = {};
+// прежние обработчики (у SIGSEGV/SIGBUS — защита Rust от переполнения стека): возвращаем их перед повтором
+struct sigaction previous_actions[NSIG] = {};
 
 // Обработчик сигнала: только open/write/backtrace, без Qt и без выделения памяти в куче
 void
@@ -330,16 +332,19 @@ on_fatal_signal(int signal_number)
 {
   const int fd = open(crash_log_path, O_WRONLY | O_CREAT | O_APPEND, 0644);
   if (fd >= 0) {
-    char header[96];
-    const int length = snprintf(header, sizeof header, "=== native crash · Materialfy · signal %d\n", signal_number);
-    const auto written = write(fd, header, length > 0 ? static_cast<size_t>(length) : 0);
+    // snprintf в обработчике сигнала небезопасен; все ловимые сигналы — двузначные
+    static const char prefix[] = "=== native crash · Materialfy · signal ";
+    const char number[3] = {char('0' + signal_number / 10), char('0' + signal_number % 10), '\n'};
+    auto written = write(fd, prefix, sizeof prefix - 1);
+    written = write(fd, number, sizeof number);
     Q_UNUSED(written);
     void* frames[64];
     const int count = backtrace(frames, 64);
     backtrace_symbols_fd(frames, count, fd);
     close(fd);
   }
-  // SA_RESETHAND уже вернул обработчик по умолчанию: повтор сигнала даёт обычное падение и дамп
+  // прежний обработчик (Rust или по умолчанию): повтор сигнала даёт обычное падение и дамп
+  sigaction(signal_number, &previous_actions[signal_number], nullptr);
   raise(signal_number);
 }
 } // namespace
@@ -360,9 +365,10 @@ install_native_crash_log(const QString& path)
   struct sigaction action {};
   action.sa_handler = on_fatal_signal;
   sigemptyset(&action.sa_mask);
-  action.sa_flags = SA_RESETHAND;
+  // на запасном стеке Rust: при переполнении стека обычный уже кончился
+  action.sa_flags = SA_ONSTACK;
   for (const int signal_number : {SIGSEGV, SIGBUS, SIGABRT, SIGFPE, SIGILL}) {
-    sigaction(signal_number, &action, nullptr);
+    sigaction(signal_number, &action, &previous_actions[signal_number]);
   }
 #else
   Q_UNUSED(path);
