@@ -88,7 +88,10 @@ Window {
     width: Math.max(400, notchW + 2 * wingW) + 2 * ear + 32
     height: expandedH + 56 // запас на подсказку клавиш под островком
     color: "transparent"
-    title: "Materialfy"
+    // KDE Wayland: окно ставит скрипт KWin и находит его по заголовку (cpp: crates/mf-platform/src/kwin.rs)
+    readonly property bool kwin: Qt.platform.pluginName.indexOf("wayland") === 0 && WindowShell.kwinAvailable()
+    readonly property string kwinTitle: "Materialfy Island " + screenIndex
+    title: kwin ? kwinTitle : "Materialfy"
     flags: Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.WindowDoesNotAcceptFocus
     transientParent: null
     // x и y — от целевого экрана, а не от screen: macOS сам переводит окно на экран, где лежат его координаты
@@ -102,12 +105,28 @@ Window {
     // macOS: островок — только в вырезе экрана; экран без выреза его не показывает
     visible: _ready && (!_fullscreen || shotPath !== "") && (Qt.platform.os !== "osx" || mac)
 
+    // x, y, ширина и высота меняются пачкой при создании: скрипт KWin грузим один раз, а не на каждое изменение
+    Timer {
+        id: kwinTimer
+        interval: 100
+        onTriggered: WindowShell.kwinPlace(root.kwinTitle, Math.round(root.x), Math.round(root.y), Math.round(root.width), Math.round(root.height))
+    }
+    function _kwinPlace() {
+        if (kwin && _screen)
+            kwinTimer.restart()
+    }
+    onXChanged: _kwinPlace()
+    onYChanged: _kwinPlace()
+    onWidthChanged: _kwinPlace()
+    onHeightChanged: _kwinPlace()
+
     Component.onCompleted: {
+        _kwinPlace()
         WindowShell.makeToolWindow(root)
         _applyMask()
         _ready = true
     }
-    Component.onDestruction: WindowShell.keyHook(root, false)
+    Component.onDestruction: { WindowShell.keyHook(root, false); if (kwin) WindowShell.kwinRelease(kwinTitle) }
     // Qt сбрасывает уровень окна при показе (macOS): снова над строкой меню
     onVisibleChanged: if (!visible) { _collapse(); WindowShell.keyHook(root, false) } else if (Qt.platform.os === "osx") WindowShell.makeToolWindow(root)
 

@@ -45,13 +45,13 @@ Window {
     // Wayland: протокола «поверх всех окон» нет (GNOME, Weston флаг игнорируют), и окно не знает своих координат
     readonly property bool wayland: Qt.platform.pluginName.indexOf("wayland") === 0
     readonly property bool canPin: !wayland
-    // Плеер вне окна (Settings → Окно → «Плеер поверх окон»): островок — Windows, macOS и X11 (на Wayland окно не может
-    // встать у края экрана само), панель задач — только Windows
+    // Плеер вне окна (Settings → Окно → «Плеер поверх окон»): островок — Windows, macOS, X11 и KDE Wayland (там его ставит скрипт KWin: окно
+    // не может встать у края экрана само), панель задач — только Windows
     readonly property string floatingMode: {
         const mode = floatingPlayer !== "" ? floatingPlayer : Settings.floatingPlayer
         if (mode === "both" && Qt.platform.os === "windows")
             return mode
-        if (mode === "island" && !wayland && ["windows", "linux", "osx"].indexOf(Qt.platform.os) >= 0)
+        if (mode === "island" && (!wayland || WindowShell.kwinAvailable()) && ["windows", "linux", "osx"].indexOf(Qt.platform.os) >= 0)
             return mode
         if (mode === "taskbar" && Qt.platform.os === "windows")
             return mode

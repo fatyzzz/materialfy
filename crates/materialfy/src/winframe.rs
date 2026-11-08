@@ -56,6 +56,19 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "makeToolWindow"]
         unsafe fn make_tool_window(self: &WindowShell, window: *mut QObject) -> bool;
+        /// Сеанс KDE Plasma на Wayland: островок можно поставить скриптом KWin (kwinPlace)
+        #[qinvokable]
+        #[cxx_name = "kwinAvailable"]
+        fn kwin_available(self: &WindowShell) -> bool;
+        /// KDE Wayland: скрипт KWin ставит окно с этим заголовком в (x, y, w, h) логических px рабочего стола,
+        /// поверх всех и вне панели задач
+        #[qinvokable]
+        #[cxx_name = "kwinPlace"]
+        fn kwin_place(self: &WindowShell, title: &QString, x: i32, y: i32, w: i32, h: i32);
+        /// Выгрузить скрипт KWin этого окна
+        #[qinvokable]
+        #[cxx_name = "kwinRelease"]
+        fn kwin_release(self: &WindowShell, title: &QString);
         /// Мышь ловит и рисуется только прямоугольник (логические px окна); w <= 0 — всё окно
         #[qinvokable]
         #[cxx_name = "setMask"]
@@ -113,6 +126,24 @@ impl qobject::WindowShell {
 
     fn raise_main(&self) {
         crate::qt::ffi::ffi::post_raise_window();
+    }
+
+    fn kwin_available(&self) -> bool {
+        mf_platform::kwin::available()
+    }
+
+    fn kwin_place(&self, title: &QString, x: i32, y: i32, w: i32, h: i32) {
+        let title = title.to_string();
+        crate::context::ctx().rt.spawn(async move {
+            if let Err(error) = mf_platform::kwin::place(&title, x, y, w, h).await {
+                tracing::warn!("KWin script for {title}: {error}");
+            }
+        });
+    }
+
+    fn kwin_release(&self, title: &QString) {
+        let title = title.to_string();
+        crate::context::ctx().rt.spawn(async move { mf_platform::kwin::release(&title).await });
     }
 
     unsafe fn make_tool_window(&self, window: *mut cxx_qt::QObject) -> bool {

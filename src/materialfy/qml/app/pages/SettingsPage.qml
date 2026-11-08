@@ -872,7 +872,7 @@ Page {
         FloatingPlayerPicker {
             id: floatingPicker
             modes: ["off"]
-                .concat(Qt.platform.os === "windows" || Qt.platform.os === "osx" || (Qt.platform.os === "linux" && !Qt.platform.pluginName.startsWith("wayland")) ? ["island"] : [])
+                .concat(Qt.platform.os === "windows" || Qt.platform.os === "osx" || (Qt.platform.os === "linux" && (!Qt.platform.pluginName.startsWith("wayland") || WindowShell.kwinAvailable())) ? ["island"] : [])
                 .concat(Qt.platform.os === "windows" ? ["taskbar", "both"] : [])
             visible: modes.length > 1
         }
