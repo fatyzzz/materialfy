@@ -238,5 +238,7 @@
   "“{0}” added to queue": "«{0}» в очереди",
   "“{0}” didn’t show up in Spotify Connect — try again": "«{0}» не появился в Spotify Connect — попробуйте ещё раз",
   "“{0}” is no longer visible on the network": "«{0}» больше не виден в сети",
-  "Playback on this computer only works through an HTTP proxy — over SOCKS5 audio would bypass the proxy": "Воспроизведение на этом компьютере работает только через HTTP-прокси — через SOCKS5 звук пошёл бы мимо прокси"
+  "Playback on this computer only works through an HTTP proxy — over SOCKS5 audio would bypass the proxy": "Воспроизведение на этом компьютере работает только через HTTP-прокси — через SOCKS5 звук пошёл бы мимо прокси",
+  "This track isn't available — moving on": "Этот трек недоступен — перехожу к следующему",
+  "“{0}” isn't available — moving on": "«{0}» недоступен — перехожу к следующему"
 }
