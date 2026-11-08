@@ -2538,3 +2538,13 @@ mod actor {
         let _ = rig.tx.send(Msg::Restore(None));
     }
 }
+
+/// Пауза, пока грузится следующий трек, — пауза: строка показывает загрузку, а не «играет».
+#[test]
+fn pausing_during_a_switch_is_a_pause() {
+    let mut core = headless();
+    playing(&mut core, "spotify:track:a");
+    core.play_items(vec![named("spotify:track:a", "A"), named("spotify:track:new", "New")], 1, PlayContext::new("search"));
+    core.toggle_play();
+    assert!(!core.believed_playing());
+}

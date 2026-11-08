@@ -2465,7 +2465,16 @@ impl Core {
         if self.device_lost && self.resume_lost_here() {
             return;
         }
-        let playing = self.now_playing().map(|now| now.playing);
+        // пока грузится следующий трек, строка показывает «не играет», но движок ещё играет: клик — пауза
+        let playing = self.now_playing().map(|now| {
+            now.playing
+                || (now.local
+                    && now.loading
+                    && match self.optimistic_playing {
+                        Some((playing, at)) if at.elapsed() < PLAYBACK_HOLD => playing,
+                        _ => self.queued_play.is_some() || self.local.playback == Playback::Playing,
+                    })
+        });
         match self.target() {
             Target::Local => {
                 if self.local.is_active() {
