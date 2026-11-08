@@ -175,7 +175,10 @@ impl qobject::WindowShell {
 
     fn kwin_release(&self, title: &QString) {
         let title = title.to_string();
-        crate::context::ctx().rt.spawn(async move { mf_platform::kwin::release(&title).await });
+        // при выходе фоновая задача не успеет: ждём выгрузки скрипта (недолго), иначе он остаётся в KWin до перезапуска
+        crate::context::ctx().rt.block_on(async move {
+            let _ = tokio::time::timeout(std::time::Duration::from_millis(500), mf_platform::kwin::release(&title)).await;
+        });
     }
 
     unsafe fn make_tool_window(&self, window: *mut cxx_qt::QObject) -> bool {

@@ -148,7 +148,10 @@ Window {
     property bool _ready: false
     property bool _fullscreen: false
     // macOS: островок — только в вырезе экрана; экран без выреза его не показывает
-    visible: _ready && (!_fullscreen || shotPath !== "") && (Qt.platform.os !== "osx" || mac)
+    // Окно приложения открыто на этом экране — островок дублирует плеер и перекрывает окно, прячем (не на Mac: там островок — вырез)
+    readonly property bool _appOnScreen: !mac && shotPath === "" && forcedState === "" && !!mainWindow && mainWindow.visible
+        && mainWindow.visibility !== Window.Minimized && mainWindow.screen === _screen
+    visible: _ready && !_appOnScreen && (!_fullscreen || shotPath !== "") && (Qt.platform.os !== "osx" || mac)
 
     // x, y, ширина и высота меняются пачкой при создании: скрипт KWin грузим один раз, а не на каждое изменение
     Timer {
@@ -555,7 +558,8 @@ Window {
                 id: slide
                 target: null
                 acceptedButtons: Qt.LeftButton
-                enabled: !root.mac && root._screen !== null
+                // на Wayland без KDE окно себя не двигает, тащить нечем
+                enabled: !root.mac && root._screen !== null && (root.kwin || Qt.platform.pluginName.indexOf("wayland") !== 0)
                 onActiveChanged: {
                     if (active && root.kwin) {
                         root._moving = root.startSystemMove()

@@ -22,6 +22,9 @@ mod imp {
     }
 
     fn script_text(title: &str, spot: &super::Spot, report: &str) -> String {
+        // заголовок идёт в текст скрипта: оставляем только буквы, цифры и пробелы
+        let title: String = title.chars().filter(|c| c.is_ascii_alphanumeric() || *c == ' ').collect();
+        let title = title.as_str();
         let super::Spot { x, y, width, height, hide_fullscreen, hide_maximized, move_x, move_y } = spot;
         // Прячем островок (minimized), пока на его мониторе и рабочем столе есть окно на весь экран или развёрнутое.
         // Развёрнутым считаем окно, занявшее всю рабочую область (без панелей): у KWin нет одного свойства на это.
@@ -38,12 +41,16 @@ mod imp {
              function follow(window) {{\n\
              \x20   let area = null;\n\
              \x20   window.interactiveMoveResizeStarted.connect(() => {{ area = window.output.geometry; }});\n\
+             \x20   let busy = false;\n\
              \x20   function keep() {{\n\
-             \x20       if (!area) return;\n\
+             \x20       if (!area || busy) return;\n\
              \x20       const g = window.frameGeometry;\n\
              \x20       const nx = moveX ? clamp(g.x, area.x, area.x + area.width - g.width) : {x};\n\
              \x20       const ny = moveY ? clamp(g.y, area.y, area.y + area.height - g.height) : {y};\n\
-             \x20       if (nx !== g.x || ny !== g.y) window.frameGeometry = {{ x: nx, y: ny, width: g.width, height: g.height }};\n\
+             \x20       if (Math.abs(nx - g.x) < 1 && Math.abs(ny - g.y) < 1) return;\n\
+             \x20       busy = true;\n\
+             \x20       window.frameGeometry = {{ x: nx, y: ny, width: g.width, height: g.height }};\n\
+             \x20       busy = false;\n\
              \x20   }}\n\
              \x20   window.interactiveMoveResizeStepped.connect(keep);\n\
              \x20   window.frameGeometryChanged.connect(keep);\n\
@@ -135,7 +142,11 @@ mod imp {
             .await
     }
 
+    // place и release одного окна не должны идти вперемешку: выгрузка одного залпа гасит загрузку другого
+    static LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
     pub async fn place(title: &str, spot: &super::Spot) -> Result<(), PlatformError> {
+        let _guard = LOCK.lock().await;
         let name = script_name(title);
         let conn = connection().await?;
         let report = conn.unique_name().map(|n| n.to_string()).unwrap_or_default();
@@ -159,6 +170,7 @@ mod imp {
     }
 
     pub async fn release(title: &str) {
+        let _guard = LOCK.lock().await;
         let name = script_name(title);
         if let Ok(conn) = zbus::Connection::session().await {
             let _ = conn.call_method(Some(SERVICE), SCRIPTING, Some(SCRIPTING_IFACE), "unloadScript", &(name.as_str(),)).await;
