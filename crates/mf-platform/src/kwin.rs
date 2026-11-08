@@ -14,6 +14,8 @@ mod imp {
         let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
         desktop.split(':').any(|part| part.eq_ignore_ascii_case("KDE"))
             && std::env::var_os("WAYLAND_DISPLAY").is_some_and(|value| !value.is_empty())
+            // скрипт на API KWin 6 (windowList, output, desktops): Plasma 5 его не выполнит
+            && std::env::var("KDE_SESSION_VERSION").as_deref() == Ok("6")
     }
 
     // имя скрипта и заголовок окна — только буквы, цифры и пробелы: идут в имя файла и в текст скрипта
@@ -66,7 +68,7 @@ mod imp {
              \x20   if (w === isl || w.caption.startsWith(\"Materialfy Island\") || !w.normalWindow || w.minimized) return false;\n\
              \x20   if (w.output !== isl.output) return false;\n\
              \x20   if (!w.onAllDesktops && !w.desktops.includes(workspace.currentDesktop)) return false;\n\
-             \x20   if (w.pid === isl.pid) return true;\n\
+             \x20   if (w.pid === isl.pid) return w.active;\n\
              \x20   if (hideFullscreen && w.fullScreen) return true;\n\
              \x20   if (!hideMaximized) return false;\n\
              \x20   const area = workspace.clientArea(KWin.MaximizeArea, w);\n\
@@ -98,6 +100,7 @@ mod imp {
              workspace.windowAdded.connect(w => {{ place(w); update(); }});\n\
              workspace.windowRemoved.connect(update);\n\
              workspace.currentDesktopChanged.connect(update);\n\
+             workspace.windowActivated.connect(update);\n\
              update();\n"
         )
     }
