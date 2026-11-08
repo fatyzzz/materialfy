@@ -62,7 +62,9 @@ SmoothFlickable {
             spacing: 8
             Label {
                 Layout.fillWidth: true
-                text: I18n.t("Friend activity")
+                text: root.signedIn && root.friends.length > 0
+                      ? I18n.t("Friend activity — {0} listening", root.friends.length)
+                      : I18n.t("Friend activity")
                 type: "titleSmall"
             }
             Item {

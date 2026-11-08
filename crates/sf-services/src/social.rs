@@ -601,6 +601,9 @@ fn parse_buddylist(body: &[u8]) -> Option<Vec<FriendActivity>> {
             })
         })
         .collect();
+    // Spotify отдаёт в buddylist только тех, кто слушает прямо сейчас, и не всех подписчиков: строки без
+    // трека отфильтрованы выше. Число в логе позволяет отличить «прислали мало» от «нарисовали мало».
+    tracing::debug!("buddylist: {} raw, {} with a playing track", friends.len(), list.len());
     list.sort_by_key(|friend| std::cmp::Reverse(friend.timestamp));
     Some(list)
 }
