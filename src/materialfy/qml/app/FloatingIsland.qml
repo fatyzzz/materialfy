@@ -516,7 +516,8 @@ Window {
                 bottomRightRadius: island.radiusBR
                 antialiasing: true
                 clip: true
-                color: root.mode === "idle" ? (root.colorMode ? Theme.primary : "#101114") : root.body
+                // с обложкой тело не рисуем: фигуру задаёт маска coverFill, а светлый цвет тела по краю скруглений торчал каймой
+                color: root.mode === "idle" ? (root.colorMode ? Theme.primary : "#101114") : coverFill.visible ? "transparent" : root.body
                 // Mac: в покое чёрное тело сливается с вырезом — крылья видно, как они в него уезжают
                 border.width: root.mode === "idle" && !root.mac ? 1 : 0
                 border.color: Qt.rgba(1, 1, 1, 0.28)
