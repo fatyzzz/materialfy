@@ -76,6 +76,8 @@
   "Bottom": "Снизу",
   "Free": "Свободно",
   "Or drag the island along the edge. 0 is the center of the edge": "Или перетащите островок вдоль края. 0 — центр края",
+  "Island size": "Размер островка",
+  "{0}% of the default size": "{0}% от обычного размера",
   "Island position": "Положение островка",
   "Hide over maximized windows": "Прятать над развёрнутыми окнами",
   "The island steps aside while a maximized window fills its monitor": "Островок убирается, пока развёрнутое окно занимает его монитор"

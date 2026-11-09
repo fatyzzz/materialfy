@@ -477,7 +477,7 @@ Window {
     Binding {
         target: Player
         property: "levelsWanted"
-        value: nowPlaying.wantsLevels || (islandWindow.object !== null && islandWindow.object.wantsLevels)
+        value: nowPlaying.wantsLevels || win._islandWantsLevels
             || (taskbarWindow.object !== null && taskbarWindow.object.wantsLevels)
     }
 
@@ -505,6 +505,16 @@ Window {
         const count = screens ? screens.length : 1
         // macOS: на всех экранах, а покажется только тот, где есть вырез (FloatingIsland.qml)
         return win.screenIndicesFromSetting(Qt.platform.os === "osx" ? "all" : Settings.floatingIslandScreens, count)
+    }
+
+    // островков по одному на монитор: object — только первый, а виден (и рисует полоски) может быть другой
+    readonly property bool _islandWantsLevels: {
+        for (let i = 0; i < islandWindow.count; ++i) {
+            const island = islandWindow.objectAt(i)
+            if (island && island.wantsLevels)
+                return true
+        }
+        return false
     }
 
     readonly property var activeTaskbarScreens: {

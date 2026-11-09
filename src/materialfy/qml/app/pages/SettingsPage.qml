@@ -934,6 +934,22 @@ Page {
 
         SettingRow {
             visible: floatingPicker.visible && (Settings.floatingPlayer === "island" || Settings.floatingPlayer === "both") && Qt.platform.os !== "osx"
+            title: I18n.t("Island size")
+            description: I18n.t("{0}% of the default size", Settings.floatingScale)
+            Slider {
+                wheelEnabled: false
+                width: 220
+                from: 70
+                to: 200
+                stepSize: 5
+                value: Settings.floatingScale
+                valueText: v => Math.round(v) + " %"
+                onMoved: v => Settings.floatingScale = Math.round(v / 5) * 5
+            }
+        }
+
+        SettingRow {
+            visible: floatingPicker.visible && (Settings.floatingPlayer === "island" || Settings.floatingPlayer === "both") && Qt.platform.os !== "osx"
                 && Settings.floatingEdge !== "free"
             title: I18n.t("Island position")
             description: I18n.t("Or drag the island along the edge. 0 is the center of the edge")

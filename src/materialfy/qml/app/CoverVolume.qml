@@ -15,6 +15,8 @@ Item {
     property bool motion: !Theme.reducedMotion && !Theme.lowPower
     // проценты — от 44 px: на меньшей обложке их не прочитать, там значок
     readonly property bool big: width >= 44
+    // см. Icon.renderScale
+    property real renderScale: 1
 
     function show() {
         shown = true
@@ -102,6 +104,7 @@ Item {
         visible: !root.big
         name: root.level <= 0 ? "volume_off" : root.level < 0.4 ? "volume_down" : "volume_up"
         size: Math.max(12, Math.round(root.width * 0.55))
+        renderScale: root.renderScale
         fill: 1
         color: "#ffffff"
     }

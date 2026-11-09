@@ -28,6 +28,11 @@ mod imp {
         let title: String = title.chars().filter(|c| c.is_ascii_alphanumeric() || *c == ' ').collect();
         let title = title.as_str();
         let super::Spot { x, y, width, height, hide_fullscreen, hide_maximized, move_x, move_y } = spot;
+        // У обычного окна Wayland нет «не брать фокус»: KWin активирует островок при появлении и по клику, и окно, где
+        // печатали, теряет фокус. Возвращаем фокус тому, кто был активен до островка (previous).
+        // Окно островка исчезло (закрыли или процесс упал, пока курсор был над ним) — снимаем его клавиши в kglobalaccel:
+        // иначе ← → ↑ ↓ и пробел остались бы захвачены во всех окнах до перезапуска сеанса
+        let key_actions = KEYS.iter().map(|k| format!("\"{}\"", k.1)).collect::<Vec<_>>().join(", ");
         // Прячем островок (minimized), пока на его мониторе и рабочем столе есть окно на весь экран или развёрнутое.
         // Окно самого приложения (тот же pid) тоже прячет островок: на Wayland клиент не знает, что его окно свернули.
         // Развёрнутым считаем окно, занявшее всю рабочую область (без панелей): у KWin нет одного свойства на это.
@@ -96,9 +101,28 @@ mod imp {
              \x20   window.outputChanged.connect(update);\n\
              \x20   window.desktopsChanged.connect(update);\n\
              }}\n\
+             let previous = null;\n\
+             function giveBack(w) {{\n\
+             \x20   if (!w || w.caption !== title) return;\n\
+             \x20   // в stackingOrder есть и закрытые окна (ещё анимируются) — у них пустой заголовок\n\
+             \x20   const ok = v => v && v.normalWindow && !v.deleted && v.wantsInput && !v.minimized && v.caption !== \"\"\n\
+             \x20       && !v.caption.startsWith(\"Materialfy Island\")\n\
+             \x20       && (v.onAllDesktops || v.desktops.includes(workspace.currentDesktop));\n\
+             \x20   // нет прежнего (островок активен с самого появления) — верхнее обычное окно этого стола\n\
+             \x20   const back = ok(previous) && workspace.windowList().includes(previous) ? previous : workspace.stackingOrder.filter(ok).pop();\n\
+             \x20   if (back) workspace.activeWindow = back;\n\
+             }}\n\
+             workspace.windowActivated.connect(w => {{\n\
+             \x20   if (w && !w.caption.startsWith(\"Materialfy Island\")) previous = w;\n\
+             \x20   giveBack(w);\n\
+             }});\n\
+             giveBack(workspace.activeWindow);\n\
              workspace.windowList().forEach(place);\n\
              workspace.windowAdded.connect(w => {{ place(w); update(); }});\n\
-             workspace.windowRemoved.connect(update);\n\
+             workspace.windowRemoved.connect(w => {{\n\
+             \x20   if (w.caption === title) [{key_actions}].forEach(a => callDBus(\"{KGA}\", \"{KGA_PATH}\", \"{KGA_IFACE}\", \"unregister\", \"{KEYS_COMPONENT}\", a));\n\
+             \x20   update();\n\
+             }});\n\
              workspace.currentDesktopChanged.connect(update);\n\
              workspace.windowActivated.connect(update);\n\
              update();\n"
@@ -150,12 +174,86 @@ mod imp {
     // place и release одного окна не должны идти вперемешку: выгрузка одного залпа гасит загрузку другого
     static LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
+    // последнее место каждого окна: KWin перезапустился — все скрипты пропали, грузим их заново
+    static SPOTS: std::sync::Mutex<Vec<(String, super::Spot)>> = std::sync::Mutex::new(Vec::new());
+    static WATCH: std::sync::Once = std::sync::Once::new();
+
+    fn remember(title: &str, spot: Option<&super::Spot>) {
+        let mut spots = SPOTS.lock().unwrap_or_else(|e| e.into_inner());
+        spots.retain(|(t, _)| t != title);
+        if let Some(spot) = spot {
+            spots.push((title.to_owned(), spot.clone()));
+        }
+    }
+
+    fn signals(interface: &'static str, member: Option<&'static str>, arg0: &'static str) -> zbus::Result<zbus::MatchRule<'static>> {
+        let rule = zbus::MatchRule::builder().msg_type(zbus::message::Type::Signal).interface(interface)?;
+        let rule = match member {
+            Some(member) => rule.member(member)?,
+            None => rule,
+        };
+        Ok(rule.arg(0, arg0)?.build())
+    }
+
+    async fn each_signal(conn: &zbus::Connection, rule: zbus::MatchRule<'static>, mut handle: impl FnMut(zbus::Message)) {
+        use zbus::export::futures_core::Stream;
+        let stream = match zbus::MessageStream::for_match_rule(rule, conn, None).await {
+            Ok(stream) => stream,
+            Err(error) => return tracing::warn!("KWin: D-Bus subscription failed: {error}"),
+        };
+        let mut stream = std::pin::pin!(stream);
+        while let Some(message) = std::future::poll_fn(|cx| stream.as_mut().poll_next(cx)).await {
+            if let Ok(message) = message {
+                handle(message);
+            }
+        }
+    }
+
+    // org.kde.KWin сменил владельца (KWin перезапустился, окна переподключились): ставим окна заново, клавиши
+    // наведения — тоже (kglobalaccel живёт в KWin и всё забыл)
+    async fn watch_kwin(conn: zbus::Connection) {
+        let Ok(rule) = signals("org.freedesktop.DBus", Some("NameOwnerChanged"), SERVICE) else { return };
+        each_signal(&conn, rule, |message| {
+            let Ok((_, _, owner)) = message.body().deserialize::<(String, String, String)>() else { return };
+            if owner.is_empty() {
+                return;
+            }
+            tokio::spawn(async {
+                // имя KWin занимает раньше, чем поднимает /Scripting
+                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                let spots = SPOTS.lock().unwrap_or_else(|e| e.into_inner()).clone();
+                for (title, spot) in spots {
+                    if let Err(error) = load(&title, &spot).await {
+                        tracing::warn!("KWin script for {title} after a KWin restart: {error}");
+                    }
+                }
+                *KEYS_ON.lock().await = false;
+                let _ = keys(KEYS_WANTED.load(std::sync::atomic::Ordering::SeqCst)).await;
+            });
+        })
+        .await
+    }
+
     pub async fn place(title: &str, spot: &super::Spot) -> Result<(), PlatformError> {
+        let conn = connection().await?;
+        WATCH.call_once(|| {
+            tokio::spawn(watch_kwin(conn.clone()));
+        });
+        load(title, spot).await
+    }
+
+    // отдельно от place: watch_kwin зовёт эту, а не place (иначе тип future place ссылался бы сам на себя)
+    async fn load(title: &str, spot: &super::Spot) -> Result<(), PlatformError> {
         let _guard = LOCK.lock().await;
+        remember(title, Some(spot));
         let name = script_name(title);
         let conn = connection().await?;
         let report = conn.unique_name().map(|n| n.to_string()).unwrap_or_default();
-        let dir = std::env::var_os("XDG_RUNTIME_DIR").map(std::path::PathBuf::from).unwrap_or_else(std::env::temp_dir);
+        // только XDG_RUNTIME_DIR (0700, наш): в общий /tmp кто угодно подложит свой файл, и KWin выполнит его
+        let dir = std::env::var_os("XDG_RUNTIME_DIR")
+            .filter(|dir| !dir.is_empty())
+            .map(std::path::PathBuf::from)
+            .ok_or_else(|| PlatformError::Io(std::io::Error::other("XDG_RUNTIME_DIR is not set")))?;
         let path = dir.join(format!("materialfy-{name}.js"));
         std::fs::write(&path, script_text(title, spot, &report))?;
         // тот же заголовок мог остаться от прошлого запуска или прошлого размера
@@ -168,7 +266,9 @@ mod imp {
         if id < 0 {
             return Err(PlatformError::DBus(format!("KWin did not load {}", path.display())));
         }
-        conn.call_method(Some(SERVICE), format!("/Scripting/Script{id}"), Some("org.kde.kwin.Script"), "run", &())
+        // не run на /Scripting/Script{id}: id у KWin — число загруженных скриптов, после выгрузки не последнего он
+        // совпадает с id живого скрипта, run уходит тому, и наш не запускается. start запускает все незапущенные
+        conn.call_method(Some(SERVICE), SCRIPTING, Some(SCRIPTING_IFACE), "start", &())
             .await
             .map_err(dbus_err)?;
         Ok(())
@@ -176,10 +276,84 @@ mod imp {
 
     pub async fn release(title: &str) {
         let _guard = LOCK.lock().await;
+        remember(title, None);
         let name = script_name(title);
         if let Ok(conn) = zbus::Connection::session().await {
             let _ = conn.call_method(Some(SERVICE), SCRIPTING, Some(SCRIPTING_IFACE), "unloadScript", &(name.as_str(),)).await;
         }
+    }
+
+    // Клавиши без фокуса: окно островка на Wayland клавиатуру не получает, поэтому ← → ↑ ↓ и пробел — глобальные
+    // сочетания kglobalaccel (он внутри KWin), и только пока курсор над островком: on — захватить, false — отпустить
+    const KGA: &str = "org.kde.kglobalaccel";
+    const KGA_PATH: &str = "/kglobalaccel";
+    const KGA_IFACE: &str = "org.kde.KGlobalAccel";
+    const KEYS_COMPONENT: &str = "materialfy-island";
+    // (код для floatingKey в FloatingIsland.qml, действие, подпись в «Комбинациях клавиш» Plasma, Qt::Key)
+    const KEYS: [(i32, &str, &str, i32); 5] = [
+        (1, "previous", "Previous track", 0x0100_0012),
+        (2, "next", "Next track", 0x0100_0014),
+        (3, "volumeUp", "Volume up", 0x0100_0013),
+        (4, "volumeDown", "Volume down", 0x0100_0015),
+        (5, "playPause", "Play / pause", 0x20),
+    ];
+
+    type KeyFn = Box<dyn Fn(i32) + Send + Sync>;
+    static ON_KEY: std::sync::OnceLock<KeyFn> = std::sync::OnceLock::new();
+    static LISTEN: std::sync::Once = std::sync::Once::new();
+    static KEYS_WANTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    static KEYS_ON: tokio::sync::Mutex<bool> = tokio::sync::Mutex::const_new(false);
+
+    pub fn on_key(callback: KeyFn) {
+        let _ = ON_KEY.set(callback);
+    }
+
+    pub async fn keys(on: bool) -> Result<(), PlatformError> {
+        KEYS_WANTED.store(on, std::sync::atomic::Ordering::SeqCst);
+        let mut active = KEYS_ON.lock().await;
+        // вызовы гонятся друг с другом в пуле: ставим последнее желание, а не своё
+        let want = KEYS_WANTED.load(std::sync::atomic::Ordering::SeqCst);
+        if *active == want {
+            return Ok(());
+        }
+        let conn = connection().await?;
+        LISTEN.call_once(|| {
+            let conn = conn.clone();
+            tokio::spawn(async move {
+                let Ok(rule) = signals("org.kde.kglobalaccel.Component", None, KEYS_COMPONENT) else { return };
+                each_signal(&conn, rule, |message| {
+                    // автоповтор (globalShortcutRepeated): громкость идёт шагами дальше, трек и пауза — один раз на нажатие
+                    let member = message.header().member().map(|m| m.to_string()).unwrap_or_default();
+                    let Ok((_, action, _)) = message.body().deserialize::<(String, String, i64)>() else { return };
+                    let Some(&(code, ..)) = KEYS.iter().find(|k| k.1 == action) else { return };
+                    let fire = member == "globalShortcutPressed" || (member == "globalShortcutRepeated" && (code == 3 || code == 4));
+                    if let (true, Some(callback)) = (fire, ON_KEY.get()) {
+                        callback(code);
+                    }
+                })
+                .await
+            });
+        });
+        for (_, action, text, key) in KEYS {
+            let id = [KEYS_COMPONENT, action, "Materialfy", text];
+            let id = id.as_slice();
+            if want {
+                conn.call_method(Some(KGA), KGA_PATH, Some(KGA_IFACE), "doRegister", &(id,)).await.map_err(dbus_err)?;
+                // SetPresent | NoAutoloading: клавиша — эта, а не сохранённая в kglobalshortcutsrc
+                let reply = conn
+                    .call_method(Some(KGA), KGA_PATH, Some(KGA_IFACE), "setShortcutKeys", &(id, vec![(vec![key],)], 6u32))
+                    .await
+                    .map_err(dbus_err)?;
+                let set: Vec<(Vec<i32>,)> = reply.body().deserialize().unwrap_or_default();
+                if !set.iter().any(|(k,)| k.first() == Some(&key)) {
+                    tracing::warn!("kglobalaccel did not take the key for {action} (taken by another shortcut?)");
+                }
+            } else {
+                conn.call_method(Some(KGA), KGA_PATH, Some(KGA_IFACE), "setInactive", &(id,)).await.map_err(dbus_err)?;
+            }
+        }
+        *active = want;
+        Ok(())
     }
 
     #[cfg(test)]
@@ -194,6 +368,8 @@ mod imp {
             // поперёк края окно стоит там, куда его поставили
             assert!(text.contains("moveY ? clamp(g.y, area.y, area.y + area.height - g.height) : 0;"));
             assert!(text.contains("callDBus(\":1.42\", \"/MaterialfyIsland\", \"org.materialfy.Island\", \"Moved\""));
+            // окно пропало — клавиши kglobalaccel снимает сам KWin (наш процесс мог упасть)
+            assert!(text.contains("[\"previous\", \"next\", \"volumeUp\", \"volumeDown\", \"playPause\"].forEach(a => callDBus(\"org.kde.kglobalaccel\", \"/kglobalaccel\", \"org.kde.KGlobalAccel\", \"unregister\", \"materialfy-island\", a));"));
         }
     }
 }
@@ -213,6 +389,12 @@ mod imp {
     pub async fn release(_title: &str) {}
 
     pub fn on_moved(_callback: Box<dyn Fn(String, i32, i32) + Send + Sync>) {}
+
+    pub async fn keys(_on: bool) -> Result<(), PlatformError> {
+        Err(PlatformError::Unsupported)
+    }
+
+    pub fn on_key(_callback: Box<dyn Fn(i32) + Send + Sync>) {}
 }
 
 /// Сеанс KDE Plasma на Wayland: островок можно поставить скриптом KWin
@@ -221,6 +403,7 @@ pub fn available() -> bool {
 }
 
 /// Где окно и когда его прятать: (x, y, width, height) — логические пиксели рабочего стола
+#[derive(Clone)]
 pub struct Spot {
     pub x: i32,
     pub y: i32,
@@ -249,4 +432,14 @@ pub fn on_moved(callback: Box<dyn Fn(String, i32, i32) + Send + Sync>) {
 /// Выгрузить скрипт окна (при закрытии островка и выходе)
 pub async fn release(title: &str) {
     imp::release(title).await
+}
+
+/// KDE: ← → ↑ ↓ и пробел без фокуса — глобальные сочетания kglobalaccel, пока on (курсор над островком)
+pub async fn keys(on: bool) -> Result<(), crate::PlatformError> {
+    imp::keys(on).await
+}
+
+/// Нажали клавишу островка: код 1 ←, 2 →, 3 ↑, 4 ↓, 5 пробел. Вызывается из потока D-Bus; задаётся один раз
+pub fn on_key(callback: Box<dyn Fn(i32) + Send + Sync>) {
+    imp::on_key(callback)
 }
