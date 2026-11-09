@@ -72,6 +72,8 @@ Item {
     Menu {
         id: menu
         anchors.fill: parent
+        // меню больше окна островка: отдельным окном и на KDE Wayland, иначе обрезано окном и не ловит клики мимо маски
+        windowed: Qt.platform.pluginName.indexOf("wayland") !== 0 || WindowShell.kwinAvailable()
         onTriggered: (id, item) => {
             switch (id) {
             case "open":

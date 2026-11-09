@@ -19,6 +19,8 @@ Item {
     // Поворот фигуры-рамки, градусы: картинка внутри стоит. Только uniform, контур не пересчитывается.
     // Медленное вращение — MaskSpin.
     property real maskRotation: 0
+    // предок растянут через scale (островок): картинка грузится под итоговый размер на экране
+    property real renderScale: 1
 
     function jumpTo(next) { m._ready = false; shape = next; m._set(next); m._ready = true }
 
@@ -149,7 +151,7 @@ Item {
         Component.onDestruction: _releaseGate(true)
         // source управляется только переходами gate: imperative assignment не спорит с _want
         // binding'ом и не создаёт цикл source → status → release → source.
-        sourceSize: Qt.size(_fit(root.width * Screen.devicePixelRatio), _fit(root.height * Screen.devicePixelRatio))
+        sourceSize: Qt.size(_fit(root.width * root.renderScale * Screen.devicePixelRatio), _fit(root.height * root.renderScale * Screen.devicePixelRatio))
         retainWhileLoading: true
         smooth: true
         property bool shown: false          // был хоть один кадр (при перезагрузке виден прежний)

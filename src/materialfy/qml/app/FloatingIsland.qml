@@ -15,7 +15,8 @@ import Materialfy.Core
 //   expanded     — 400 × 158 при наведении: обложка, кнопки, волна прогресса, «назад / пуск / дальше»
 // Наведение — опросом курсора (WindowShell.cursorIn), а не HoverHandler: окно с маской и без фокуса Qt
 // узнаёт о мыши поздно, а полоску в покое курсор только задевает у самого края. Клавиши без фокуса
-// (← → треки, ↑ ↓ громкость, пробел) — пока курсор над островком (cpp/floating.cpp).
+// (← → треки, ↑ ↓ громкость, пробел) — пока курсор над островком: Windows и X11 — cpp/floating.cpp, KDE Wayland —
+// глобальные сочетания kglobalaccel (crates/mf-platform/src/kwin.rs); macOS и прочий Wayland — нет, подсказки тоже.
 Window {
     id: root
 
@@ -109,8 +110,13 @@ Window {
         : notchH + 36
 
     // окно — по раскрытому островку своего края и подсказке клавиш под ним (сбоку островок посередине окна)
-    width: vertical ? Math.max(sideW + 24, keysPopover.width + 16) : Math.max(400, notchW + 2 * wingW) + 2 * ear + 32
-    height: vertical ? sideH + 2 * 52 : expandedH + 56 // запас на подсказку клавиш под островком
+    // Размер островка: Settings.floatingScale, %. Всё внутри рисуется в базовых px (baseW × baseH) и масштабируется целиком
+    // (scaler); окно, маска и зона наведения считаются уже в px экрана. На Mac островок — вырез, он не масштабируется
+    readonly property real k: Qt.platform.os === "osx" ? 1 : Settings.floatingScale / 100
+    readonly property int baseW: vertical ? Math.max(sideW + 24, keysPopover.width + 16) : Math.max(400, notchW + 2 * wingW) + 2 * ear + 32
+    readonly property int baseH: vertical ? sideH + 2 * 52 : expandedH + 56 // запас на подсказку клавиш под островком
+    width: Math.round(baseW * k)
+    height: Math.round(baseH * k)
     color: "transparent"
     // KDE Wayland: окно ставит скрипт KWin и находит его по заголовку (cpp: crates/mf-platform/src/kwin.rs)
     readonly property bool kwin: Qt.platform.pluginName.indexOf("wayland") === 0 && WindowShell.kwinAvailable()
@@ -150,7 +156,7 @@ Window {
     // macOS: островок — только в вырезе экрана; экран без выреза его не показывает
     // KDE Wayland: окно свёрнуто — клиент этого не видит, прячет скрипт KWin. Окно приложения впереди на этом экране — островок дублирует плеер и перекрывает окно, прячем (не на Mac: там островок — вырез)
     readonly property bool _appOnScreen: !mac && !kwin && shotPath === "" && forcedState === "" && !!mainWindow && mainWindow.active
-        && mainWindow.screen.name === _screen.name
+        && !!_screen && !!mainWindow.screen && mainWindow.screen.name === _screen.name
     visible: _ready && !_appOnScreen && (!_fullscreen || shotPath !== "") && (Qt.platform.os !== "osx" || mac)
 
     // x, y, ширина и высота меняются пачкой при создании: скрипт KWin грузим один раз, а не на каждое изменение
@@ -220,6 +226,10 @@ Window {
     Connections {
         target: WindowShell
         enabled: root.kwin
+        function onIslandKey(code) {
+            if (root._wantKeys)
+                root.floatingKey(code)
+        }
         function onKwinMoved(title, x, y) {
             if (title !== root.kwinTitle)
                 return
@@ -237,7 +247,8 @@ Window {
     }
     Component.onDestruction: { WindowShell.keyHook(root, false); if (kwin) WindowShell.kwinRelease(kwinTitle) }
     // Qt сбрасывает уровень окна при показе (macOS): снова над строкой меню
-    onVisibleChanged: if (!visible) { _collapse(); WindowShell.keyHook(root, false) } else if (Qt.platform.os === "osx") WindowShell.makeToolWindow(root)
+    // спрятали под курсором — опрос стоит, и _inside иначе так и остался бы true: клавиши не отпустились бы
+    onVisibleChanged: if (!visible) { _collapse(); _inside = false; _dwell = 0 } else if (Qt.platform.os === "osx") WindowShell.makeToolWindow(root)
 
     // ---- Курсор: опрос 10 раз в секунду ----
     // В покое — полоса у самой кромки над полоской (курсор «упёрся» в край), на Mac — вырез; иначе — сам островок.
@@ -247,7 +258,19 @@ Window {
     readonly property var growCurve: [0.38, 1.21, 0.22, 1.0, 1.0, 1.0]
     readonly property var shrinkCurve: [0.3, 0.0, 0.1, 1.0, 1.0, 1.0]
     property bool _inside: false
-    on_InsideChanged: WindowShell.keyHook(root, _inside && mode !== "idle")
+    // Клавиши без фокуса — пока курсор над островком (не над полоской в покое). Linux: курсор лежит без движения
+    // дольше 6 с (мышь бросили у края и печатают) — клавиши отпускаем; на Windows это считает сам хук (floating.cpp)
+    property double _movedAt: 0
+    property bool _keysIdle: false
+    // пока открыто меню, стрелки и пробел нужны ему, а не громкости и паузе
+    readonly property bool _wantKeys: _inside && !islandMenu.opened && mode !== "idle" && !_keysIdle
+    property bool _keysOk: false        // клавиши без фокуса здесь работают: только тогда показываем подсказку
+    on_InsideChanged: if (_inside) _movedAt = Date.now()
+    on_WantKeysChanged: {
+        const ok = WindowShell.keyHook(root, _wantKeys)
+        if (_wantKeys)
+            _keysOk = ok
+    }
     Timer {
         // раскрыт — чаще: уход курсора ловим за ~40 мс, а не за 100
         interval: root._open || root._peek || root._wings ? 40 : 100
@@ -261,9 +284,14 @@ Window {
             const zh = idle && root.mac ? root.notchH : edgeZone ? (root.vertical ? 320 : 3) : island.height
             const zx = root.edge === "right" ? island.x + island.width - zw : root.edge === "left" ? island.x : island.x + (island.width - zw) / 2
             const zy = root.edge === "bottom" ? island.y + island.height - zh : root.vertical ? island.y + (island.height - zh) / 2 : island.y
-            const hit = WindowShell.cursorIn(root, Math.round(zx), Math.round(zy), Math.round(zw), Math.round(zh))
+            // округляем края, а не размер: у кромки экрана зона доходит до последнего пикселя окна
+            const x0 = Math.round(zx * root.k)
+            const y0 = Math.round(zy * root.k)
+            const hit = WindowShell.cursorIn(root, x0, y0, Math.round((zx + zw) * root.k) - x0, Math.round((zy + zh) * root.k) - y0)
             const busy = islandMenu.opened || seek.dragging || root._dragging || root._moving
             root._inside = hit > 0 || busy
+            if (Qt.platform.os === "linux")
+                root._keysIdle = root._inside && Date.now() - root._movedAt > 6000
             if (hit === 1 && !busy) {
                 root._dwell += 1
                 // ~100–200 мс у края или над островком: случайный пролёт мыши к вкладкам браузера не раскрывает
@@ -299,8 +327,8 @@ Window {
             return
         _open = true
         _announce = false
-        // подсказка с клавишами — первые три раскрытия
-        if (Settings.floatingKeyHints < 3) {
+        // подсказка с клавишами — первые три раскрытия, и только где клавиши без фокуса работают
+        if (Settings.floatingKeyHints < 3 && _keysOk) {
             Settings.floatingKeyHints = Settings.floatingKeyHints + 1
             _keys = true
             keysTimer.restart()
@@ -361,6 +389,9 @@ Window {
 
     // ---- Клавиши без фокуса и колесо ----
     function floatingKey(code) {
+        // стрелками пользуются осознанно — срок простоя продлевают; пробел — нет
+        if (Number(code) !== 5)
+            _movedAt = Date.now()
         switch (Number(code)) {
         case 1: Player.previous(); break
         case 2: Player.next(); break
@@ -383,7 +414,7 @@ Window {
 
     // ---- Маска окна: ровно фигура островка; сторона у кромки экрана прямая (скругление за краем окна отрезано) ----
     readonly property string _maskKey: [Math.round(island.x), Math.round(island.y), Math.round(island.width), Math.round(island.height),
-        Math.round(island.radius), keysPopover.visible, mode === "idle", edge, width, height].join()
+        Math.round(island.radius), keysPopover.visible, mode === "idle", edge, width, height, k].join()
     on_MaskKeyChanged: Qt.callLater(_applyMask)
     function _applyMask() {
         let x = island.x - (mac && mode !== "idle" ? ear : 0)
@@ -411,8 +442,19 @@ Window {
         } else if (edge === "right") {
             w += r
         }
-        WindowShell.setMaskRounded(root, Math.floor(x), Math.floor(y), Math.max(1, Math.ceil(w)), Math.max(1, Math.ceil(h)), r)
+        // в px окна; дальний край — ceil, иначе у нижней или правой кромки экрана маска не доходит до неё на пиксель
+        const x0 = Math.floor(x * k)
+        const y0 = Math.floor(y * k)
+        WindowShell.setMaskRounded(root, x0, y0, Math.max(1, Math.ceil((x + w) * k) - x0), Math.max(1, Math.ceil((y + h) * k) - y0), Math.round(r * k))
     }
+
+    // Всё, что рисуется, живёт в scaler: базовый размер, растянутый на окно (левый верхний угол — точка отсчёта)
+    Item {
+    id: scaler
+    width: root.baseW
+    height: root.baseH
+    scale: root.k
+    transformOrigin: Item.TopLeft
 
     // ================= Тело островка =================
     // Островок и его фон — источник снимка для шторки смены темы (окно постоянного размера: снимок не тянется)
@@ -474,7 +516,8 @@ Window {
                 bottomRightRadius: island.radiusBR
                 antialiasing: true
                 clip: true
-                color: root.mode === "idle" ? (root.colorMode ? Theme.primary : "#101114") : root.body
+                // с обложкой тело не рисуем: фигуру задаёт маска coverFill, а светлый цвет тела по краю скруглений торчал каймой
+                color: root.mode === "idle" ? (root.colorMode ? Theme.primary : "#101114") : coverFill.visible ? "transparent" : root.body
                 // Mac: в покое чёрное тело сливается с вырезом — крылья видно, как они в него уезжают
                 border.width: root.mode === "idle" && !root.mac ? 1 : 0
                 border.color: Qt.rgba(1, 1, 1, 0.28)
@@ -486,6 +529,7 @@ Window {
                     anchors.fill: parent
                     visible: root._onCover && root.mode !== "idle"
                     layer.enabled: visible
+                    layer.textureSize: Qt.size(width * root.k, height * root.k)
                     layer.effect: MultiEffect {
                         maskEnabled: true
                         maskSource: coverMask
@@ -513,6 +557,7 @@ Window {
                     anchors.fill: parent
                     visible: false
                     layer.enabled: coverFill.visible
+                    layer.textureSize: Qt.size(width * root.k, height * root.k)
                     topLeftRadius: island.radiusTL
                     topRightRadius: island.radiusTR
                     bottomLeftRadius: island.radiusBL
@@ -544,6 +589,8 @@ Window {
             Ear { x: -root.ear }
             Ear { x: island.width; mirrored: true }
 
+            // движение курсора над островком — для простоя клавиш (Linux)
+            HoverHandler { onPointChanged: root._movedAt = Date.now() }
             WheelHandler {
                 acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
                 onWheel: event => {
@@ -625,6 +672,7 @@ Window {
                     MorphImage {
                         id: cmpCoverImg
                         anchors.fill: parent
+                        renderScale: root.k
                         visible: Player.hasTrack && Player.cover !== ""
                         source: Player.cover
                         eager: true
@@ -644,12 +692,14 @@ Window {
                             anchors.centerIn: parent
                             name: !Player.hasTrack ? "music_note" : Player.isEpisode ? "podcasts" : "music_note"
                             size: Math.round(parent.width * 0.58)
+                            renderScale: root.k
                             color: root.inkDim
                         }
                     }
                     CoverVolume {
                         id: cmpVolume
                         anchors.fill: parent
+                        renderScale: root.k
                         radius: Player.playing ? width / 2 : width * 0.3
                         accent: root.accent
                     }
@@ -702,6 +752,7 @@ Window {
                         anchors.verticalCenter: parent.verticalCenter
                         name: Player.volume <= 0 ? "volume_off" : Player.volume < 0.4 ? "volume_down" : "volume_up"
                         size: 16
+                        renderScale: root.k
                         fill: 1
                         color: root.accent
                     }
@@ -731,6 +782,7 @@ Window {
                         anchors.centerIn: parent
                         name: "pause"
                         size: 16
+                        renderScale: root.k
                         fill: 1
                         color: root.accent
                         visible: !Player.playing
@@ -836,6 +888,7 @@ Window {
                         MorphImage {
                             id: expCoverImg
                             anchors.fill: parent
+                            renderScale: root.k
                             visible: Player.cover !== ""
                             source: Player.coverLarge !== "" ? Player.coverLarge : Player.cover
                             fallbackKind: Player.album !== "" ? "album" : "track"
@@ -850,11 +903,12 @@ Window {
                             visible: Player.cover === ""
                             shape: "softSquare"
                             color: Qt.alpha(root.ink, 0.14)
-                            Icon { anchors.centerIn: parent; name: Player.isEpisode ? "podcasts" : "music_note"; size: 28; color: root.inkDim }
+                            Icon { anchors.centerIn: parent; name: Player.isEpisode ? "podcasts" : "music_note"; size: 28; renderScale: root.k; color: root.inkDim }
                         }
                         CoverVolume {
                             id: expVolume
                             anchors.fill: parent
+                            renderScale: root.k
                             radius: Player.playing ? width / 2 : width * 0.3
                             accent: root.accent
                         }
@@ -978,6 +1032,7 @@ Window {
                     PlayButton {
                         anchors.verticalCenter: parent.verticalCenter
                         size: 46
+                        renderScale: root.k
                         playing: Player.playing
                         loading: Player.buffering
                         containerColor: root.accent
@@ -1003,6 +1058,7 @@ Window {
         id: islandWipe
         anchors.fill: parent
         source: stage
+        textureSize: Qt.size(width * root.k, height * root.k)
         mode: Theme.reducedMotion ? "dissolve" : Settings.trackTransition
         originItem: root.mode === "expanded" ? expCover : cmpCover
         Component.onCompleted: Theme.addWipe(islandWipe)
@@ -1041,6 +1097,7 @@ Window {
             KbdKey { text: I18n.t("Space") }
             Label { text: I18n.t("pause"); type: "labelSmall"; color: Qt.rgba(1, 1, 1, 0.72); anchors.verticalCenter: parent.verticalCenter }
         }
+    }
     }
 
     // ================= Анимации смены трека =================
@@ -1095,6 +1152,7 @@ Window {
             anchors.centerIn: parent
             name: ibtn.icon
             size: ibtn.iconSize
+            renderScale: root.k
             fill: ibtn.filled ? 1 : 0
             color: ibtn.tint
         }

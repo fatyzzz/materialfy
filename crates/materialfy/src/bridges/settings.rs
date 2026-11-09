@@ -126,6 +126,7 @@ pub mod qobject {
         #[qproperty(QString, floating_edge, cxx_name = "floatingEdge", READ, WRITE = set_floating_edge, NOTIFY = floating_edge_changed)]
         #[qproperty(i32, floating_free_x, cxx_name = "floatingFreeX", READ, WRITE = set_floating_free_x, NOTIFY = floating_free_x_changed)]
         #[qproperty(i32, floating_free_y, cxx_name = "floatingFreeY", READ, WRITE = set_floating_free_y, NOTIFY = floating_free_y_changed)]
+        #[qproperty(i32, floating_scale, cxx_name = "floatingScale", READ, WRITE = set_floating_scale, NOTIFY = floating_scale_changed)]
         #[qproperty(i32, floating_offset_x, cxx_name = "floatingOffsetX", READ, WRITE = set_floating_offset_x, NOTIFY = floating_offset_x_changed)]
         #[qproperty(bool, floating_hide_maximized, cxx_name = "floatingHideMaximized", READ, WRITE = set_floating_hide_maximized, NOTIFY = floating_hide_maximized_changed)]
         #[qproperty(QString, floating_island_screens, cxx_name = "floatingIslandScreens", READ, WRITE = set_floating_island_screens, NOTIFY = floating_island_screens_changed)]
@@ -219,6 +220,7 @@ pub mod qobject {
         fn set_floating_hide_fullscreen(self: Pin<&mut Settings>, value: bool);
         fn set_floating_hide_maximized(self: Pin<&mut Settings>, value: bool);
         fn set_floating_offset_x(self: Pin<&mut Settings>, value: i32);
+        fn set_floating_scale(self: Pin<&mut Settings>, value: i32);
         fn set_floating_edge(self: Pin<&mut Settings>, value: QString);
         fn set_floating_free_x(self: Pin<&mut Settings>, value: i32);
         fn set_floating_free_y(self: Pin<&mut Settings>, value: i32);
@@ -457,6 +459,9 @@ pub mod qobject {
         #[qsignal]
         #[cxx_name = "floatingHideMaximizedChanged"]
         fn floating_hide_maximized_changed(self: Pin<&mut Settings>);
+        #[qsignal]
+        #[cxx_name = "floatingScaleChanged"]
+        fn floating_scale_changed(self: Pin<&mut Settings>);
         #[qsignal]
         #[cxx_name = "floatingOffsetXChanged"]
         fn floating_offset_x_changed(self: Pin<&mut Settings>);
@@ -737,6 +742,7 @@ settings! {
     floating_hide_fullscreen: bool = FloatingHideFullscreen, set_floating_hide_fullscreen, floating_hide_fullscreen_changed;
     floating_hide_maximized: bool = FloatingHideMaximized, set_floating_hide_maximized, floating_hide_maximized_changed;
     floating_offset_x: i32 = FloatingOffsetX, set_floating_offset_x, floating_offset_x_changed;
+    floating_scale: i32 = FloatingScale, set_floating_scale, floating_scale_changed;
     floating_edge: QString = FloatingEdge, set_floating_edge, floating_edge_changed;
     floating_free_x: i32 = FloatingFreeX, set_floating_free_x, floating_free_x_changed;
     floating_free_y: i32 = FloatingFreeY, set_floating_free_y, floating_free_y_changed;

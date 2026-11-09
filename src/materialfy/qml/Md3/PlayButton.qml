@@ -14,6 +14,8 @@ Item {
     property bool spin: true
     // выбранный трек ещё грузится: вместо значка — индикатор MD3, кнопка при этом остаётся нажимаемой
     property bool loading: false
+    // см. Icon.renderScale
+    property real renderScale: 1
 
     signal clicked()
 
@@ -50,6 +52,7 @@ Item {
         visible: !root.loading
         name: root.playing ? "pause" : "play_arrow"
         size: root.size * 0.45
+        renderScale: root.renderScale
         fill: 1
         color: root.enabled ? root.iconColor : Qt.alpha(Theme.fgSurface, Theme.stateLayer.disabledContent)
     }

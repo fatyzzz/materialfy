@@ -14,6 +14,8 @@ Item {
     property Item source
     property string mode: "wipe"
     property Item originItem
+    // размер снимка, px (пусто — по размеру source): source под scale (островок) иначе снимается мельче, чем виден
+    property alias textureSize: snap.textureSize
     readonly property int duration: ({ ripple: 900, dissolve: 1000, liquid: 1200 })[mode] ?? 650
     readonly property bool running: _phase !== 0
 
