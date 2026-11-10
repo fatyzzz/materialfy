@@ -78,6 +78,9 @@ Item {
             { id: "mini:repeat", text: I18n.t("Repeat"), icon: Player.repeat === "one" ? "repeat_one" : "repeat",
               checked: Player.repeat !== "off", enabled: Player.hasTrack }
         ]
+        if (Player.smartShuffleAvailable)
+            items.splice(1, 0, { id: "mini:smartshuffle", text: I18n.t("Smart Shuffle"), icon: "auto_awesome",
+                                 checked: Player.smartShuffle })
         if (onTop)
             items.push({ id: "mini:ontop", text: I18n.t("Always on top"), icon: "push_pin", checked: !!_win.pinnedOnTop })
         if (_win && typeof _win.expandFromMini === "function")
@@ -88,6 +91,8 @@ Item {
     function _miniAction(id) {
         if (id === "mini:shuffle")
             Player.shuffle = !Player.shuffle
+        else if (id === "mini:smartshuffle")
+            Player.smartShuffle = !Player.smartShuffle
         else if (id === "mini:repeat")
             Player.cycleRepeat()
         else if (id === "mini:ontop" && _win && "pinnedOnTop" in _win)

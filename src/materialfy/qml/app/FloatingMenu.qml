@@ -60,6 +60,8 @@ Item {
                 items.push({ id: "goto:artist", text: I18n.t("Go to artist"), icon: "person" })
             items.push({ separator: true })
             items.push({ id: "shuffle", text: I18n.t("Shuffle playback"), icon: "shuffle", checked: Player.shuffle, enabled: Player.source !== "radio" })
+            if (Player.smartShuffleAvailable)
+                items.push({ id: "smartshuffle", text: I18n.t("Smart Shuffle"), icon: "auto_awesome", checked: Player.smartShuffle })
             items.push({ id: "repeat", text: I18n.t("Repeat"), icon: Player.repeat === "one" ? "repeat_one" : "repeat", checked: Player.repeat !== "off" })
             items.push({ separator: true })
         }
@@ -87,6 +89,9 @@ Item {
                 break
             case "shuffle":
                 Player.shuffle = !Player.shuffle
+                break
+            case "smartshuffle":
+                Player.smartShuffle = !Player.smartShuffle
                 break
             case "like":
             case "addqueue":
