@@ -309,6 +309,11 @@ fn total(list: &SessionPlaylist) -> u32 {
     u32::try_from(list.length).unwrap_or_default()
 }
 
+/// Blend помечен форматом списка: официальный клиент считает бленд по формату «blend» и «celebrity-blend».
+pub(crate) fn is_blend(attributes: &PlaylistAttributes) -> bool {
+    matches!(attributes.format.as_str(), "blend" | "celebrity-blend")
+}
+
 fn header(id: &str, list: &SessionPlaylist) -> Playlist {
     let attributes = &list.attributes;
     let owner = non_empty(owner_of(list));
@@ -324,6 +329,7 @@ fn header(id: &str, list: &SessionPlaylist) -> Playlist {
             display_name: None,
         },
         collaborative: attributes.is_collaborative,
+        blend: is_blend(attributes),
         snapshot_id: Some(snapshot(&list.revision)),
         items_count: Some(TrackCount { total: total(list) }),
         ..Default::default()
@@ -1079,7 +1085,7 @@ pub(crate) async fn context_name(
 #[cfg(test)]
 mod tests {
     use librespot_metadata::Metadata as _;
-    use librespot_protocol::playlist4_external::{Item, SelectedListContent};
+    use librespot_protocol::playlist4_external::{FormatListAttribute, Item, SelectedListContent};
 
     use super::*;
 
@@ -1187,6 +1193,27 @@ mod tests {
         assert_eq!(playlist.track_total(), 3);
         assert_eq!(playlist.snapshot_id.as_deref(), Some("AAAABw"));
         assert!(playlist.images[0].url.starts_with(IMAGE_HOST));
+    }
+
+    #[test]
+    fn a_blend_is_told_by_its_list_format() {
+        let blend = |format: &str, key: &str| {
+            let mut message = SelectedListContent::new();
+            message.set_length(0);
+            let attributes = message.attributes.mut_or_insert_default();
+            attributes.set_format(format.into());
+            if !key.is_empty() {
+                let mut pair = FormatListAttribute::new();
+                pair.set_key(key.into());
+                pair.set_value("1".into());
+                attributes.format_attributes.push(pair);
+            }
+            header("pl", &SessionPlaylist::parse(&message, &playlist_uri()).unwrap()).blend
+        };
+        assert!(!blend("", ""));
+        assert!(blend("blend", ""));
+        assert!(blend("celebrity-blend", ""));
+        assert!(!blend("chart", "blend"));
     }
 
     #[test]

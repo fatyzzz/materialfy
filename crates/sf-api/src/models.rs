@@ -475,6 +475,8 @@ pub struct Playlist {
     #[serde(default)]
     pub collaborative: bool,
     #[serde(default)]
+    pub blend: bool,
+    #[serde(default)]
     pub snapshot_id: Option<String>,
     #[serde(default)]
     pub tracks: Option<TrackCount>,
