@@ -171,8 +171,8 @@ fn device_keys() {
 
 #[test]
 fn queue_row_is_flat_track() {
-    assert_eq!(keys(&QueueRow::default()), expected(&[&["section", "uid"], TRACK_KEYS]));
-    let row = QueueRow { section: QueueSection::Manual, uid: 7, track: track() };
+    assert_eq!(keys(&QueueRow::default()), expected(&[&["section", "uid", "recommended"], TRACK_KEYS]));
+    let row = QueueRow { section: QueueSection::Manual, uid: 7, recommended: false, track: track() };
     let value = serde_json::to_value(&row).unwrap();
     assert_eq!(value["section"], json!("manual"));
     assert_eq!(value["uid"], json!(7));

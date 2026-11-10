@@ -54,6 +54,9 @@ pub mod qobject {
         #[qproperty(f64, position, READ, NOTIFY = position_changed)]
         #[qproperty(f64, volume, READ, WRITE = set_volume, NOTIFY = volume_changed)]
         #[qproperty(bool, shuffle, READ, WRITE = set_shuffle, NOTIFY = mode_changed)]
+        /// Smart Shuffle: перемешивание с рекомендациями Spotify (shuffle при этом тоже true)
+        #[qproperty(bool, smart_shuffle, cxx_name = "smartShuffle", READ, WRITE = set_smart_shuffle, NOTIFY = mode_changed)]
+        #[qproperty(bool, smart_shuffle_available, cxx_name = "smartShuffleAvailable", READ, NOTIFY = mode_changed)]
         #[qproperty(QString, repeat, READ, WRITE = set_repeat, NOTIFY = mode_changed)]
         #[qproperty(*mut QObject, queue, READ = queue_ptr, CONSTANT)]
         #[qproperty(i32, current_index, cxx_name = "currentIndex", READ, NOTIFY = queue_changed)]
@@ -84,6 +87,7 @@ pub mod qobject {
         fn queue_ptr(self: &Player) -> *mut QObject;
         fn set_volume(self: Pin<&mut Player>, value: f64);
         fn set_shuffle(self: Pin<&mut Player>, value: bool);
+        fn set_smart_shuffle(self: Pin<&mut Player>, value: bool);
         fn set_repeat(self: Pin<&mut Player>, value: QString);
         fn set_levels_wanted(self: Pin<&mut Player>, value: bool);
 
@@ -153,6 +157,10 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "cycleRepeat"]
         fn cycle_repeat(self: Pin<&mut Player>);
+        /// Кнопка перемешивания: выкл → перемешивание → Smart Shuffle (где доступен) → выкл.
+        #[qinvokable]
+        #[cxx_name = "cycleShuffle"]
+        fn cycle_shuffle(self: Pin<&mut Player>);
         /// ±мс от текущей позиции (выпуски: −10000 / +30000).
         #[qinvokable]
         #[cxx_name = "seekRelative"]
@@ -234,6 +242,8 @@ pub struct PlayerRust {
     position: f64,
     volume: f64,
     shuffle: bool,
+    smart_shuffle: bool,
+    smart_shuffle_available: bool,
     repeat: QString,
     queue: UniquePtr<DictListModel>,
     current_index: i32,
@@ -297,6 +307,8 @@ impl Default for PlayerRust {
             position: 0.0,
             volume: 0.0,
             shuffle: false,
+            smart_shuffle: false,
+            smart_shuffle_available: false,
             repeat: QString::from(Repeat::Off.as_str()),
             queue: DictListModel::create(ModelKind::Queue),
             current_index: -1,
@@ -432,10 +444,34 @@ impl qobject::Player {
         }
         let mut this = self.as_mut().rust_mut();
         this.shuffle = value;
+        this.smart_shuffle = false;
         this.stale = None;
         this.mode_set_at = Some(Instant::now());
         self.mode_changed();
         ctx().services.player.set_shuffle(value);
+    }
+
+    /// Smart Shuffle включает и перемешивание; выключение оставляет обычное перемешивание.
+    fn set_smart_shuffle(mut self: Pin<&mut Self>, value: bool) {
+        if value == self.smart_shuffle || (value && !self.smart_shuffle_available) {
+            return;
+        }
+        let mut this = self.as_mut().rust_mut();
+        this.smart_shuffle = value;
+        this.shuffle = true;
+        this.stale = None;
+        this.mode_set_at = Some(Instant::now());
+        self.mode_changed();
+        ctx().services.player.set_smart_shuffle(value);
+    }
+
+    fn cycle_shuffle(self: Pin<&mut Self>) {
+        if self.shuffle && !self.smart_shuffle && self.smart_shuffle_available {
+            self.set_smart_shuffle(true);
+        } else {
+            let next = !self.shuffle;
+            self.set_shuffle(next);
+        }
     }
 
     fn set_repeat(self: Pin<&mut Self>, value: QString) {
@@ -783,16 +819,22 @@ impl qobject::Player {
 
     fn sync_mode(mut self: Pin<&mut Self>, s: &PlayerSnapshot) {
         // режимы
-        if held(self.mode_set_at) && (self.shuffle != s.shuffle || self.repeat_mode != s.repeat) {
+        let changed = self.shuffle != s.shuffle || self.smart_shuffle != s.smart_shuffle || self.repeat_mode != s.repeat;
+        if held(self.mode_set_at) && changed {
             let mut this = self.as_mut().rust_mut();
             this.stale = Some(());
             self.as_mut().schedule_resync();
         }
-        if !held(self.mode_set_at) && (self.shuffle != s.shuffle || self.repeat_mode != s.repeat) {
+        if !held(self.mode_set_at) && changed {
             let mut this = self.as_mut().rust_mut();
             this.shuffle = s.shuffle;
+            this.smart_shuffle = s.smart_shuffle;
             this.repeat_mode = s.repeat;
             this.repeat = QString::from(s.repeat.as_str());
+            self.as_mut().mode_changed();
+        }
+        if self.smart_shuffle_available != s.smart_shuffle_available {
+            self.as_mut().rust_mut().smart_shuffle_available = s.smart_shuffle_available;
             self.as_mut().mode_changed();
         }
     }

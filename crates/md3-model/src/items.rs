@@ -286,13 +286,15 @@ pub enum QueueSection {
     Context,
 }
 
-/// Строка Player.queue (QUEUE_KEYS): section, uid + все ключи трека.
+/// Строка Player.queue (QUEUE_KEYS): section, uid, recommended + все ключи трека.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct QueueRow {
     pub section: QueueSection,
     /// уникален у каждого вхождения (дубликаты разрешены); стабилен, пока строка в очереди
     pub uid: u64,
+    /// рекомендация Smart Shuffle, а не трек самого плейлиста
+    pub recommended: bool,
     #[serde(flatten)]
     pub track: TrackItem,
 }
