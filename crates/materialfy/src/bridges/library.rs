@@ -12,7 +12,7 @@ use md3_model::{ListChange, PlayContext, PlaylistId, contexts};
 use sf_services::{AuthEvent, HistoryEvent, LibraryEvent, LibraryKind};
 use tokio::sync::{Semaphore, broadcast};
 
-use super::{Delivery, forward_events, json_str, model_ptr, string_list, track_from_map, with_model};
+use super::{Delivery, forward_events, json_str, model_ptr, string_list, to_qmap, track_from_map, with_model};
 use crate::context::ctx;
 use crate::models::{DictListModel, ModelKind, Row, apply_list_change, apply_row_change, to_row_change, to_rows};
 use crate::qt::{QVariantList, QVariantMap, qvariant_to_json};
@@ -45,6 +45,7 @@ pub mod qobject {
         #[qproperty(i32, pins_revision, cxx_name = "pinsRevision", READ, NOTIFY = pins_changed)]
         #[qproperty(i32, pages_loaded, cxx_name = "pagesLoaded", READ, NOTIFY = pages_changed)]
         #[qproperty(i32, pages_total, cxx_name = "pagesTotal", READ, NOTIFY = pages_changed)]
+        #[qproperty(i32, history_revision, cxx_name = "historyRevision", READ, NOTIFY = history_changed)]
         type Library = super::LibraryRust;
 
         fn playlists_ptr(self: &Library) -> *mut QObject;
@@ -70,6 +71,10 @@ pub mod qobject {
         #[qsignal]
         #[cxx_name = "pagesChanged"]
         fn pages_changed(self: Pin<&mut Library>);
+        /// локальная история прослушиваний изменилась — listeningStats() перечитать
+        #[qsignal]
+        #[cxx_name = "historyChanged"]
+        fn history_changed(self: Pin<&mut Library>);
         /// дерево/сортировка изменились — модели items()/folderChildren() уже обновлены
         #[qsignal]
         #[cxx_name = "entriesChanged"]
@@ -100,6 +105,10 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "playlistInfo"]
         fn playlist_info(self: &Library, playlist_id: &QString) -> QMap_QString_QVariant;
+        /// статистика прослушиваний этого ПК за `days` последних дней (ListeningStats)
+        #[qinvokable]
+        #[cxx_name = "listeningStats"]
+        fn listening_stats(self: &Library, days: i32) -> QMap_QString_QVariant;
         #[qinvokable]
         #[cxx_name = "canEdit"]
         fn can_edit(self: &Library, playlist_id: &QString) -> bool;
@@ -211,6 +220,7 @@ pub struct LibraryRust {
     pins_revision: i32,
     pages_loaded: i32,
     pages_total: i32,
+    history_revision: i32,
 }
 
 impl Default for LibraryRust {
@@ -239,6 +249,7 @@ impl Default for LibraryRust {
             pins_revision: 0,
             pages_loaded: 0,
             pages_total: 0,
+            history_revision: 0,
         }
     }
 }
@@ -378,6 +389,10 @@ impl qobject::Library {
             this.playlist_refs.remove(&id);
             ctx().services.library.cancel_playlist(&id);
         }
+    }
+
+    fn listening_stats(&self, days: i32) -> QVariantMap {
+        to_qmap(&ctx().services.history.listening_stats(days.clamp(1, 366) as usize))
     }
 
     fn playlist_info(&self, playlist_id: &QString) -> QVariantMap {
@@ -664,8 +679,11 @@ impl qobject::Library {
         with_model(&mut self.as_mut().rust_mut().get_mut().liked, |m| m.set_context(context));
     }
 
-    fn on_history(self: Pin<&mut Self>, _delivery: Delivery<HistoryEvent>) {
-        self.sync_recent();
+    fn on_history(mut self: Pin<&mut Self>, _delivery: Delivery<HistoryEvent>) {
+        self.as_mut().sync_recent();
+        let revision = self.history_revision.wrapping_add(1);
+        self.as_mut().rust_mut().get_mut().history_revision = revision;
+        self.history_changed();
     }
 
     fn on_event(mut self: Pin<&mut Self>, delivery: LibraryDelivery) {
