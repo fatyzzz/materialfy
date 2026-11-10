@@ -15,7 +15,7 @@ use tokio::sync::broadcast;
 
 use crate::auth::{AuthEvent, AuthService};
 use crate::data::journal::{self, Journal};
-use crate::data::{home_feed, known, route};
+use crate::data::{home_feed, known, route, stats};
 use crate::extra::feed;
 use crate::lock;
 
@@ -183,6 +183,11 @@ impl HistoryService {
         let mut plays = journal::merged(state.journal.plays(), &state.remote);
         plays.truncate(limit);
         plays
+    }
+
+    /// Статистика прослушиваний этого ПК (только локальная история: у Spotify нет времени прослушивания).
+    pub fn listening_stats(&self, days: usize) -> stats::ListeningStats {
+        stats::listening(lock(&self.state).journal.plays(), &jiff::Zoned::now(), days)
     }
 
     /// Недавние уникальные контексты (для сидов радио и «Недавно прослушанное»).

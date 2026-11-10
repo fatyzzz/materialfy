@@ -37,5 +37,7 @@ pub mod playlist_session;
 pub mod podcast_session;
 /// маршрутизация Web API / сессии и тексты ошибок
 pub mod route;
+/// статистика прослушиваний из локальной истории: время по периодам и дням, топ треков и исполнителей
+pub mod stats;
 /// подписи, склонения, разница списков
 pub mod text;
