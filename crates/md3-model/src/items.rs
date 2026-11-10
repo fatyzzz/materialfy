@@ -106,7 +106,7 @@ pub struct ArtistItem {
     pub followers: i64,
 }
 
-/// PLAYLIST_KEYS: playlistId, uri, title, description, trackCount, cover, owner, ownerId, canEdit, collaborative,
+/// PLAYLIST_KEYS: playlistId, uri, title, description, trackCount, cover, owner, ownerId, canEdit, collaborative, blend,
 /// public, snapshotId, pinned.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -123,6 +123,7 @@ pub struct PlaylistItem {
     /// свой, совместный или по приглашению (права из rootlist librespot)
     pub can_edit: bool,
     pub collaborative: bool,
+    pub blend: bool,
     pub public: bool,
     pub snapshot_id: String,
     /// закреплён локально

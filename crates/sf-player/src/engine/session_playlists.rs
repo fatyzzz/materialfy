@@ -154,6 +154,7 @@ fn listed(item: &Item, meta: &MetaItem) -> Option<Playlist> {
         },
         public: item.attributes.public,
         collaborative: attributes.is_collaborative,
+        blend: session_reads::is_blend(&attributes),
         snapshot_id: meta.revision.as_deref().map(session_reads::snapshot),
         items_count: Some(TrackCount { total: u32::try_from(meta.length()).unwrap_or_default() }),
         ..Default::default()
