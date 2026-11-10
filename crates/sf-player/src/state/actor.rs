@@ -16,7 +16,7 @@ use super::session::SessionData;
 use crate::engine::{EngineConfig, EngineEvent, LoadSpec};
 #[cfg(test)]
 use crate::QueueChange;
-use crate::{LocalPlayback, PlayerEvent, PlayerSnapshot, Repeat, Target, codec_label};
+use crate::{LocalPlayback, PlayerEvent, PlayerSnapshot, Repeat, Target, TrackEnded, codec_label};
 
 /// Пока что-то движется — снимок пересчитывается так часто.
 const FRAME: Duration = Duration::from_millis(250);
@@ -82,7 +82,8 @@ pub(crate) enum Msg {
     Local(LocalMsg),
     Cover { url: String, result: Result<PathBuf, String> },
     Restore(Option<SessionData>),
-    Shutdown(std::sync::mpsc::Sender<()>),
+    /// ответ — конец трека, который ещё играл (его TrackEnded иначе не наступил бы)
+    Shutdown(std::sync::mpsc::Sender<Option<TrackEnded>>),
 }
 
 /// Как пересоздать сессию librespot (громкость — для нового движка).
@@ -157,8 +158,7 @@ impl Actor {
             match tokio::time::timeout(wait, self.rx.recv()).await.ok() {
                 Some(None) => break,
                 Some(Some(Msg::Shutdown(done))) => {
-                    self.shutdown();
-                    let _ = done.send(());
+                    let _ = done.send(self.shutdown());
                     break;
                 }
                 Some(Some(message)) => self.handle(message),
@@ -167,8 +167,7 @@ impl Actor {
             // всё, что уже пришло, — одним снимком
             while let Ok(message) = self.rx.try_recv() {
                 if let Msg::Shutdown(done) = message {
-                    self.shutdown();
-                    let _ = done.send(());
+                    let _ = done.send(self.shutdown());
                     return;
                 }
                 self.handle(message);
@@ -542,16 +541,25 @@ impl Actor {
         }
     }
 
-    fn shutdown(&mut self) {
+    /// Сохранить сессию и закрыть текущее прослушивание: события после выхода уже никто не получит,
+    /// поэтому конец трека возвращается вызывающему.
+    pub(crate) fn shutdown(&mut self) -> Option<TrackEnded> {
         self.core.save_session();
+        self.core.finish_listening(true);
+        let mut ended = None;
         for effect in self.core.take_effects() {
-            if let (Effect::Save(data), Some(path)) = (effect, self.session_file.as_ref())
-                && let Err(error) = data.save(path)
-            {
-                tracing::warn!("player session not saved: {error:#}");
+            match (effect, self.session_file.as_ref()) {
+                (Effect::Save(data), Some(path)) => {
+                    if let Err(error) = data.save(path) {
+                        tracing::warn!("player session not saved: {error:#}");
+                    }
+                }
+                (Effect::Ended(last), _) => ended = Some((*last).into()),
+                _ => {}
             }
         }
         self.engine = None;
+        ended
     }
 }
 
