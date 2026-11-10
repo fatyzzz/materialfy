@@ -43,16 +43,29 @@ TrackListPage {
 
     // сохранить альбом в библиотеку
     headerExtra: Component {
-        IconButton {
-            icon: page.saved ? "library_add_check" : "library_add"
-            style: page.saved ? "tonal" : "standard"
-            size: "m"
-            checkable: true
-            checked: page.saved
-            autoToggle: false
-            enabled: (page.info.uri ?? "") !== ""
-            Accessible.name: page.saved ? I18n.t("In library") : I18n.t("Save")
-            onClicked: Library.toggleSaved(page.info.uri)
+        Row {
+            spacing: 8
+            IconButton {
+                icon: page.saved ? "library_add_check" : "library_add"
+                style: page.saved ? "tonal" : "standard"
+                size: "m"
+                checkable: true
+                checked: page.saved
+                autoToggle: false
+                enabled: (page.info.uri ?? "") !== ""
+                Accessible.name: page.saved ? I18n.t("In library") : I18n.t("Save")
+                onClicked: Library.toggleSaved(page.info.uri)
+            }
+            IconButton {
+                icon: "share"
+                size: "m"
+                enabled: (page.info.uri ?? "") !== ""
+                Accessible.name: I18n.t("Copy link")
+                onClicked: {
+                    Catalog.copyLink(Catalog.uriUrl(page.info.uri))
+                    Window.window?.notify(I18n.t("Link copied"))
+                }
+            }
         }
     }
 
