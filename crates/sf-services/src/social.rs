@@ -175,8 +175,9 @@ impl SocialService {
                 match result {
                     Ok(friends) => {
                         s.friends_loaded = true;
-                        if *s.friends != friends {
-                            s.friends = Arc::new(friends);
+                        let merged = merge_buddy(&s.friends, &friends);
+                        if *s.friends != merged {
+                            s.friends = Arc::new(merged);
                         }
                     }
                     Err(error) => s.friends_error = error,
@@ -402,6 +403,10 @@ impl SocialService {
                 .bearer_auth(&token.access_token)
                 .header(reqwest::header::ACCEPT, "application/json")
                 .timeout(TIMEOUT);
+            // buddylist: платформа влияет на состав ответа; перебираем, если первая пуста
+            if path.contains("/presence-view/") {
+                request = request.header("app-platform", "WebPlayer");
+            }
             if let Ok(client_token) = session.spclient().client_token().await {
                 request = request.header("client-token", client_token);
             }
@@ -569,42 +574,64 @@ fn number(value: &Value, key: &str) -> i64 {
 
 /// `{"friends":[{timestamp, user{uri,name,imageUrl}, track{uri,name,imageUrl,album,artist,context}}]}`, newest
 /// first. None — not a buddylist answer.
+/// Панель «Активность друзей» копит последние записи: presence-view отдаёт только тех, кто слушает
+/// прямо сейчас, а официальный клиент держит строку и после того, как друг ушёл из списка (она гаснет
+/// с «2 hr ago»). Поэтому новый ответ не заменяет список, а обновляет его: кто остался — свежие данные,
+/// кто исчез — остаётся со старой записью, пока не протухнет.
+fn merge_buddy(old: &[FriendActivity], fresh: &[FriendActivity]) -> Vec<FriendActivity> {
+    let mut list: Vec<FriendActivity> = old.to_vec();
+    for friend in fresh {
+        match list.iter().position(|row| row.user_uri == friend.user_uri) {
+            Some(at) => list[at] = friend.clone(),
+            None => list.push(friend.clone()),
+        }
+    }
+    // протухшие записи уходят: панель — про последние дни, не про вечный архив
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
+        .unwrap_or_default();
+    const KEEP_MS: i64 = 7 * 24 * 3600 * 1000;
+    list.retain(|row| row.timestamp <= 0 || now_ms - row.timestamp <= KEEP_MS);
+    list.sort_by_key(|row| std::cmp::Reverse(row.timestamp));
+    list
+}
+
 fn parse_buddylist(body: &[u8]) -> Option<Vec<FriendActivity>> {
     let value: Value = serde_json::from_slice(body).ok()?;
     let friends = value.get("friends")?.as_array()?;
-    let mut list: Vec<FriendActivity> = friends
-        .iter()
-        .filter_map(|friend| {
-            let user_uri = text(friend, "/user/uri");
-            // трека может не быть: Spotify оставляет запись, где слушают только контекст (плейлист без
-            // конкретной песни), официальный клиент такие строки показывает — выбрасывать их нельзя
-            let track_uri = text(friend, "/track/uri");
-            if user_uri.is_empty() {
-                return None;
-            }
-            let name = Some(text(friend, "/user/name"))
-                .filter(|name| !name.is_empty())
-                .unwrap_or_else(|| user_uri.rsplit(':').next().unwrap_or_default().to_owned());
-            Some(FriendActivity {
-                name,
-                avatar: secure(text(friend, "/user/imageUrl")),
-                track: text(friend, "/track/name"),
-                cover: secure(text(friend, "/track/imageUrl")),
-                artist: text(friend, "/track/artist/name"),
-                artist_uri: text(friend, "/track/artist/uri"),
-                album: text(friend, "/track/album/name"),
-                album_uri: text(friend, "/track/album/uri"),
-                context: text(friend, "/track/context/name"),
-                context_uri: text(friend, "/track/context/uri"),
-                timestamp: number(friend, "timestamp"),
-                is_episode: track_uri.starts_with("spotify:episode:"),
-                user_uri,
-                track_uri,
-            })
-        })
-        .collect();
+    let mut list: Vec<FriendActivity> = friends.iter().filter_map(|friend| parse_buddy_friend(friend)).collect();
     list.sort_by_key(|friend| std::cmp::Reverse(friend.timestamp));
     Some(list)
+}
+
+/// One row of the buddylist. Трека может не быть: сервер оставляет запись, где слушают только контекст
+/// (плейлист без конкретной песни), официальный клиент такие строки показывает — выбрасывать их нельзя.
+fn parse_buddy_friend(friend: &Value) -> Option<FriendActivity> {
+    let user_uri = text(friend, "/user/uri");
+    if user_uri.is_empty() {
+        return None;
+    }
+    let track_uri = text(friend, "/track/uri");
+    let name = Some(text(friend, "/user/name"))
+        .filter(|name| !name.is_empty())
+        .unwrap_or_else(|| user_uri.rsplit(':').next().unwrap_or_default().to_owned());
+    Some(FriendActivity {
+        name,
+        avatar: secure(text(friend, "/user/imageUrl")),
+        track: text(friend, "/track/name"),
+        cover: secure(text(friend, "/track/imageUrl")),
+        artist: text(friend, "/track/artist/name"),
+        artist_uri: text(friend, "/track/artist/uri"),
+        album: text(friend, "/track/album/name"),
+        album_uri: text(friend, "/track/album/uri"),
+        context: text(friend, "/track/context/name"),
+        context_uri: text(friend, "/track/context/uri"),
+        timestamp: number(friend, "timestamp"),
+        is_episode: track_uri.starts_with("spotify:episode:"),
+        user_uri,
+        track_uri,
+    })
 }
 
 /// A social-connect session (the answer of current / current_or_new / join, or `session` of a push).
@@ -743,6 +770,43 @@ mod tests {
         "join_session_uri":"spotify:socialsession:7uVvNohpFt5ZsOdgfYewlh","is_session_owner":true,"is_listening":true,
         "is_controlling":true,"initialSessionType":"REMOTE","hostActiveDeviceId":"","maxMemberCount":32,"active":true,
         "queue_only_mode":false,"wifi_broadcast":false,"is_paused":false}"#;
+
+    #[test]
+    fn friend_activity_accumulates_between_polls() {
+        let buddylist = |uris: &[&str]| {
+            let rows: Vec<String> = uris
+                .iter()
+                .enumerate()
+                .map(|(i, uri)| {
+                    format!(
+                        r#"{{"timestamp":{},"user":{{"uri":"spotify:user:{uri}","name":"{uri}"}},
+                            "track":{{"uri":"spotify:track:t{i}","name":"T{i}"}}}}"#,
+                        1_794_000_000_000i64 + i as i64 * 60_000
+                    )
+                })
+                .collect();
+            parse_buddylist(format!(r#"{{"friends":[{}]}}"#, rows.join(",")).as_bytes()).unwrap()
+        };
+        // первый опрос: двое слушают
+        let after_a = buddylist(&["alice", "bob"]);
+        // второй: bob ушёл, carol появилась — bob остаётся в панели с последней записью
+        let after_b = merge_buddy(&after_a, &buddylist(&["alice", "carol"]));
+        let names: Vec<&str> = after_b.iter().map(|row| row.name.as_str()).collect();
+        assert_eq!(names, ["bob", "carol", "alice"], "пропавший друг остаётся со своей записью");
+        // протухшая запись выпадает: bob — последний в after_b, ему и подставляем старое время
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
+            .unwrap_or_default();
+        let mut stale = after_b.clone();
+        let bob_at = stale.iter().position(|row| row.name == "bob").expect("bob is in the list");
+        stale[bob_at].timestamp = now_ms - 8 * 24 * 3600 * 1000;
+        assert!(merge_buddy(&stale, &buddylist(&["alice"])).iter().all(|row| row.name != "bob"),
+                "запись старше недели уходит");
+        // вернувшийся обновляется, а не дублируется
+        let back = merge_buddy(&after_b, &buddylist(&["alice", "carol", "bob"]));
+        assert_eq!(back.iter().filter(|row| row.name == "bob").count(), 1);
+    }
 
     #[test]
     fn friend_activity_reads_newest_first() {
