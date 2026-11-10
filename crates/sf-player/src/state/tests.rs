@@ -40,14 +40,24 @@ fn playing(core: &mut Core, uri: &str) {
 }
 
 fn loaded_queue(core: &mut Core, current: &str, next: &[&str]) {
-    let fetched = FetchedQueue { current: Some(song(current)), next: next.iter().map(|uri| song(uri)).collect(), context: None };
+    let fetched = FetchedQueue {
+        current: Some(song(current)),
+        next: next.iter().map(|uri| song(uri)).collect(),
+        context: None,
+        recommended: Vec::new(),
+    };
     let current = fetched.current.clone().map(|track| QItem { uid: 1000, track });
     let next = fetched.next.iter().enumerate().map(|(i, track)| QItem { uid: 1001 + i as u64, track: track.clone() });
     core.queue = Some(QueueData { current, next: next.collect() });
 }
 
 fn fetched(current: &str, next: &[&str]) -> FetchedQueue {
-    FetchedQueue { current: Some(song(current)), next: next.iter().map(|uri| song(uri)).collect(), context: None }
+    FetchedQueue {
+        current: Some(song(current)),
+        next: next.iter().map(|uri| song(uri)).collect(),
+        context: None,
+        recommended: Vec::new(),
+    }
 }
 
 fn queue_uris(core: &Core) -> (Option<String>, Vec<String>) {
@@ -1574,6 +1584,44 @@ fn a_shuffled_list_play_switches_shuffle_on_after_loading_straight() {
 }
 
 #[test]
+fn smart_shuffle_reloads_the_playlist_with_recommendations_and_back() {
+    let mut core = headless();
+    core.local.connected = true;
+    core.play_context(PlayContext::with_uri("playlist", "spotify:playlist:p"), Some("spotify:track:a".into()), None);
+    playing(&mut core, "spotify:track:a");
+    let _ = engine_commands(&mut core);
+    assert!(core.smart_shuffle_available());
+
+    core.set_smart_shuffle(true);
+    assert!(core.smart_shuffle() && core.shuffle_wanted);
+    assert!(matches!(
+        engine_commands(&mut core).as_slice(),
+        [PlayerCommand::Load(load)] if load.context_uri.as_deref() == Some("spotify:playlist:p?spotify-apply-lenses=enhance")
+            && load.offset_uri.as_deref() == Some("spotify:track:a")
+            && load.shuffle == Some(true)
+    ));
+
+    // играет рекомендация: в обычном плейлисте её нет — с начала
+    playing(&mut core, "spotify:track:rec");
+    core.age_intent(Duration::from_secs(60));
+    let mut queue = fetched("spotify:track:rec", &["spotify:track:b"]);
+    queue.recommended = vec!["spotify:track:rec".into()];
+    answer_latest(&mut core, Ok(queue));
+    assert!(core.queue_rows()[0].recommended);
+    core.set_shuffle(false);
+    assert!(!core.smart_shuffle() && !core.smart_wanted);
+    assert!(matches!(
+        engine_commands(&mut core).as_slice(),
+        [PlayerCommand::Load(load)] if load.context_uri.as_deref() == Some("spotify:playlist:p")
+            && load.offset_uri.is_none()
+            && load.shuffle.is_none()
+    ));
+
+    core.play_context(PlayContext::with_uri("album", "spotify:album:x"), None, None);
+    assert!(!core.smart_shuffle_available());
+}
+
+#[test]
 fn one_song_is_loaded_as_a_context() {
     let one = local_load(&PlayRequest::tracks(vec!["spotify:track:a".into()]), false);
     assert_eq!(one.context_uri.as_deref(), Some("spotify:track:a"));
@@ -2431,7 +2479,7 @@ mod actor {
             let (events, receiver_events) = broadcast::channel(1024);
             let web = Arc::new(FakeWeb::default());
             *web.queue.lock().unwrap() =
-                Some(FetchedQueue { current: Some(song("spotify:track:a")), next: vec![song("spotify:track:ctx")], context: None });
+                Some(FetchedQueue { current: Some(song("spotify:track:a")), next: vec![song("spotify:track:ctx")], context: None, recommended: Vec::new() });
             let actor =
                 Actor::new(
                     Core::new(0.5, false),

@@ -46,6 +46,9 @@ const LOCAL_EXPECT_HOLD: Duration = Duration::from_secs(45);
 const PRELOAD_AFTER_MS: u32 = 3_000;
 /// Опросы без устройства, после которых удалённое устройство считается пропавшим.
 const LOST_AFTER_POLLS: u8 = 2;
+/// Smart Shuffle: /context-resolve с этой линзой отдаёт плейлист вместе с рекомендациями Spotify
+/// (заголовком линза в context-resolve не работает, только параметром).
+const SMART_LENS: &str = "?spotify-apply-lenses=enhance";
 
 pub const MAX_LIST: usize = 500;
 
@@ -195,6 +198,8 @@ pub struct FetchedQueue {
     pub next: Vec<TrackItem>,
     /// играющий контекст с названием, если источник его знает (карточка «Играет из …»)
     pub context: Option<PlayContext>,
+    /// URI рекомендаций Smart Shuffle среди current/next
+    pub recommended: Vec<String>,
 }
 
 impl FetchedQueue {
@@ -203,6 +208,7 @@ impl FetchedQueue {
             current: queue.currently_playing.as_ref().map(map::playable),
             next: queue.queue.iter().map(map::playable).collect(),
             context: None,
+            recommended: Vec::new(),
         }
     }
 }
@@ -368,6 +374,10 @@ pub struct Core {
     assumed_context: Option<AssumedContext>,
     pub(crate) shuffle_wanted: bool,
     pub(crate) shuffle_set_at: Option<Instant>,
+    /// Smart Shuffle выбран (действует вместе с shuffle_wanted, только локально и у плейлистов)
+    pub(crate) smart_wanted: bool,
+    /// рекомендации Smart Shuffle в последней прочитанной очереди
+    recommended: Vec<String>,
     pub(crate) queued_play: Option<PlayRequest>,
     /// вход обещал поднять движок (воспроизведение на ПК разрешено): запуск до подключения ждёт его
     local_expected: Option<Instant>,
@@ -463,6 +473,8 @@ impl Core {
             assumed_context: None,
             shuffle_wanted: false,
             shuffle_set_at: None,
+            smart_wanted: false,
+            recommended: Vec::new(),
             queued_play: None,
             local_expected: None,
             queue_start_pending: None,
@@ -1789,6 +1801,7 @@ impl Core {
                         self.remember(track);
                     }
                 }
+                self.recommended = std::mem::take(&mut fetched.recommended);
                 let queue = self.adopt_queue(fetched);
                 self.queue = Some(queue);
                 self.reconcile_pending_queue();
@@ -2242,6 +2255,13 @@ impl Core {
                 self.queued_play = None;
                 let mut load = local_load(&request, shuffle);
                 load.repeat = Some(self.local.repeat);
+                if shuffle
+                    && self.smart_wanted
+                    && let Some(uri) = load.context_uri.as_mut()
+                    && smart_capable(uri)
+                {
+                    uri.push_str(SMART_LENS);
+                }
                 self.local_list = load.context_uri.is_none().then(|| load.uris.clone());
                 let shuffle_after = shuffle && load.shuffle.is_none() && !load.uris.is_empty();
                 self.engine(PlayerCommand::Load(load));
@@ -2689,9 +2709,17 @@ impl Core {
     }
 
     pub fn set_shuffle(&mut self, shuffle: bool) {
+        let was_smart = self.smart_shuffle();
+        if !shuffle {
+            self.smart_wanted = false;
+        }
         self.shuffle_wanted = shuffle;
         self.shuffle_set_at = Some(Instant::now());
         self.session_dirty = true;
+        // рекомендации живут в самом контексте — без них контекст грузится заново
+        if was_smart && !shuffle && self.reload_smart_context() {
+            return;
+        }
         if let Some(assumed) = &mut self.assumed_context {
             assumed.shuffle = Some(shuffle);
         }
@@ -2711,6 +2739,41 @@ impl Core {
                 self.remote(RemoteAction::Shuffle(shuffle), device);
             }
         }
+    }
+
+    /// Smart Shuffle можно включить: играет плейлист на этом ПК (удалённым устройствам линзу не передать).
+    pub fn smart_shuffle_available(&self) -> bool {
+        self.target() == Target::Local && self.playing_context_uri().is_some_and(|uri| smart_capable(&uri))
+    }
+
+    pub fn smart_shuffle(&self) -> bool {
+        self.smart_wanted && self.shuffle_wanted && self.smart_shuffle_available()
+    }
+
+    pub fn set_smart_shuffle(&mut self, smart: bool) {
+        if smart == self.smart_shuffle() || (smart && !self.smart_shuffle_available()) {
+            return;
+        }
+        self.smart_wanted = smart;
+        self.shuffle_wanted = true;
+        self.shuffle_set_at = Some(Instant::now());
+        self.session_dirty = true;
+        self.reload_smart_context();
+    }
+
+    /// Тот же контекст с рекомендациями или без них, с текущего трека и места; если играет рекомендация,
+    /// в обычном плейлисте её нет — тогда с начала.
+    fn reload_smart_context(&mut self) -> bool {
+        let (Some(context), Some(now)) = (self.playing_context_uri(), self.now_playing()) else {
+            return false;
+        };
+        let mut request = PlayRequest::context(context);
+        if !self.recommended.contains(&now.track.uri) {
+            request = request.starting_at_uri(now.track.uri);
+            request.position_ms = now.position_ms;
+        }
+        self.play_request(request, false);
+        true
     }
 
     pub fn repeat(&self) -> RepeatMode {
@@ -3129,14 +3192,17 @@ impl Core {
                     }
                 },
             };
-            rows.push(QueueRow { section: QueueSection::Current, uid, track: now.track.clone() });
+            let recommended = self.recommended.contains(&now.track.uri);
+            rows.push(QueueRow { section: QueueSection::Current, uid, recommended, track: now.track.clone() });
         } else if let Some(item) = &queue_current {
-            rows.push(QueueRow { section: QueueSection::Current, uid: item.uid, track: item.track.clone() });
+            let recommended = self.recommended.contains(&item.track.uri);
+            rows.push(QueueRow { section: QueueSection::Current, uid: item.uid, recommended, track: item.track.clone() });
         }
         if let Some(queue) = &self.queue {
             for (index, item) in queue.next.iter().enumerate() {
                 let section = if index < queued { QueueSection::Manual } else { QueueSection::Context };
-                rows.push(QueueRow { section, uid: item.uid, track: item.track.clone() });
+                let recommended = section == QueueSection::Context && self.recommended.contains(&item.track.uri);
+                rows.push(QueueRow { section, uid: item.uid, recommended, track: item.track.clone() });
             }
         }
         rows
@@ -3205,6 +3271,12 @@ fn playable_list(items: &[TrackItem], row: usize) -> (Vec<String>, usize) {
     }
     let index = index.unwrap_or(0);
     (uris, index)
+}
+
+/// Контексты, которые Spotify дополняет рекомендациями (Smart Shuffle). «Любимые треки» с линзой
+/// context-resolve отвечает 404 (проверено 2026-11).
+fn smart_capable(uri: &str) -> bool {
+    uri.starts_with("spotify:playlist:") && !uri.contains('?')
 }
 
 /// Один трек — как контекст (чтобы автоплей шёл от него); список с выбранной строкой не грузится перемешанным.

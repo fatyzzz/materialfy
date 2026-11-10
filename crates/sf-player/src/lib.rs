@@ -156,6 +156,10 @@ pub struct PlayerSnapshot {
     /// 0..1
     pub volume: f64,
     pub shuffle: bool,
+    /// Smart Shuffle: перемешивание с рекомендациями Spotify (shuffle тоже true)
+    pub smart_shuffle: bool,
+    /// Smart Shuffle можно включить (плейлист на этом ПК)
+    pub smart_shuffle_available: bool,
     pub repeat: Repeat,
     /// индекс строки section=current в queue, -1 — нет
     pub current_index: i32,

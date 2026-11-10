@@ -147,7 +147,7 @@ mod tests {
     use md3_model::{QueueSection, TrackItem};
 
     fn row(uid: u64, section: QueueSection) -> QueueRow {
-        QueueRow { section, uid, track: TrackItem { uri: format!("spotify:track:{uid}"), ..Default::default() } }
+        QueueRow { section, uid, recommended: false, track: TrackItem { uri: format!("spotify:track:{uid}"), ..Default::default() } }
     }
 
     fn rows(uids: &[u64]) -> Vec<QueueRow> {

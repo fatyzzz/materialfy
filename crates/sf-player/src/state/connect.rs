@@ -353,6 +353,7 @@ impl ConnectBackend {
             current: current.map(|uri| track_item(&uri, &tracks, state.duration)),
             next: next.iter().map(|uri| track_item(uri, &tracks, 0)).collect(),
             context,
+            recommended: recommended(state),
         }
     }
 
@@ -720,6 +721,15 @@ pub(crate) fn queue_from_state(state: &PlayerState, limit: usize) -> (Option<Str
     (current, next)
 }
 
+/// Треки, которые Smart Shuffle добавил в контекст от себя.
+fn recommended(state: &PlayerState) -> Vec<String> {
+    std::iter::once(&*state.track)
+        .chain(state.next_tracks.iter())
+        .filter(|track| track.metadata.get("provider").map(String::as_str) == Some("enhanced_recommendation"))
+        .map(|track| track.uri.clone())
+        .collect()
+}
+
 /// URI текущего трека и первых `limit` следующих у активного устройства кластера.
 pub(crate) fn queue_uris(cluster: &Cluster, limit: usize) -> (Option<String>, Vec<String>) {
     if cluster.active_device_id.is_empty() {
@@ -767,7 +777,8 @@ fn track_item(uri: &str, tracks: &HashMap<String, TrackItem>, duration_ms: i64) 
 
 /// Контекст, который показал бы Web API (у списка без контекста — нет).
 fn context_uri(state: &PlayerState) -> Option<String> {
-    let uri = state.context_uri.as_str();
+    // у Smart Shuffle в URI контекста остаётся параметр линзы
+    let uri = state.context_uri.split('?').next().unwrap_or_default();
     (uri.starts_with("spotify:") && uri != "spotify:web-api" && !uri.starts_with("spotify:internal:"))
         .then(|| sf_api::link::canonical_context_uri(uri))
 }
@@ -1104,6 +1115,17 @@ mod tests {
         // список без контекста Web API не называет
         state.context_uri = "spotify:web-api".into();
         assert_eq!(context_uri(&state), None);
+    }
+
+    #[test]
+    fn smart_shuffle_keeps_the_playlist_uri_and_marks_its_recommendations() {
+        let mut state = local_state();
+        state.context_uri = "spotify:playlist:p?spotify-apply-lenses=enhance".into();
+        assert_eq!(context_uri(&state).as_deref(), Some("spotify:playlist:p"));
+        let mut rec = provided("spotify:track:rec");
+        rec.metadata.insert("provider".into(), "enhanced_recommendation".into());
+        state.next_tracks = vec![provided("spotify:track:own"), rec];
+        assert_eq!(recommended(&state), ["spotify:track:rec"]);
     }
 
     #[test]

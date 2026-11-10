@@ -282,6 +282,11 @@ impl PlayerHandle {
         self.send(Command::SetShuffle(value));
     }
 
+    /// Smart Shuffle (только локально и у плейлистов; иначе не действует).
+    pub fn set_smart_shuffle(&self, value: bool) {
+        self.send(Command::SetSmartShuffle(value));
+    }
+
     /// 0..1; при перетаскивании — VolumePreview, через ~150 мс тишины — Volume (удалённо — PUT volume).
     pub fn set_volume(&self, value: f64) {
         self.send(Command::SetVolume(value.clamp(0.0, 1.0)));
