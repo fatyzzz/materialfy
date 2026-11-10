@@ -14,7 +14,8 @@ Item {
     property bool open: false
     // Уровни звука нужны (Player.levelsWanted ставит Main.qml — их просит и островок): у другого устройства
     // уровня нет — пульт не просит его и не «дышит»; мини-плееру (MiniMode) тоже — там обложка и фон дышат в такт
-    readonly property bool wantsLevels: ((visible && open) || (Window.window && Window.window.layoutMode === "mini"))
+    readonly property bool wantsLevels: ((visible && open && !(layoutCompact && sheetOpen))
+                                       || (Window.window && Window.window.layoutMode === "mini"))
         && Settings.coverPulse && Player.playing && Player.isLocal === true && !Theme.quiet
     property point origin: Qt.point(width / 2, height - 60)
     property string tab: "lyrics"          // lyrics | queue
@@ -372,7 +373,7 @@ Item {
                 enabled: Theme.mobile && root.open && !(root.layoutCompact && root.sheetOpen)
                 target: null
                 xAxis.enabled: false
-                // translation обнуляется раньше, чем приходит active=false: смещение и скорость запоминаем по ходу.
+                // Сохраняем скорость последнего кадра. Отмена захвата только возвращает плеер на место.
                 // Плеер едет за пальцем вниз целиком, как лист
                 property real vy: 0
                 onTranslationChanged: {
@@ -385,11 +386,15 @@ Item {
                     if (active) {
                         vy = 0
                         dropBack.stop()
-                        return
                     }
+                }
+                onGrabChanged: transition => {
+                    const released = transition === PointerDevice.UngrabExclusive
+                    if (!released && transition !== PointerDevice.CancelGrabExclusive)
+                        return
                     if (dismiss.running)
                         return
-                    if (root._dropY > root.height * 0.18 || (vy > 900 && root._dropY > 24))
+                    if (released && (root._dropY > root.height * 0.18 || (vy > 900 && root._dropY > 24)))
                         root.hide()
                     else
                         dropBack.restart()
@@ -408,7 +413,7 @@ Item {
             // телефон: под статус-баром
             anchors.topMargin: 16 + Theme.safeTop
             spacing: 12
-            IconButton { icon: "keyboard_arrow_down"; style: "tonal"; onClicked: root.hide() }
+            IconButton { icon: "keyboard_arrow_down"; Accessible.name: I18n.t("Minimize"); style: "tonal"; onClicked: root.hide() }
             Item { Layout.fillWidth: true }
             DeviceButton { iconOnly: root.layoutCompact; usePanel: false }   // правая панель — под этим экраном
             ButtonGroup {
@@ -466,7 +471,7 @@ Item {
 
             // ---- Колонка плеера (слева, с отступом от края): обложка и управление ----
             ColumnLayout {
-                id: left
+                id: playerColumn
                 visible: !root.layoutCompact || !root.sheetOpen
                 Layout.fillHeight: true
                 Layout.fillWidth: root.layoutCompact
@@ -477,8 +482,9 @@ Item {
                 // ширина колонки из размеров окна, а не из уже разложенной колонки: иначе обложка и подписи
                 // меняют ширину, от которой сами зависят (recursive rearrange)
                 readonly property real colWidth: root.layoutCompact ? body.width : Math.min(460, root.width * 0.42)
-                // очень узкий телефон (320): кнопки управления меньше, иначе ряд шире экрана
-                readonly property string ctl: root.layoutCompact && colWidth < 4 * 56 + 72 + 8 ? "s" : "m"
+                readonly property real controlWidth: root.layoutCompact && colWidth < 4 * 56 + 72 + 8
+                                                     ? (Theme.mobile ? 48 : 40) : 56
+                readonly property string ctl: controlWidth < 56 ? "s" : "m"
 
                 Item { Layout.fillHeight: true }
 
@@ -489,18 +495,19 @@ Item {
                 Behavior on beat { NumberAnimation { duration: 110; easing.type: Easing.OutQuad } }
                 Connections {
                     target: Player
+                    enabled: root.open && playerColumn.visible && root.wantsLevels
                     function onLevelChanged() {
-                        left.avgLevel += (Player.level - left.avgLevel) * 0.06
-                        const b = Math.max(0, Math.min(1, (Player.level - left.avgLevel) * 4))
+                        playerColumn.avgLevel += (Player.level - playerColumn.avgLevel) * 0.06
+                        const b = Math.max(0, Math.min(1, (Player.level - playerColumn.avgLevel) * 4))
                         // пишем только значимые сдвиги: каждый старт Behavior перерисовывает всё окно,
                         // а события уровня приходят 30–60 раз в секунду
-                        if (Math.abs(b - left.beat) > 0.04)
-                            left.beat = b
+                        if (Math.abs(b - playerColumn.beat) > 0.04)
+                            playerColumn.beat = b
                     }
                 }
                 Connections {
                     target: Player
-                    function onStateChanged() { if (!Player.playing) left.beat = 0 }
+                    function onStateChanged() { if (!Player.playing) playerColumn.beat = 0 }
                 }
 
                 NowPlayingCover {
@@ -508,8 +515,8 @@ Item {
                     // Всё остальное в колонке занимает ~360 px (в узком окне ~310) — обложка берёт оставшееся
                     // плашка пульта (если видна) тоже забирает высоту
                     // телефон: запас по бокам — «печенька» обложки, её пульс и вращение шире самой картинки
-                    readonly property real s: root.layoutCompact ? Math.max(96, Math.min(left.colWidth * (Theme.mobile ? 0.84 : 1), body.height - 316 - npBanner.implicitHeight, 360))
-                                                           : Math.max(160, Math.min(left.colWidth, body.height - 360 - npBanner.implicitHeight, 440))
+                    readonly property real s: root.layoutCompact ? Math.max(96, Math.min(playerColumn.colWidth * (Theme.mobile ? 0.84 : 1), body.height - 316 - npBanner.implicitHeight, 360))
+                                                           : Math.max(160, Math.min(playerColumn.colWidth, body.height - 360 - npBanner.implicitHeight, 440))
                     Layout.alignment: Qt.AlignHCenter
                     Layout.preferredWidth: s
                     Layout.preferredHeight: s
@@ -546,12 +553,16 @@ Item {
                                 lastX = 0
                                 vx = 0
                                 coverSettle.stop()
-                                return
                             }
+                        }
+                        onGrabChanged: transition => {
+                            const released = transition === PointerDevice.UngrabExclusive
+                            if (!released && transition !== PointerDevice.CancelGrabExclusive)
+                                return
                             if (root._coverDir !== 0)
                                 return
                             const flick = Math.abs(vx) > 900 && Math.abs(lastX) > 24
-                            if (Math.abs(lastX) > bigCover.width * 0.3 || flick)
+                            if (released && (Math.abs(lastX) > bigCover.width * 0.3 || flick))
                                 root._coverSwipeAway(lastX < 0 ? -1 : 1)
                             else
                                 coverSettle.restart()
@@ -577,11 +588,11 @@ Item {
                 Connections {
                     target: Player
                     function onTrackChanged() {
-                        if (root.visible && left._lastId !== Player.trackId) {
-                            left.infoIn = 0
+                        if (root.visible && playerColumn._lastId !== Player.trackId) {
+                            playerColumn.infoIn = 0
                             infoAnim.restart()
                         }
-                        left._lastId = Player.trackId
+                        playerColumn._lastId = Player.trackId
                     }
                 }
                 property string _lastId: ""
@@ -590,13 +601,13 @@ Item {
                     acceptedButtons: Qt.RightButton
                     acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad   // касание — не правый клик: у него нет кнопок, TapHandler принял бы любой тап
                     onTapped: (point) => {
-                        const p = left.mapToItem(null, point.position.x, point.position.y)
+                        const p = playerColumn.mapToItem(null, point.position.x, point.position.y)
                         Catalog.requestTrackMenu(Player.track, p.x, p.y)
                     }
                 }
                 NumberAnimation {
                     id: infoAnim
-                    target: left
+                    target: playerColumn
                     property: "infoIn"
                     to: 1
                     duration: 420
@@ -614,34 +625,34 @@ Item {
                     wrapMode: Text.WordWrap
                     maximumLineCount: 2
                     elide: Text.ElideRight
-                    opacity: left.infoIn * root._detail
-                    transform: Translate { y: (1 - left.infoIn) * 14 }
+                    opacity: playerColumn.infoIn * root._detail
+                    transform: Translate { y: (1 - playerColumn.infoIn) * 14 }
                 }
                 LinkLabel {
                     Layout.alignment: Qt.AlignHCenter
-                    Layout.maximumWidth: left.colWidth
+                    Layout.maximumWidth: playerColumn.colWidth
                     Layout.topMargin: -6
                     horizontalAlignment: Text.AlignHCenter
                     // у выпуска подкаста под названием — подкаст: ссылка на его страницу
                     linkEnabled: Player.isEpisode ? (Player.track.showId ?? "") !== "" : (Player.track.artistRefs ?? []).length > 0
                     previewArtistId: !Player.isEpisode && (Player.track.artistRefs ?? []).length === 1 ? Player.track.artistRefs[0].id : ""
                     onClicked: Player.isEpisode ? Catalog.openShow(Player.track.showId ?? "") : Catalog.openArtists(Player.track.artistRefs ?? [])
-                    opacity: Math.max(0, left.infoIn * 1.3 - 0.3) * root._detail    // чуть позже названия
-                    transform: Translate { y: (1 - left.infoIn) * 18 }
+                    opacity: Math.max(0, playerColumn.infoIn * 1.3 - 0.3) * root._detail    // чуть позже названия
+                    transform: Translate { y: (1 - playerColumn.infoIn) * 18 }
                     text: Player.artist
                     type: "titleMedium"
                     color: Theme.fgSurfaceVariant
                 }
                 LinkLabel {
                     Layout.alignment: Qt.AlignHCenter
-                    Layout.maximumWidth: left.colWidth
+                    Layout.maximumWidth: playerColumn.colWidth
                     Layout.topMargin: -6
                     horizontalAlignment: Text.AlignHCenter
                     // у выпуска подкаста и трека без альбома ссылки нет
                     linkEnabled: (Player.track.albumId ?? "") !== ""
                     onClicked: Catalog.openAlbum(Player.track.albumId ?? "")
-                    opacity: Math.max(0, left.infoIn * 1.3 - 0.3) * root._detail    // чуть позже названия
-                    transform: Translate { y: (1 - left.infoIn) * 18 }
+                    opacity: Math.max(0, playerColumn.infoIn * 1.3 - 0.3) * root._detail    // чуть позже названия
+                    transform: Translate { y: (1 - playerColumn.infoIn) * 18 }
                     text: Player.album + (Player.codec !== "" && Player.isLocal === true ? "  ·  " + Player.codec : "")
                     type: "bodySmall"
                     color: Theme.fgSurfaceVariant
@@ -666,7 +677,7 @@ Item {
                         thickness: 6
                         amplitude: 4
                         wavelength: 48
-                        value: left.progress
+                        value: playerColumn.progress
                         wavy: Player.playing
                         interactive: true
                         onCommitted: v => Player.seek(v)
@@ -684,9 +695,14 @@ Item {
                     Layout.alignment: Qt.AlignHCenter
                     Layout.topMargin: 4
                     // узкий телефон (< 380): 4 × 56 + 72 с промежутками по 12 шире колонки — распирали весь экран
-                    spacing: root.layoutCompact ? Math.max(2, Math.min(12, (left.colWidth - 4 * (left.ctl === "s" ? 40 : 56) - 72) / 4)) : 12
-                    IconButton {
-                        icon: Player.isEpisode ? "replay_10" : "shuffle"; size: left.ctl
+                    spacing: root.layoutCompact ? Math.max(2, Math.min(12, (playerColumn.colWidth - 4 * playerColumn.controlWidth - 72) / 4)) : 12
+                    component TransportButton: IconButton {
+                        size: playerColumn.ctl
+                        implicitWidth: playerColumn.controlWidth
+                        implicitHeight: playerColumn.controlWidth
+                    }
+                    TransportButton {
+                        icon: Player.isEpisode ? "replay_10" : "shuffle"
                         checkable: !Player.isEpisode; autoToggle: false; checked: !Player.isEpisode && Player.shuffle
                         enabled: Player.isEpisode || Player.source !== "radio"
                         style: checked ? "tonal" : "standard"
@@ -697,7 +713,7 @@ Item {
                                 Player.shuffle = !Player.shuffle
                         }
                     }
-                    IconButton { icon: "skip_previous"; size: left.ctl; iconColor: Theme.fgSurface; onClicked: Player.previous() }
+                    TransportButton { icon: "skip_previous"; Accessible.name: I18n.t("Previous track"); iconColor: Theme.fgSurface; onClicked: Player.previous() }
                     PlayButton {
                         size: root.layoutCompact ? 72 : 96
                         playing: Player.playing
@@ -706,9 +722,9 @@ Item {
                         iconColor: Theme.fgPrimaryContainer
                         onClicked: Player.togglePlay()
                     }
-                    IconButton { icon: "skip_next"; size: left.ctl; iconColor: Theme.fgSurface; onClicked: Player.next() }
-                    IconButton {
-                        icon: Player.isEpisode ? "forward_30" : Player.repeat === "one" ? "repeat_one" : "repeat"; size: left.ctl
+                    TransportButton { icon: "skip_next"; Accessible.name: I18n.t("Next track"); iconColor: Theme.fgSurface; onClicked: Player.next() }
+                    TransportButton {
+                        icon: Player.isEpisode ? "forward_30" : Player.repeat === "one" ? "repeat_one" : "repeat"
                         checkable: !Player.isEpisode; autoToggle: false; checked: !Player.isEpisode && Player.repeat !== "off"
                         style: checked ? "tonal" : "standard"
                         onClicked: Player.isEpisode ? Player.seekRelative(30000) : Player.cycleRepeat()
@@ -722,9 +738,11 @@ Item {
                     // громкость играющего устройства; у части устройств её меняют только на них самих
                     readonly property bool locked: Player.remote === true && Player.canSetVolume === false
                     readonly property bool slider: !Theme.mobile || Player.remote === true
+                    readonly property bool stretch: Theme.mobile && slider
                     Layout.alignment: Qt.AlignHCenter
+                    Layout.fillWidth: stretch
                     Layout.topMargin: 4
-                    spacing: 12
+                    spacing: stretch ? 8 : 12
                     IconButton {
                         visible: Player.source === "radio" && !Player.isEpisode
                         icon: "thumb_down"
@@ -749,7 +767,10 @@ Item {
                     }
                     Slider {
                         visible: volumeRow.slider
-                        Layout.preferredWidth: root.layoutCompact ? Math.min(220, left.colWidth - 260) : 220
+                        Layout.fillWidth: volumeRow.stretch
+                        Layout.minimumWidth: volumeRow.stretch ? 48 : 0
+                        Layout.preferredWidth: root.layoutCompact ? Math.max(48, Math.min(220, playerColumn.colWidth - 260)) : 220
+                        Accessible.name: I18n.t("Volume")
                         value: Player.volume
                         trackHeight: 14
                         handleHeight: 36

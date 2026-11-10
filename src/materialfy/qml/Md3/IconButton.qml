@@ -23,6 +23,19 @@ Item {
 
     signal clicked()
 
+    Accessible.role: checkable ? Accessible.CheckBox : Accessible.Button
+    Accessible.checkable: checkable
+    Accessible.checked: checked
+    Accessible.onPressAction: root.activate()
+
+    function activate() {
+        if (!enabled)
+            return
+        if (checkable && autoToggle)
+            checked = !checked
+        clicked()
+    }
+
     readonly property var _spec: ({
         xs: { h: 32,  icon: 20, narrow: 28,  wide: 40,  pressedR: 8,  squareR: 12 },
         s:  { h: 40,  icon: 24, narrow: 32,  wide: 52,  pressedR: 8,  squareR: 12 },
@@ -89,10 +102,6 @@ Item {
         enabled: root.enabled
         radius: container.radius
         color: root.iconColor
-        onClicked: {
-            if (root.checkable && root.autoToggle)
-                root.checked = !root.checked
-            root.clicked()
-        }
+        onClicked: root.activate()
     }
 }

@@ -72,6 +72,7 @@ Item {
         opacity: root.chip ? 0 : 1
         Behavior on opacity { NumberAnimation { duration: Theme.motion.effectsFast } }
         icon: "speaker_group"
+        Accessible.name: I18n.t("Devices")
         checkable: true
         autoToggle: false
         checked: root.menuOpen

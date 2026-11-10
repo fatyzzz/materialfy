@@ -457,14 +457,15 @@ Item {
                 root._swipeX = x <= root._queueAt ? x : root._queueAt + (x - root._queueAt) * 0.3
             }
             onActiveChanged: {
-                if (active) {
+                if (active)
                     swipeBack.stop()
+            }
+            onGrabChanged: transition => {
+                const released = transition === PointerDevice.UngrabExclusive
+                if (!released && transition !== PointerDevice.CancelGrabExclusive)
                     return
-                }
-                if (root._queueArmed) {
+                if (released && root._queueArmed)
                     Player.addToQueue(root.trackData())
-                    Player.notice(I18n.t("Added to queue"))
-                }
                 swipeBack.restart()
             }
         }

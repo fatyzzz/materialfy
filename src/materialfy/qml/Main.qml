@@ -576,7 +576,7 @@ Window {
             // поиск по ссылке при уже открытом поиске — тот же экран с новым запросом
             const page = router.currentItem
             if (name === "search" && router.currentName === "search" && page && page.showQuery)
-                page.showQuery(Catalog.searchQuery)
+                page.showQuery(props.initialQuery)
             else
                 router.push(name, props)
         }

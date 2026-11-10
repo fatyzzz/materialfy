@@ -5,7 +5,7 @@ import QtQuick.Shapes
 // triggered(id, item); пункты — { id, text, icon, enabled, checked, hint, separator, submenu }.
 // Подменю открывается на месте списка (сверху — строка «‹ назад» с именем родителя). Закрыть — тап по
 // затемнению, свайп листа вниз или «назад» системы (MobileMain зовёт back()).
-Item {
+FocusScope {
     id: root
 
     property var items: []
@@ -15,26 +15,43 @@ Item {
     property var _levels: []
     readonly property var _current: _levels.length ? _levels[_levels.length - 1] : { items: [], title: "", parentIndex: -1 }
     property bool opened: false
+    property Item _previousFocus: null
 
     signal picked(int index)
     signal triggered(string id, var item)
 
     function open(list) {
+        if (!opened)
+            _previousFocus = Window.window ? Window.window.activeFocusItem : null
         items = list
         _levels = [{ items: list, title: "", parentIndex: -1 }]
         sheet.dragOffset = 0
         flick.contentY = 0
         opened = true
+        forceActiveFocus()
     }
-    function close() { opened = false }
+    function close() {
+        if (!opened)
+            return
+        const restoreFocus = activeFocus
+        opened = false
+        focus = false
+        const previous = _previousFocus
+        _previousFocus = null
+        if (restoreFocus && previous && previous.visible && previous.enabled && previous.Window.window === Window.window)
+            previous.forceActiveFocus()
+    }
     // «назад» системы: из подменю — к родителю, иначе закрыть. false — лист и так закрыт
     function back() {
         if (!opened)
             return false
-        if (_levels.length > 1)
+        if (_levels.length > 1) {
+            const parentScroll = _current.parentScroll
             _levels = _levels.slice(0, -1)
-        else
+            flick.contentY = parentScroll
+        } else {
             close()
+        }
         return true
     }
 
@@ -46,7 +63,7 @@ Item {
         if (!_usable(item))
             return
         if (item.submenu && item.submenu.length > 0) {
-            _levels = _levels.concat([{ items: item.submenu, title: item.text ?? "", parentIndex: index }])
+            _levels = _levels.concat([{ items: item.submenu, title: item.text ?? "", parentIndex: index, parentScroll: flick.contentY }])
             flick.contentY = 0
             return
         }
@@ -65,7 +82,7 @@ Item {
             easing.bezierCurve: root.opened ? Theme.motion.emphasizedDecelerate : Theme.motion.emphasizedAccelerate
         }
     }
-    visible: progress > 0.001
+    visible: opened || progress > 0.001
 
     // Затемнение под листом: клики по приложению не проходят, тап — закрыть
     Rectangle {
@@ -113,10 +130,11 @@ Item {
                 target: null
                 xAxis.enabled: false
                 onTranslationChanged: if (active) sheet.dragOffset = Math.max(0, translation.y)   // в конце жеста translation сбрасывается в 0
-                onActiveChanged: {
-                    if (active)
+                onGrabChanged: transition => {
+                    const released = transition === PointerDevice.UngrabExclusive
+                    if (!released && transition !== PointerDevice.CancelGrabExclusive)
                         return
-                    if (sheet.dragOffset > sheet.height * 0.25)
+                    if (released && sheet.dragOffset > sheet.height * 0.25)
                         root.close()
                     sheet.dragOffset = 0
                 }
@@ -238,6 +256,13 @@ Item {
                         readonly property bool isSeparator: modelData.separator === true
                         readonly property bool usable: root._usable(modelData)
                         readonly property bool hasSub: !isSeparator && !!modelData.submenu && modelData.submenu.length > 0
+                        Accessible.ignored: isSeparator || !root.opened
+                        Accessible.role: Accessible.MenuItem
+                        Accessible.name: modelData.text ?? ""
+                        Accessible.onPressAction: if (root.opened) root._activate(row.index)
+                        activeFocusOnTab: root.opened && usable
+                        Keys.onReturnPressed: root._activate(index)
+                        Keys.onSpacePressed: root._activate(index)
 
                         width: column.width
                         height: isSeparator ? 17 : 52
@@ -273,8 +298,9 @@ Item {
                             Label {
                                 x: 64
                                 width: parent.width - x - 24 - (row.hasSub || row.modelData.checked === true ? 32 : 0)
-                                       - (hint.visible ? hint.implicitWidth + 12 : 0)
+                                       - (hint.visible ? hint.width + 12 : 0)
                                 anchors.verticalCenter: parent.verticalCenter
+                                Accessible.ignored: true
                                 text: row.modelData.text ?? ""
                                 type: "bodyLarge"
                                 color: Theme.fgSurface
@@ -285,6 +311,8 @@ Item {
                                 anchors.right: parent.right
                                 anchors.rightMargin: 24 + (row.hasSub || row.modelData.checked === true ? 32 : 0)
                                 anchors.verticalCenter: parent.verticalCenter
+                                width: Math.min(implicitWidth, parent.width * 0.25)
+                                Accessible.ignored: true
                                 text: row.modelData.hint ?? ""
                                 type: "labelMedium"
                                 color: Theme.fgSurfaceVariant
@@ -321,9 +349,18 @@ Item {
 
                         StateLayer {
                             visible: !row.isSeparator
-                            enabled: row.usable
+                            enabled: row.usable && root.opened
                             anchors.fill: parent
                             onClicked: root._activate(row.index)
+                        }
+                        Rectangle {
+                            anchors.fill: parent
+                            anchors.margins: 2
+                            visible: root.opened && row.activeFocus
+                            color: "transparent"
+                            border.color: Theme.primary
+                            border.width: 2
+                            radius: Theme.shape.medium
                         }
                     }
                 }

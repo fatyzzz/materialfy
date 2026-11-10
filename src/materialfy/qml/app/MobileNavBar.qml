@@ -38,6 +38,20 @@ Rectangle {
                 readonly property bool active: root.current === modelData.name
                 Layout.fillWidth: true
                 Layout.fillHeight: true
+                activeFocusOnTab: true
+                Accessible.role: Accessible.PageTab
+                Accessible.name: modelData.text
+                Accessible.selected: active
+                Accessible.onPressAction: tab.activate()
+                Keys.onReturnPressed: tab.activate()
+                Keys.onSpacePressed: tab.activate()
+
+                function activate() {
+                    if (active)
+                        root.reselected(modelData.name)
+                    else
+                        root.activated(modelData.name)
+                }
 
                 // Выбор раздела: пилюля раскрывается от центра с пружинным перелётом, иконка коротко
                 // «подпрыгивает» (MD3 Expressive); нажатие чуть поджимает иконку
@@ -75,6 +89,7 @@ Rectangle {
                     Behavior on scale { enabled: !pop.running; NumberAnimation { duration: Theme.motion.spatialFast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.motion.springFast } }
                 }
                 Label {
+                    Accessible.ignored: true
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.top: pill.bottom
                     anchors.topMargin: 4
@@ -97,18 +112,13 @@ Rectangle {
                     height: 32
                     radius: 16
                     color: Theme.fgSurface
-                    opacity: tapArea.pressed ? Theme.stateLayer.pressed : 0
+                    opacity: tapArea.pressed ? Theme.stateLayer.pressed : tab.activeFocus ? Theme.stateLayer.focus : 0
                     Behavior on opacity { NumberAnimation { duration: Theme.motion.effectsFast } }
                 }
                 MouseArea {
                     id: tapArea
                     anchors.fill: parent
-                    onClicked: {
-                        if (tab.active)
-                            root.reselected(tab.modelData.name)
-                        else
-                            root.activated(tab.modelData.name)
-                    }
+                    onClicked: tab.activate()
                 }
             }
         }

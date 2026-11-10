@@ -371,9 +371,9 @@ Window {
                 nowPlaying.hide()
             const page = router.currentItem
             if (name === "search" && router.currentName === "search" && page && page.showQuery)
-                page.showQuery(Catalog.searchQuery)
+                page.showQuery(props.initialQuery)
             else if (name === "search")
-                router.reset("search")
+                router.reset("search", props)
             else
                 router.push(name, props)
         }

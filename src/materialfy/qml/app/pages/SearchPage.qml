@@ -12,6 +12,7 @@ Page {
     title: I18n.t("Search")
     showHeader: false
 
+    property string initialQuery
     property int filter: 0
     readonly property var filters: [
         { text: I18n.t("All"), type: "all" }, { text: I18n.t("Tracks"), type: "tracks" }, { text: I18n.t("Albums"), type: "albums" },
@@ -39,14 +40,18 @@ Page {
     function focusSearch() { field.inputItem.forceActiveFocus() }
     // запрос уже запущен снаружи (Catalog.openUri("spotify:search:…")): только показать его
     function showQuery(q) {
-        if (q === "" || q === field.text)
+        if (!q)
             return
+        resetSearchFeedback()
+        _syncingQuery = true
         filter = 0
         field.text = q
         debounce.stop()
+        _syncingQuery = false
+        updateSearchFeedback()
     }
     Component.onCompleted: {
-        showQuery(Catalog.searchQuery)
+        showQuery(initialQuery)
         // телефон: клавиатура — только по касанию поля, а не при каждом входе в раздел
         if (!Theme.mobile)
             Qt.callLater(focusSearch)
@@ -55,27 +60,77 @@ Page {
     Timer {
         id: debounce
         interval: 350
-        onTriggered: Catalog.search(field.text, page.type)
-    }
-    onTypeChanged: if (field.text.trim() !== "") Catalog.search(field.text, page.type)
-
-    // ---- Тихий повтор ----
-    // Первый запрос после простоя нередко падает на «холодном» соединении (на телефоне — почти каждый раз),
-    // а повтор проходит: один повтор без экрана ошибки, «Поиск не ответил» — только если не ответил и он
-    readonly property string _searchKey: field.text.trim() + "|" + type
-    property string _retriedFor: ""
-    readonly property bool _failed: Catalog.searchState === "error" && _retriedFor === _searchKey && !retryTimer.running
-    readonly property bool _retrying: Catalog.searchState === "error" && !_failed
-    Connections {
-        target: Catalog
-        function onSearchChanged() {
-            if (Catalog.searchState !== "error" || field.text.trim() === "" || page._retriedFor === page._searchKey)
-                return
-            page._retriedFor = page._searchKey
-            retryTimer.restart()
+        onTriggered: {
+            page.submitSearch(false)
+            page.updateSearchFeedback()
         }
     }
-    Timer { id: retryTimer; interval: 600; onTriggered: Catalog.search(field.text, page.type) }
+
+    readonly property string query: field.text.trim()
+    readonly property bool currentPage: visible && (!router || router.currentItem === page)
+    // Catalog также используется в подборе трека для радио и добавлении в плейлист.
+    readonly property string searchState: Catalog.searchQuery === query && Catalog.searchKind === type
+                                          ? Catalog.searchState : "idle"
+    property bool _syncingQuery: false
+    property bool _retried: false
+
+    function resetSearchFeedback() {
+        retryTimer.stop()
+        rememberTimer.stop()
+        _retried = false
+    }
+    function submitSearch(save) {
+        debounce.stop()
+        if (!signedIn)
+            return
+        if (save && query !== "")
+            remember(query)
+        Catalog.search(query, type)
+    }
+    function updateSearchFeedback() {
+        if (!currentPage || !signedIn || query === "" || debounce.running)
+            return
+        if (searchState === "ok") {
+            if (recent[0] !== query)
+                rememberTimer.restart()
+        } else if (searchState === "error" && !_retried && !retryTimer.running) {
+            retryTimer.start()
+        }
+    }
+    onTypeChanged: {
+        if (!_syncingQuery && query !== "") {
+            resetSearchFeedback()
+            submitSearch(false)
+            updateSearchFeedback()
+        }
+    }
+    onCurrentPageChanged: {
+        if (currentPage) {
+            Qt.callLater(restoreSearch)
+        } else {
+            debounce.stop()
+            retryTimer.stop()
+            rememberTimer.stop()
+        }
+    }
+    function restoreSearch() {
+        if (!currentPage)
+            return
+        if (query !== "" && searchState === "idle" && !debounce.running)
+            submitSearch(false)
+        updateSearchFeedback()
+    }
+    onSearchStateChanged: updateSearchFeedback()
+    Timer {
+        id: retryTimer
+        interval: 600
+        onTriggered: {
+            if (page.currentPage && page.signedIn && page.query !== "" && page.searchState === "error") {
+                page._retried = true
+                page.submitSearch(false)
+            }
+        }
+    }
 
     // ---- Недавние запросы ----
     // Запрос попадает в историю, когда по нему есть результаты и его не меняли 2,5 с (или нажат Enter / выбран
@@ -105,12 +160,19 @@ Page {
     function forget(q) { searchHistory.recent = JSON.stringify(recent.filter(x => x !== q)) }
     function searchFor(q) {
         field.text = q
-        debounce.stop()
-        Catalog.search(q, page.type)
-        remember(q)
+        resetSearchFeedback()
+        submitSearch(true)
+        updateSearchFeedback()
     }
-    Timer { id: rememberTimer; interval: 2500; onTriggered: if (Catalog.searchState === "ok") page.remember(field.text) }
-    readonly property bool showRecent: signedIn && field.text.trim() === "" && recent.length > 0
+    Timer {
+        id: rememberTimer
+        interval: 2500
+        onTriggered: {
+            if (page.currentPage && page.signedIn && page.searchState === "ok")
+                page.remember(page.query)
+        }
+    }
+    readonly property bool showRecent: signedIn && query === "" && recent.length > 0
 
     SearchField {
         id: field
@@ -122,16 +184,15 @@ Page {
         // телефон: коротко — длинная подсказка не помещается в поле
         placeholder: Theme.mobile ? I18n.t("Search") : I18n.t("Track, album, artist, playlist or podcast")
         onTextChanged: {
-            debounce.restart()
-            rememberTimer.restart()
+            if (!page._syncingQuery) {
+                page.resetSearchFeedback()
+                debounce.restart()
+            }
         }
         // Enter — искать сразу, не дожидаясь паузы ввода; Esc — очистить поле
         onAccepted: {
-            debounce.stop()
-            if (field.text.trim() !== "") {
-                Catalog.search(field.text, page.type)
-                page.remember(field.text)
-            }
+            page.resetSearchFeedback()
+            page.submitSearch(true)
         }
         Keys.onEscapePressed: event => {
             if (field.text !== "")
@@ -198,6 +259,7 @@ Page {
                     }
                     IconButton {
                         icon: "close"
+                        Accessible.name: I18n.t("Remove") + " · " + recentRow.modelData
                         size: "s"
                         onClicked: page.forget(recentRow.modelData)
                     }
@@ -209,24 +271,27 @@ Page {
     EmptyState {
         Layout.alignment: Qt.AlignHCenter
         Layout.topMargin: 48
-        visible: !page.signedIn || (Catalog.searchState === "idle" && !page.showRecent) || Catalog.searchState === "empty" || page._failed
-        icon: !page.signedIn ? "login" : Catalog.searchState === "empty" ? "search_off"
-            : Catalog.searchState === "error" ? "cloud_off" : "travel_explore"
+        readonly property bool failed: page.query !== "" && page.searchState === "error" && !retryTimer.running && !debounce.running
+        readonly property bool empty: page.query !== "" && page.searchState === "empty" && !debounce.running
+        visible: !page.signedIn || (page.query === "" && !page.showRecent) || empty || failed
+        icon: !page.signedIn ? "login" : empty ? "search_off" : failed ? "cloud_off" : "travel_explore"
         title: !page.signedIn ? I18n.t("Sign in to search")
-             : Catalog.searchState === "empty" ? I18n.t("Nothing found")
-             : Catalog.searchState === "error" ? I18n.t("Search didn't respond")
+             : empty ? I18n.t("Nothing found")
+             : failed ? I18n.t("Search didn't respond")
              : I18n.t("What do you want to hear?")
         text: !page.signedIn ? I18n.t("Search works through your Spotify account")
-            : Catalog.searchState === "empty" ? I18n.t("Try different wording or another filter")
-            : Catalog.searchState === "error" ? I18n.t("Check your connection and try again")
+            : empty ? I18n.t("Try different wording or another filter")
+            : failed ? I18n.t("Check your connection and try again")
             : I18n.t("Search for tracks, albums, artists, playlists and podcasts. You can also just paste an open.spotify.com link")
-        actionText: !page.signedIn ? I18n.t("Sign in") : Catalog.searchState === "error" ? I18n.t("Retry") : ""
+        actionText: !page.signedIn ? I18n.t("Sign in") : failed ? I18n.t("Retry") : ""
         actionIcon: !page.signedIn ? "login" : "refresh"
         onAction: {
             if (!page.signedIn)
                 page.router.reset("account")
-            else
-                Catalog.search(field.text, page.type)
+            else {
+                page.resetSearchFeedback()
+                page.submitSearch(false)
+            }
         }
     }
     LoadingIndicator {
@@ -234,7 +299,7 @@ Page {
         Layout.topMargin: 48
         size: 64
         contained: true
-        visible: page.signedIn && (Catalog.searchState === "loading" || page._retrying)
+        visible: page.signedIn && page.query !== "" && (debounce.running || page.searchState === "loading" || retryTimer.running)
     }
 
     // ---- Результаты ----
@@ -242,7 +307,7 @@ Page {
         id: results
         Layout.fillWidth: true
         spacing: 24
-        visible: page.signedIn && Catalog.searchState === "ok"
+        visible: page.signedIn && page.query !== "" && !debounce.running && page.searchState === "ok"
 
         // Лучший результат
         Item {

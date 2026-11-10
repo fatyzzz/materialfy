@@ -22,9 +22,7 @@ Row {
         id: button
         property string label
         size: "xs"
-        Accessible.role: Accessible.Button
         Accessible.name: label
-        Accessible.onPressAction: button.clicked()
     }
 
     WindowButton {

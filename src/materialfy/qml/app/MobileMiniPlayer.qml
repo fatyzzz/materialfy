@@ -257,8 +257,9 @@ Item {
                 implicitHeight: 48
                 IconButton {
                     id: playToggle
-                    anchors.centerIn: parent
+                    anchors.fill: parent
                     icon: Player.playing ? "pause" : "play_arrow"
+                    Accessible.name: Player.playing ? I18n.t("Pause") : I18n.t("Play")
                     iconSize: 30
                     iconFill: 1
                     iconColor: Theme.fgSurface
@@ -309,18 +310,22 @@ Item {
                     vx = 0
                     settle.stop()
                     settleY.stop()
-                    return
                 }
+            }
+            onGrabChanged: transition => {
+                const released = transition === PointerDevice.UngrabExclusive
+                if (!released && transition !== PointerDevice.CancelGrabExclusive)
+                    return
                 if (root._dir !== 0)
                     return
                 const t = last
                 settleY.restart()
                 const flick = Math.abs(vx) > 900 && Math.abs(t.x) > 24
-                if ((Math.abs(t.x) > root.width * 0.28 || flick) && Math.abs(t.x) > Math.abs(t.y)) {
+                if (released && (Math.abs(t.x) > root.width * 0.28 || flick) && Math.abs(t.x) > Math.abs(t.y)) {
                     root._swipeAway(t.x < 0 ? -1 : 1)
                 } else {
                     settle.restart()
-                    if (t.y < -40 && Math.abs(t.y) > Math.abs(t.x))
+                    if (released && t.y < -40 && Math.abs(t.y) > Math.abs(t.x))
                         root._open()
                 }
             }
