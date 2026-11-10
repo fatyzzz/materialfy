@@ -296,7 +296,7 @@ pub fn recent_records(recent: &[RecentContext], cards: &[FeedCard]) -> Vec<PlayR
             if let Some(c) = context {
                 ctx = ctx.titled(c.title.clone()).with_cover(c.cover.clone());
             }
-            Some(PlayRecord { track, context: ctx, played_at })
+            Some(PlayRecord { track, context: ctx, played_at, ..Default::default() })
         })
         .collect()
 }

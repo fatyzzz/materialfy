@@ -34,6 +34,8 @@ pub struct PlayRecord {
     pub context: PlayContext,
     /// ISO-время
     pub played_at: String,
+    /// сколько реально слушали, мс; 0 — неизвестно (старая история, записи Spotify)
+    pub played_ms: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -159,7 +161,8 @@ impl HistoryService {
         let started = jiff::Timestamp::now()
             .checked_sub(jiff::SignedDuration::from_secs_f64(played.max(0.0)))
             .unwrap_or_else(|_| jiff::Timestamp::now());
-        let record = PlayRecord { track, context, played_at: started.to_string() };
+        let played_ms = (played.max(0.0) * 1000.0) as i64;
+        let record = PlayRecord { track, context, played_at: started.to_string(), played_ms };
         lock(&self.state).journal.record(record);
         self.save_later();
         let _ = self.events.send(HistoryEvent::Changed);
@@ -306,6 +309,7 @@ impl HistoryService {
                             .map(|context| PlayContext::with_uri(context_kind(&context.kind), context.uri.clone()))
                             .unwrap_or_else(|| PlayContext::new(contexts::TRACKS)),
                         played_at: play.played_at.clone().unwrap_or_default(),
+                        ..Default::default()
                     })
                     .collect();
                 // у недавнего сессии треки неполные — в реестр только ответ Web API
