@@ -199,6 +199,16 @@ Page {
                         autoToggle: false
                         onClicked: Library.toggleSaved(page.info.uri ?? "")
                     }
+                    IconButton {
+                        icon: "share"
+                        size: "m"
+                        enabled: page.artistId !== ""
+                        Accessible.name: I18n.t("Copy link")
+                        onClicked: {
+                            Catalog.copyLink(Catalog.artistUrl(page.artistId))
+                            Window.window?.notify(I18n.t("Link copied"))
+                        }
+                    }
                 }
             }
         }
