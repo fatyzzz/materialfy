@@ -276,6 +276,8 @@ type ClientSource = std::sync::Arc<dyn Fn() -> Result<reqwest::Client, String> +
 pub struct LyricsFetcher {
     cache_dir: PathBuf,
     http: ClientSource,
+    /// Свой токен Musixmatch из настроек; пусто — анонимный (его Musixmatch сейчас блокирует).
+    mxm_user_token: std::sync::Arc<dyn Fn() -> String + Send + Sync>,
 }
 
 impl LyricsFetcher {
@@ -302,7 +304,13 @@ impl LyricsFetcher {
         if let Err(e) = std::fs::create_dir_all(&cache_dir) {
             tracing::warn!("lyrics: cache directory {} not created: {e}", cache_dir.display());
         }
-        Self { cache_dir, http: std::sync::Arc::new(source) }
+        Self { cache_dir, http: std::sync::Arc::new(source), mxm_user_token: std::sync::Arc::new(String::new) }
+    }
+
+    /// Токен Musixmatch читается на каждый поиск: новый из настроек применяется сразу.
+    pub fn with_mxm_user_token(mut self, token: impl Fn() -> String + Send + Sync + 'static) -> Self {
+        self.mxm_user_token = std::sync::Arc::new(token);
+        self
     }
 
     pub fn cache_dir(&self) -> &Path {
@@ -357,7 +365,7 @@ impl LyricsFetcher {
                 }
             }
         }
-        let token = sources::mxm_token(&http, &self.cache_dir, "").await.ok().flatten().filter(|t| !t.is_empty())?;
+        let token = sources::mxm_token(&http, &self.cache_dir, (self.mxm_user_token)().trim()).await.ok().flatten().filter(|t| !t.is_empty())?;
         match sources::mxm_fetch(&http, query, &token).await {
             Ok(Some(("word", lines))) => Some(LyricsResult::found("Musixmatch", "word", lines)),
             _ => None,
@@ -371,7 +379,7 @@ impl LyricsFetcher {
         if let Some(cached) = self.read_cache(&query.track_id).await {
             return cached;
         }
-        let mut result = self.fetch(query, "", extra).await;
+        let mut result = self.fetch(query, (self.mxm_user_token)().trim(), extra).await;
         if result.ok && result.source == EXTRA_SOURCE && result.kind == "line" {
             // Spotify knew the lines immediately; a word-level source makes the fill non-linear.
             // Wait a little, then keep the line and finish the upgrade in the background.

@@ -340,6 +340,8 @@
   "Shows the source badge (e.g. “Spotify · line by line”)": "Показывает источник текста в углу (напр. «Spotify · построчно»)",
   "Sync adjustment": "Синхронизация",
   "Exact sync with playback (0 ms)": "В такт воспроизведению (0 мс)",
+  "Musixmatch token": "Токен Musixmatch",
+  "Musixmatch refuses the built-in anonymous token. Paste your own user token to get word-timed lyrics from it": "Встроенный анонимный токен Musixmatch не принимает. Вставьте свой user token, чтобы получать оттуда тексты по словам",
   "Lyrics lead playback by {0} ms": "Текст опережает на {0} мс",
   "Lyrics lag playback by {0} ms": "Текст отстаёт на {0} мс",
   "Graphics processor": "Графический процессор",

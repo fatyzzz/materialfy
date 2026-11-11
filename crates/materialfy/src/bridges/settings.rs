@@ -64,6 +64,7 @@ pub mod qobject {
         #[qproperty(bool, lyrics_animate, cxx_name = "lyricsAnimate", READ, WRITE = set_lyrics_animate, NOTIFY = lyrics_animate_changed)]
         #[qproperty(bool, lyrics_show_source, cxx_name = "lyricsShowSource", READ, WRITE = set_lyrics_show_source, NOTIFY = lyrics_show_source_changed)]
         #[qproperty(i32, lyrics_sync_ms, cxx_name = "lyricsSyncMs", READ, WRITE = set_lyrics_sync_ms, NOTIFY = lyrics_sync_ms_changed)]
+        #[qproperty(QString, musixmatch_token, cxx_name = "musixmatchToken", READ, WRITE = set_musixmatch_token, NOTIFY = musixmatch_token_changed)]
         #[qproperty(QString, animations, READ, WRITE = set_animations, NOTIFY = animations_changed)]
         /// "auto" | "on" | "off" — режим для слабых ПК (Theme.lowPower)
         #[qproperty(QString, low_power_mode, cxx_name = "lowPowerMode", READ, WRITE = set_low_power_mode, NOTIFY = low_power_mode_changed)]
@@ -176,6 +177,7 @@ pub mod qobject {
         fn set_lyrics_animate(self: Pin<&mut Settings>, value: bool);
         fn set_lyrics_show_source(self: Pin<&mut Settings>, value: bool);
         fn set_lyrics_sync_ms(self: Pin<&mut Settings>, value: i32);
+        fn set_musixmatch_token(self: Pin<&mut Settings>, value: QString);
         fn set_animations(self: Pin<&mut Settings>, value: QString);
         fn set_low_power_mode(self: Pin<&mut Settings>, value: QString);
         fn set_gpu_preference(self: Pin<&mut Settings>, value: QString);
@@ -319,6 +321,9 @@ pub mod qobject {
         #[qsignal]
         #[cxx_name = "lyricsSyncMsChanged"]
         fn lyrics_sync_ms_changed(self: Pin<&mut Settings>);
+        #[qsignal]
+        #[cxx_name = "musixmatchTokenChanged"]
+        fn musixmatch_token_changed(self: Pin<&mut Settings>);
         #[qsignal]
         #[cxx_name = "animationsChanged"]
         fn animations_changed(self: Pin<&mut Settings>);
@@ -694,6 +699,7 @@ settings! {
     lyrics_animate: bool = LyricsAnimate, set_lyrics_animate, lyrics_animate_changed;
     lyrics_show_source: bool = LyricsShowSource, set_lyrics_show_source, lyrics_show_source_changed;
     lyrics_sync_ms: i32 = LyricsSyncMs, set_lyrics_sync_ms, lyrics_sync_ms_changed;
+    musixmatch_token: QString = MusixmatchToken, set_musixmatch_token, musixmatch_token_changed;
     animations: QString = Animations, set_animations, animations_changed;
     low_power_mode: QString = LowPowerMode, set_low_power_mode, low_power_mode_changed;
     gpu_preference: QString = GpuPreference, set_gpu_preference, gpu_preference_changed;

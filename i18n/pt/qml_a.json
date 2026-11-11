@@ -340,6 +340,8 @@
   "Shows the source badge (e.g. “Spotify · line by line”)": "Mostra o rótulo da fonte no canto inferior (ex.: \"Spotify · linha por linha\")",
   "Sync adjustment": "Ajuste de sincronia",
   "Exact sync with playback (0 ms)": "Em sincronia com a reprodução (0 ms)",
+  "Musixmatch token": "Token do Musixmatch",
+  "Musixmatch refuses the built-in anonymous token. Paste your own user token to get word-timed lyrics from it": "O Musixmatch recusa o token anônimo embutido. Cole seu próprio user token para receber letras sincronizadas por palavra",
   "Lyrics lead playback by {0} ms": "Letra adiantada em {0} ms",
   "Lyrics lag playback by {0} ms": "Letra atrasada em {0} ms",
   "Graphics processor": "Processador gráfico",
