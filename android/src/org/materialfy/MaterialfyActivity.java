@@ -21,7 +21,7 @@ public class MaterialfyActivity extends QtActivity
     private final Runnable syncDensity = () -> {
         android.view.View decor = getWindow().getDecorView();
         try {
-            MobileBridge.onWindowMetricsChanged(decor.getWidth(), decor.getHeight());
+            MobileBridge.onWindowMetricsChanged(decor.getWidth(), decor.getHeight(), displayDensity);
         } catch (UnsatisfiedLinkError e) {
             // Qt может ещё загружаться при первом изменении конфигурации.
             android.util.Log.w("materialfy", "viewport changed before native initialization");
@@ -58,8 +58,8 @@ public class MaterialfyActivity extends QtActivity
         if (config.densityDpi == displayDensity)
             return;
         displayDensity = config.densityDpi;
-        // Сначала Qt применяет новый DPR. Физический размер Surface при смене density не меняется,
-        // поэтому обычного sizeChanged нет: повторно задаём логический размер окна после обновления Qt.
+        // После прохода Android layout передаём физические размеры и целевую density.
+        // Нативный обработчик дождётся DevicePixelRatioChange в Qt перед изменением размера окна.
         android.view.View decor = getWindow().getDecorView();
         decor.removeCallbacks(syncDensity);
         decor.postDelayed(syncDensity, 100);
