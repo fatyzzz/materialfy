@@ -1437,6 +1437,31 @@ Page {
             }
         }
 
+        SettingRow {
+            title: I18n.t("Musixmatch token")
+            description: I18n.t("Musixmatch refuses the built-in anonymous token. Paste your own user token to get word-timed lyrics from it")
+            TextField {
+                id: mxmTokenField
+                width: page.compact ? 220 : 280
+                text: Settings.musixmatchToken
+                placeholderText: I18n.t("optional")
+                echoMode: TextInput.Password
+                function commit() {
+                    const t = text.trim()
+                    if (t !== Settings.musixmatchToken)
+                        Settings.musixmatchToken = t
+                }
+                onAccepted: commit()
+                Connections {
+                    target: mxmTokenField.inputItem
+                    function onActiveFocusChanged() {
+                        if (!mxmTokenField.inputItem.activeFocus)
+                            mxmTokenField.commit()
+                    }
+                }
+            }
+        }
+
     }
 
     // ================= Воспроизведение =================

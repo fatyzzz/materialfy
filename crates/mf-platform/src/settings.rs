@@ -74,6 +74,8 @@ pub enum SettingKey {
     LyricsShowSource,
     /// сдвиг синхронизации в миллисекундах (-500..500)
     LyricsSyncMs,
+    /// свой user token Musixmatch; пусто — анонимный
+    MusixmatchToken,
     /// "system" | "full" | "reduced" → Theme.reducedMotion
     Animations,
     /// режим для слабых ПК: "auto" (сам, когда кадры рисует процессор) | "on" | "off" → Theme.lowPower
@@ -195,7 +197,7 @@ pub enum SettingType {
 }
 
 impl SettingKey {
-    pub const ALL: [SettingKey; 90] = [
+    pub const ALL: [SettingKey; 91] = [
         SettingKey::ThemeMode,
         SettingKey::SchemeVariant,
         SettingKey::AccentFromCover,
@@ -227,6 +229,7 @@ impl SettingKey {
         SettingKey::LyricsAnimate,
         SettingKey::LyricsShowSource,
         SettingKey::LyricsSyncMs,
+        SettingKey::MusixmatchToken,
         SettingKey::Animations,
         SettingKey::LowPowerMode,
         SettingKey::GpuPreference,
@@ -323,6 +326,7 @@ impl SettingKey {
             LyricsAnimate => "lyricsAnimate",
             LyricsShowSource => "lyricsShowSource",
             LyricsSyncMs => "lyricsSyncMs",
+            MusixmatchToken => "musixmatchToken",
             Animations => "animations",
             LowPowerMode => "lowPowerMode",
             GpuPreference => "gpuPreference",
@@ -433,6 +437,7 @@ impl SettingKey {
             LyricsAnimate => Bool(true),
             LyricsShowSource => Bool(true),
             LyricsSyncMs => Int(0),
+            MusixmatchToken => Str(String::new()),
             Animations => Str("system".into()),
             LowPowerMode => Str("auto".into()),
             GpuPreference => Str("auto".into()),
@@ -1242,7 +1247,7 @@ mod tests {
 
     #[test]
     fn schema() {
-        assert_eq!(SettingKey::ALL.len(), 90);
+        assert_eq!(SettingKey::ALL.len(), 91);
         for key in SettingKey::ALL {
             assert_eq!(SettingKey::from_name(key.name()), Some(key));
             assert_eq!(key.default_value().value_type(), key.value_type());
@@ -1588,7 +1593,7 @@ mod tests {
             "lyricsTextAlign", "lyricsFillMode", "lyricsVisibleLines", "lyricsHighlight",
             "lyricsActiveScale", "lyricsIdleScale", "lyricsWordBounce", "lyricsDimOpacity",
             "lyricsScrollMs", "lyricsStaggerMs", "lyricsBlurAmount",
-            "lyricsLineSpacing", "lyricsAnimate", "lyricsShowSource", "lyricsSyncMs",
+            "lyricsLineSpacing", "lyricsAnimate", "lyricsShowSource", "lyricsSyncMs", "musixmatchToken",
             "animations", "lowPowerMode", "gpuPreference", "rightPanelOpen", "rightPanelTab", "sidebarCollapsed", "windowWidth",
             "windowHeight", "windowX", "windowY", "windowMaximized", "closeToTray", "wheelStep", "floatingPlayer", "floatingPlayerStyle",
             "taskbarWidgetPos", "floatingKeyHints", "floatingHideFullscreen", "floatingHideMaximized", "floatingOffsetX", "floatingEdge", "floatingFreeX", "floatingFreeY", "libraryView",
