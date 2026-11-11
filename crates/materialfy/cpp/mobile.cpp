@@ -15,6 +15,7 @@
 #include <cstdio>
 #include <QtGui/QDesktopServices>
 #include <QtGui/QGuiApplication>
+#include <QtGui/QScreen>
 #include <QtGui/QWindow>
 
 #if defined(Q_OS_ANDROID)
@@ -64,7 +65,10 @@ native_window_metrics(JNIEnv*, jclass, jint pixel_width, jint pixel_height)
     for (QWindow* window : QGuiApplication::topLevelWindows()) {
       if (window->objectName() != QStringLiteral("materialfyMobileWindow"))
         continue;
-      const qreal ratio = window->devicePixelRatio();
+      // QWindow кеширует DPR до следующего кадра. При densityChanged экран уже обновлён,
+      // а окно ещё возвращает старый масштаб; тот же QScreen использует resize() в Qt.
+      const QScreen* screen = window->screen();
+      const qreal ratio = screen ? screen->devicePixelRatio() : 0;
       if (ratio <= 0)
         return;
       const QSize logical(qRound(pixel_width / ratio), qRound(pixel_height / ratio));
