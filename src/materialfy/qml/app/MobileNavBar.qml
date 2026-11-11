@@ -43,6 +43,9 @@ Rectangle {
                 Accessible.name: modelData.text
                 Accessible.selectable: true
                 Accessible.selected: tab.active
+                // Android-мост Qt передаёт checked, но не selected: активная вкладка должна озвучиваться.
+                Accessible.checkable: true
+                Accessible.checked: tab.active
                 Accessible.onPressAction: tab.activate()
                 Keys.onReturnPressed: tab.activate()
                 Keys.onSpacePressed: tab.activate()
