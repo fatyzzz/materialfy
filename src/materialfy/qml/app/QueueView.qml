@@ -18,6 +18,7 @@ Item {
     // ---- Границы секций (порядок в модели: current → manual → context) ----
     property int manualStart: -1
     property int contextStart: -1
+    property int sectionRevision: 0
     readonly property int count: queue ? queue.count : 0
     readonly property int manualRows: manualStart < 0 ? 0 : (contextStart >= 0 ? contextStart : count) - manualStart
     readonly property int contextRows: contextStart >= 0 ? count - contextStart : 0
@@ -34,33 +35,25 @@ Item {
         }
         manualStart = queue.find("section", "manual")
         contextStart = queue.find("section", "context")
-        // Сигналы модели приходят, пока ListView ещё обрабатывает вставку/удаление строк.
-        // Смена section.property внутри них удаляет используемые делегаты и может уронить Qt.
-        // callLater объединяет серию сигналов и пересобирает заголовки после завершения диффа.
-        Qt.callLater(root._refreshSections)
+        sectionRevision++
     }
-    // Очередь обновляется диффом (удалить / переставить / вставить / заменить на месте), и на некоторых его
-    // сочетаниях ListView оставлял прежние заголовки секций: над играющим треком — «Далее», две плашки
-    // «Перетащите трек сюда». Переназначение section.property пересчитывает секции всех строк заново
-    property string _sectionRole: "section"
-    function _refreshSections() {
-        _sectionRole = ""
-        _sectionRole = "section"
-    }
-    Component.onCompleted: recount()
+    // Один пересчёт после диффа модели. Заголовки принадлежат строкам, а не кешу секций ListView:
+    // смена section.property во время обновления давала неверные подписи и нативное падение Qt.
+    function scheduleRecount() { Qt.callLater(root.recount) }
+    Component.onCompleted: scheduleRecount()
     Connections {
         target: Player
         function onQueueChanged() {
-            root.recount()
+            root.scheduleRecount()
             root._resetDrag()
         }
     }
     Connections {
         target: root.queue
-        function onCountChanged() { root.recount() }
-        function onModelReset() { root.recount() }
+        function onCountChanged() { root.scheduleRecount() }
+        function onModelReset() { root.scheduleRecount() }
         // после каждого диффа, в том числе замены строк на месте, о которой queueChanged не сообщает
-        function onRowsChanged() { root.recount() }
+        function onRowsChanged() { root.scheduleRecount() }
     }
     // новый контекст — снова свёрнут
     readonly property string _contextUri: Player.contextUri
@@ -154,7 +147,7 @@ Item {
     function _dropIndexAt(x, y) {
         if (!Player.isLocal)
             return manualRows
-        const p = list.mapToItem(list.contentItem, x, y)
+        const p = root.mapToItem(list.contentItem, x, y)
         const i = list.indexAt(p.x, p.y)
         if (i < 0)
             return dropZoneHover.containsDrag || Player.manualCount === 0 ? 0 : -1
@@ -163,7 +156,7 @@ Item {
             return 0
         if (t.section === "manual") {
             const item = list.itemAtIndex(i)
-            const below = item ? p.y - item.y > item.height / 2 : false
+            const below = item ? p.y - item.y - item.headerHeight > root.rowHeight / 2 : false
             return i - manualStart + (below ? 1 : 0)
         }
         return -1
@@ -227,39 +220,6 @@ Item {
         // без reuseItems: замер на живой очереди показал регрессию — при частых диффах плеера
         // переклейка данных на переиспользуемые делегаты дороже обновления биндингов на месте
 
-        section.property: root._sectionRole
-        section.criteria: ViewSection.FullString
-        section.delegate: Column {
-            id: sec
-            required property string section
-            width: list.width
-            spacing: 4
-
-            Item {
-                width: parent.width
-                height: sec.section === "context" && root.dropZoneShown ? zone.height + 8 : 0
-                visible: height > 0
-                QueueDropZone {
-                    id: zone
-                    y: 8
-                    width: parent.width
-                    active: dropZoneHover.containsDrag
-                }
-            }
-            QueueSectionHeader {
-                width: parent.width
-                title: sec.section === "current" ? I18n.t("Now playing")
-                     : sec.section === "manual" ? I18n.t("Next in queue")
-                     : Player.contextTitle !== "" ? I18n.t("Next from “{0}”", Player.contextTitle) : I18n.t("Next up")
-                count: sec.section === "manual" ? Player.manualCount : -1
-                actionIcon: sec.section === "manual" && Player.canClearQueue ? "clear_all" : ""
-                actionText: I18n.t("Clear")
-                note: sec.section === "manual" && Player.remote ? I18n.t("New tracks go to the end")
-                    : sec.section === "context" && root.dragFrom >= 0 ? I18n.t("Can't drop here") : ""
-                onAction: root.clearQueue()
-            }
-        }
-
         delegate: Item {
             id: cell
             required property int index
@@ -268,16 +228,54 @@ Item {
             readonly property int m: sec === "manual" ? index - root.manualStart : -1
             readonly property bool hidden: sec === "context" && index - root.contextStart >= root.contextShown
             readonly property bool lifted: m >= 0 && m === root.dragFrom
+            readonly property bool startsSection: root.sectionRevision >= 0
+                && index >= 0 && index < root.count
+                && (index === 0 || (root.queue && (root.queue.get(index - 1) ?? {}).section !== sec))
+            readonly property real headerHeight: sectionHeader.height
 
             width: ListView.view.width
-            height: hidden ? 0 : root.rowHeight
+            height: hidden ? 0 : headerHeight + root.rowHeight
             visible: !hidden
             z: lifted ? 10 : 0
+
+            Loader {
+                id: sectionHeader
+                width: cell.width
+                height: item ? item.implicitHeight : 0
+                active: cell.startsSection && !cell.hidden
+                sourceComponent: Column {
+                    width: cell.width
+                    spacing: 4
+                    Item {
+                        width: parent.width
+                        height: cell.sec === "context" && root.dropZoneShown ? zone.height + 8 : 0
+                        visible: height > 0
+                        QueueDropZone {
+                            id: zone
+                            y: 8
+                            width: parent.width
+                            active: dropZoneHover.containsDrag
+                        }
+                    }
+                    QueueSectionHeader {
+                        width: parent.width
+                        title: cell.sec === "current" ? I18n.t("Now playing")
+                             : cell.sec === "manual" ? I18n.t("Next in queue")
+                             : Player.contextTitle !== "" ? I18n.t("Next from “{0}”", Player.contextTitle) : I18n.t("Next up")
+                        count: cell.sec === "manual" ? Player.manualCount : -1
+                        actionIcon: cell.sec === "manual" && Player.canClearQueue ? "clear_all" : ""
+                        actionText: I18n.t("Clear")
+                        note: cell.sec === "manual" && Player.remote ? I18n.t("New tracks go to the end")
+                            : cell.sec === "context" && root.dragFrom >= 0 ? I18n.t("Can't drop here") : ""
+                        onAction: root.clearQueue()
+                    }
+                }
+            }
 
             // место, куда встанет поднятая строка
             Rectangle {
                 visible: cell.lifted && root.dragTo !== root.dragFrom
-                y: (root.dragTo - root.dragFrom) * root.rowHeight
+                y: cell.headerHeight + (root.dragTo - root.dragFrom) * root.rowHeight
                 width: parent.width
                 height: root.rowHeight
                 radius: Theme.shape.large
@@ -291,7 +289,7 @@ Item {
                 width: parent.width
                 height: root.rowHeight
                 compact: root.compact
-                y: cell.lifted ? root.dragOffset : root.shiftFor(cell.m)
+                y: cell.headerHeight + (cell.lifted ? root.dragOffset : root.shiftFor(cell.m))
                 Behavior on y {
                     enabled: !row.dragging && root.shiftAnimated
                     NumberAnimation { duration: Theme.motion.spatialFast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.motion.emphasized }
