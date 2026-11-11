@@ -505,6 +505,21 @@ Item {
                 readonly property real controlWidth: root.layoutCompact && colWidth < 4 * 56 + 72 + 8
                                                      ? (Theme.mobile ? 48 : 40) : 56
                 readonly property string ctl: controlWidth < 56 ? "s" : "m"
+                // Высота подписей и пульта меняется: длинный заголовок, заблокированная громкость,
+                // потерянное устройство. Остаток для обложки считаем по самим контролам.
+                readonly property real controlsHeight: {
+                    const items = visibleChildren
+                    let total = Math.max(0, items.length - 1) * spacing
+                    for (let i = 0; i < items.length; i++) {
+                        const item = items[i]
+                        total += item.Layout.topMargin + item.Layout.bottomMargin
+                        if (item === bigCover)
+                            continue
+                        const preferred = item.Layout.preferredHeight
+                        total += Math.max(item.Layout.minimumHeight, preferred >= 0 ? preferred : item.implicitHeight)
+                    }
+                    return total
+                }
 
                 Item { Layout.fillHeight: true }
 
@@ -532,15 +547,13 @@ Item {
 
                 NowPlayingCover {
                     id: bigCover
-                    // Всё остальное в колонке занимает ~360 px (в узком окне ~310) — обложка берёт оставшееся
-                    // плашка пульта (если видна) тоже забирает высоту
                     // Центр-режим: панель справа убрана, колонка шире — обложке даём вырасти по ширине;
                     // вертикальный бюджет тот же (текст и управление остаются)
                     // Размер интерполируется blend'ом (0 — обычный, 1 — центр-режим): ресайз окна мгновенен
                     property real _max: root.coverOnly ? 520 : 440
                     Behavior on _max { NumberAnimation { duration: Theme.motion.spatialDefault; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.motion.emphasizedDecelerate } }
-                    readonly property real s: root.layoutCompact ? Math.max(96, Math.min(playerColumn.colWidth * (Theme.mobile ? 0.84 : 1), body.height - 316 - npBanner.implicitHeight, 360))
-                                                           : Math.max(160, Math.min(playerColumn.colWidth, body.height - 360 - npBanner.implicitHeight, _max))
+                    readonly property real s: root.layoutCompact ? Math.max(0, Math.min(playerColumn.colWidth * (Theme.mobile ? 0.84 : 1), body.height - playerColumn.controlsHeight, 360))
+                                                           : Math.max(0, Math.min(playerColumn.colWidth, body.height - playerColumn.controlsHeight, _max))
                     Layout.alignment: Qt.AlignHCenter
                     Layout.preferredWidth: s
                     Layout.preferredHeight: s

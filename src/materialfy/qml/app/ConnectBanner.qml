@@ -134,6 +134,12 @@ Item {
                 Layout.column: root.stacked ? 1 : 2
                 Layout.row: root.stacked ? 1 : 0
                 enabled: !moving
+                Accessible.role: Accessible.Button
+                Accessible.name: actionLabel.text
+                Accessible.onPressAction: if (action.enabled) root._listenHere()
+                activeFocusOnTab: true
+                Keys.onReturnPressed: if (enabled) root._listenHere()
+                Keys.onSpacePressed: if (enabled) root._listenHere()
 
                 Rectangle {
                     anchors.fill: parent
@@ -162,6 +168,7 @@ Item {
                         color: root.lost ? Theme.errorContainer : Theme.fgSecondaryContainer
                     }
                     Label {
+                        id: actionLabel
                         anchors.verticalCenter: parent.verticalCenter
                         text: action.moving ? I18n.t("Transferring…") : root.needsSetup ? I18n.t("Set up") : I18n.t("Play here")
                         type: "labelLarge"
