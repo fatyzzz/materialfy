@@ -24,10 +24,12 @@ Item {
 
     onSourceChanged: {
         const front = _layers[_front], back = _layers[1 - _front]
+        // Сигнал Ready может прийти синхронно при присваивании нового source.
+        // Сначала отменяем старое ожидание, включая возврат к уже показанной обложке.
+        _pending = false
+        timeout.stop()
         if (front.source.toString() === "" || !visible) {   // первая обложка / плеер закрыт — без анимации
             // Отложенная загрузка предыдущего трека не должна позднее вернуть старую обложку.
-            _pending = false
-            timeout.stop()
             outAnim.complete()
             inAnim.complete()
             front.jumpTo(restShape)

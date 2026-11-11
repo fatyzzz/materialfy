@@ -78,6 +78,16 @@ Window {width:360;height:640;visible:true
         incoming = state["layers"][state["front"]]
         assert incoming["scale"] == 1 and incoming["rotation"] == 0 and incoming["opacity"] == 1
         window.changeSource("slow")
+        window.changeSource("newest")
+        QTest.qWait(350)
+        state = json.loads(window.state())
+        assert state["layers"][state["front"]]["source"].endswith("newest"), "An old ready callback swapped the cover twice"
+        window.changeSource("slow")
+        window.changeSource("newest")
+        QTest.qWait(1600)
+        state = json.loads(window.state())
+        assert state["layers"][state["front"]]["source"].endswith("newest"), "Returning to the current cover kept a stale pending load"
+        window.changeSource("slow")
         window.setCoverVisible(False)
         window.changeSource("latest")
         QTest.qWait(1600)
