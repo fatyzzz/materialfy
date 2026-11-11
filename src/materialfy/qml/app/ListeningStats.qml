@@ -169,6 +169,17 @@ ColumnLayout {
                 required property int index
                 Layout.fillWidth: true
                 implicitHeight: 56
+                // в истории фото исполнителя нет: ищем по имени тем же поиском, что и запасные обложки
+                property string photo: ""
+                property string _photoKey: ""
+                Component.onCompleted: if (list.artists) _photoKey = Covers.find("artist", modelData.title ?? "", "")
+                Connections {
+                    target: row._photoKey !== "" ? Covers : null
+                    function onFound(key, url) {
+                        if (key === row._photoKey)
+                            row.photo = url
+                    }
+                }
                 StateLayer { anchors.fill: parent; radius: Theme.shape.medium; onClicked: list.picked(row.modelData) }
                 RowLayout {
                     anchors.fill: parent
@@ -187,13 +198,14 @@ ColumnLayout {
                         Layout.preferredHeight: 40
                         Avatar { visible: list.artists; anchors.fill: parent; size: 40; name: row.modelData.title ?? "" }
                         MorphImage {
-                            visible: !list.artists
+                            visible: !list.artists || (row.photo !== "" && status === Image.Ready)
+                            eager: true
                             anchors.fill: parent
-                            source: row.modelData.cover ?? ""
-                            fallbackKind: "track"
+                            source: list.artists ? row.photo : (row.modelData.cover ?? "")
+                            fallbackKind: list.artists ? "" : "track"
                             fallbackArtist: (row.modelData.subtitle ?? "").split(", ")[0]
                             fallbackTitle: row.modelData.title ?? ""
-                            shape: "softSquare"
+                            shape: list.artists ? "circle" : "softSquare"
                         }
                     }
                     ColumnLayout {
