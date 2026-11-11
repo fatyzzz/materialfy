@@ -3,6 +3,7 @@ package org.materialfy;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
@@ -16,11 +17,22 @@ import org.qtproject.qt.android.bindings.QtActivity;
 public class MaterialfyActivity extends QtActivity
 {
     private static final int REQUEST_NOTIFICATIONS = 4101;
+    private int displayDensity;
+    private final Runnable syncDensity = () -> {
+        android.view.View decor = getWindow().getDecorView();
+        try {
+            MobileBridge.onWindowMetricsChanged(decor.getWidth(), decor.getHeight());
+        } catch (UnsatisfiedLinkError e) {
+            // Qt может ещё загружаться при первом изменении конфигурации.
+            android.util.Log.w("materialfy", "viewport changed before native initialization");
+        }
+    };
 
     @Override
     public void onCreate(Bundle savedInstanceState)
     {
         super.onCreate(savedInstanceState);
+        displayDensity = getResources().getConfiguration().densityDpi;
         Window window = getWindow();
         // Интерфейс рисуется под системными панелями (отступы — SafeArea в QML)
         window.setStatusBarColor(Color.TRANSPARENT);
@@ -38,6 +50,20 @@ public class MaterialfyActivity extends QtActivity
     }
 
     private Object backCallback;
+
+    @Override
+    public void onConfigurationChanged(Configuration config)
+    {
+        super.onConfigurationChanged(config);
+        if (config.densityDpi == displayDensity)
+            return;
+        displayDensity = config.densityDpi;
+        // Сначала Qt применяет новый DPR. Физический размер Surface при смене density не меняется,
+        // поэтому обычного sizeChanged нет: повторно задаём логический размер окна после обновления Qt.
+        android.view.View decor = getWindow().getDecorView();
+        decor.removeCallbacks(syncDensity);
+        decor.postDelayed(syncDensity, 100);
+    }
 
     // Android 13+: «Назад» (кнопка и жест) приходит в OnBackInvokedCallback, KEYCODE_BACK система больше не шлёт.
     // Qt регистрирует свой колбэк в onResume, а срабатывает последний зарегистрированный — поэтому свой ставим
@@ -94,6 +120,7 @@ public class MaterialfyActivity extends QtActivity
     protected void onDestroy()
     {
         unregisterBack();
+        getWindow().getDecorView().removeCallbacks(syncDensity);
         // Активность закрыта, а процесс живёт (музыка играет в сервисе) — ссылку отпускаем
         MobileBridge.detach(this);
         super.onDestroy();

@@ -10,9 +10,12 @@
 #include <QtCore/QStandardPaths>
 #include <QtCore/QUrl>
 #include <QtCore/QtLogging>
+#include <QtCore/QtMath>
 
 #include <cstdio>
 #include <QtGui/QDesktopServices>
+#include <QtGui/QGuiApplication>
+#include <QtGui/QWindow>
 
 #if defined(Q_OS_ANDROID)
 #include <QtCore/QJniEnvironment>
@@ -51,6 +54,27 @@ native_media_command(JNIEnv* env, jclass, jstring command, jlong arg)
   mobile_post_media_command(text, static_cast<qint64>(arg));
 }
 
+// Android сообщает физические размеры после обновления density/DPR, даже если Surface не менялся.
+void JNICALL
+native_window_metrics(JNIEnv*, jclass, jint pixel_width, jint pixel_height)
+{
+  if (!qApp || pixel_width <= 0 || pixel_height <= 0)
+    return;
+  QMetaObject::invokeMethod(qApp, [pixel_width, pixel_height] {
+    for (QWindow* window : QGuiApplication::topLevelWindows()) {
+      if (window->objectName() != QStringLiteral("materialfyMobileWindow"))
+        continue;
+      const qreal ratio = window->devicePixelRatio();
+      if (ratio <= 0)
+        return;
+      const QSize logical(qRound(pixel_width / ratio), qRound(pixel_height / ratio));
+      window->resize(logical);
+      qInfo("materialfy: density resize %dx%d pixels at %.3f -> %dx%d",
+            pixel_width, pixel_height, double(ratio), logical.width(), logical.height());
+    }
+  }, Qt::QueuedConnection);
+}
+
 void
 register_natives()
 {
@@ -61,8 +85,9 @@ register_natives()
   QJniEnvironment env;
   const JNINativeMethod methods[] = {
     { "onMediaCommand", "(Ljava/lang/String;J)V", reinterpret_cast<void*>(native_media_command) },
+    { "onWindowMetricsChanged", "(II)V", reinterpret_cast<void*>(native_window_metrics) },
   };
-  if (!env.registerNativeMethods(BRIDGE, methods, 1))
+  if (!env.registerNativeMethods(BRIDGE, methods, 2))
     qWarning("materialfy: could not register MobileBridge natives");
 }
 

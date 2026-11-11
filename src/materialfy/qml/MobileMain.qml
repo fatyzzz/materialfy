@@ -9,11 +9,12 @@ import "app"
 // Системные панели Android прозрачные: интерфейс рисуется под ними, отступы — Theme.safeTop / safeBottom.
 Window {
     id: win
+    objectName: "materialfyMobileWindow"
 
     property string startPage: "home"     // --set startPage=settings | artist:<id>
 
-    width: MobileShell.android ? Screen.width : 412
-    height: MobileShell.android ? Screen.height : 915
+    width: 412
+    height: 915
     visible: true
     title: Player.hasTrack ? Player.title + " — " + Player.artist + " · Materialfy" : "Materialfy"
     color: Theme.surface
