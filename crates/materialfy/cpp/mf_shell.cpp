@@ -316,7 +316,7 @@ on_unhandled_exception(EXCEPTION_POINTERS* info)
   return EXCEPTION_CONTINUE_SEARCH; // дальше — как обычно (отчёт Windows, журнал событий)
 }
 } // namespace
-#elif defined(Q_OS_LINUX)
+#elif defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
 #include <execinfo.h>
 #include <fcntl.h>
 #include <signal.h>
@@ -360,7 +360,7 @@ install_native_crash_log(const QString& path)
 #if defined(Q_OS_WIN)
   wcsncpy_s(crash_log_path, reinterpret_cast<const wchar_t*>(path.utf16()), _TRUNCATE);
   SetUnhandledExceptionFilter(on_unhandled_exception);
-#elif defined(Q_OS_LINUX)
+#elif defined(Q_OS_LINUX) && !defined(Q_OS_ANDROID)
   const QByteArray utf8 = path.toUtf8();
   std::strncpy(crash_log_path, utf8.constData(), sizeof crash_log_path - 1);
   // первый вызов backtrace подгружает libgcc_s и может выделить память: делаем это до падения
