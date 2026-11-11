@@ -25,7 +25,7 @@ Item {
         liked: "favorite", radio: "radio", search: "search", tracks: "history"
     })
 
-    implicitHeight: 64
+    implicitHeight: Math.max(64, Theme.type.labelMedium.line + Theme.type.titleSmall.line + 16)
     implicitWidth: 280
 
     Rectangle {

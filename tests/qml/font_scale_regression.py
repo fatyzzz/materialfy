@@ -27,6 +27,8 @@ with TemporaryDirectory(prefix="materialfy-font-test-") as directory:
         shutil.copy(QML / "Md3" / name, md / name)
     shutil.copy(QML / "app/MobileNavBar.qml", base / "MobileNavBar.qml")
     shutil.copy(QML / "app/SettingsNav.qml", base / "SettingsNav.qml")
+    for name in ("QueueContextCard", "QueueSectionHeader"):
+        shutil.copy(QML / "app" / (name + ".qml"), base / (name + ".qml"))
     roles = re.findall(r': "(\w+)"', (md / "Theme.qml").read_text(encoding="utf-8-sig"))
     colors = ",".join(name + ':Qt.rgba(.2,.2,.2,1)' for name in dict.fromkeys(roles))
     (core / "ThemeEngine.qml").write_text('pragma Singleton\nimport QtQuick\nQtObject {property bool dark:false;property var colors:({' + colors + '});signal schemeChanged()}')
@@ -41,10 +43,13 @@ QtObject { property real fontScale:1
     (core / "qmldir").write_text("module Materialfy.Core\n" + "".join("singleton " + name + " 1.0 " + name + ".qml\n" for name in ("ThemeEngine", "Settings", "MobileShell")))
     stubs = {
         "I18n": 'pragma Singleton\nimport QtQuick\nQtObject {function t(value){return value}}',
-        "Icon": 'import QtQuick\nItem {property string name;property real size:24;property color color;property bool fill:false;property real weight:400;property bool tight:false;implicitWidth:size;implicitHeight:size}',
+        "Icon": 'import QtQuick\nItem {property string name;property real size:24;property color color;property real fill:0;property real weight:400;property bool tight:false;implicitWidth:size;implicitHeight:size}',
         "IconButton": 'import QtQuick\nItem {property string size;property string icon;signal clicked();width:40;height:40}',
         "StateLayer": 'import QtQuick\nItem {property real radius;property real topLeftRadius;property real topRightRadius;property real bottomLeftRadius;property real bottomRightRadius;property color color;property bool ripple;property int cursorShape;property bool pressed:false;property bool containsMouse:false;signal clicked()}',
         "Elevation": 'import QtQuick\nQtObject {property Item target;property int level}',
+        "MorphImage": 'import QtQuick\nItem {property string source;property string shape}',
+        "MorphShape": 'import QtQuick\nItem {property string shape;property color color}',
+        "WavyDivider": 'import QtQuick\nItem {}',
     }
     for name, source in stubs.items():
         (md / (name + ".qml")).write_text(source)
@@ -61,9 +66,12 @@ Window {width:360;height:640;visible:true
  TextField {id:field;label:"Name"}
  SettingsNav {id:settingsNav;y:200;width:parent.width;sections:[{key:"appearance",text:"Оформление"}]}
  ButtonGroup {id:group;y:280;maxWidth:320;model:["Системные","Уменьшенные","Полные"]}
+ ButtonGroup {id:icons;y:320;model:[{icon:"shuffle"},{icon:"repeat"}]}
+ QueueContextCard {id:contextCard;context:({type:"album",title:"Album"});width:320}
+ QueueSectionHeader {id:sectionHeader;title:"Next";count:7;width:320}
  MobileNavBar {id:nav;y:400;width:parent.width;items:[
-   {name:"home",text:"Главная"},{name:"search",text:"Поиск"},
-   {name:"library",text:"Библиотека"},{name:"settings",text:"Настройки"}]}
+   {name:"home",text:"Главная",icon:"home"},{name:"search",text:"Поиск",icon:"search"},
+   {name:"library",text:"Библиотека",icon:"library_music"},{name:"settings",text:"Настройки",icon:"settings"}]}
  function scale(value){Theme.mobile=true;MobileShell.fontScale=value}
  function desktop(){Theme.mobile=false}
  function captions(item,result){
@@ -75,9 +83,12 @@ Window {width:360;height:640;visible:true
    buttonHeight:button.implicitHeight,chipHeight:chip.implicitHeight,
    searchHeight:search.implicitHeight,fieldHeight:field.implicitHeight,
    navHeight:nav.implicitHeight,navLabels:labels,rowHeight:Theme.trackRowHeight(false),
-   groupHeight:group.implicitHeight,settingsNavHeight:settingsNav.implicitHeight})}
+   groupHeight:group.implicitHeight,settingsNavHeight:settingsNav.implicitHeight,
+   iconGroupHeight:icons.implicitHeight,contextHeight:contextCard.implicitHeight,sectionHeight:sectionHeader.implicitHeight})}
 }'''
     engine = QQmlEngine()
+    warnings = []
+    engine.warnings.connect(lambda errors: warnings.extend(error.toString() for error in errors))
     engine.addImportPath(str(base))
     component = QQmlComponent(engine)
     component.setData(scene.encode(), QUrl.fromLocalFile(str(base / "test.qml")))
@@ -101,6 +112,8 @@ Window {width:360;height:640;visible:true
         assert len(large["navLabels"]) == 4 and all(label["size"] == 24 and label["bottom"] <= large["navHeight"] for label in large["navLabels"]), large
         assert large["rowHeight"] >= 108
         assert large["groupHeight"] >= 92 and large["settingsNavHeight"] >= 60, large
+        assert large["iconGroupHeight"] == 40 and large["contextHeight"] >= 88 and large["sectionHeight"] >= 56, large
+        assert not warnings, warnings
         window.desktop()
         assert json.loads(window.state())["body"]["size"] == 16
         print("PASS: live nonlinear text scaling, proportional line metrics, larger input/button bounds, desktop sizes preserved", flush=True)

@@ -22,6 +22,14 @@ Item {
 
     readonly property var spec: ({ xs: { h: 32, pad: 12, inner: 4 }, s: { h: 40, pad: 16, inner: 8 }, m: { h: 56, pad: 24, inner: 8 } })[size]
     readonly property int count: model ? model.length : 0
+    readonly property bool hasText: {
+        for (let i = 0; i < count; ++i) {
+            const entry = model[i]
+            if ((typeof entry === "string" ? entry : (entry.text ?? "")) !== "")
+                return true
+        }
+        return false
+    }
     // естественная ширина: с иконками и без
     property real _withIcons: 0
     property real _noIcons: 0
@@ -46,7 +54,7 @@ Item {
     }
 
     implicitWidth: _withIcons
-    implicitHeight: Math.max(spec.h, Theme.type.labelLarge.line * (Theme.fontScale > 1 ? 2 : 1) + 12)
+    implicitHeight: hasText ? Math.max(spec.h, Theme.type.labelLarge.line * (Theme.fontScale > 1 ? 2 : 1) + 12) : spec.h
     width: Math.min(implicitWidth, maxWidth)
 
     Row {
@@ -84,7 +92,10 @@ Item {
                 readonly property string iconName: typeof modelData === "string" ? "" : (modelData.icon ?? "")
                 readonly property var spec: root.spec
                 readonly property bool showIcon: icon.n !== "" && !root._dropIcons
-                readonly property real bareWidth: caption.implicitWidth + 2 * spec.pad
+                // Wrapping changes Text.implicitWidth: measure unwrapped text independently
+                // so the segment's width cannot feed back into its own natural width.
+                TextMetrics { id: captionMetrics; font: caption.font; text: seg.label }
+                readonly property real bareWidth: captionMetrics.advanceWidth + 2 * spec.pad
                 readonly property real fullWidth: bareWidth + (icon.n !== "" ? 18 + (seg.label !== "" ? content.spacing : 0) : 0)
                 onFullWidthChanged: Qt.callLater(root._measure)
 
@@ -129,12 +140,12 @@ Item {
                     Label {
                         id: caption
                         visible: seg.label !== ""
-                        width: Math.min(implicitWidth, seg.width - 2 * (seg.spec.pad - root._padCut)
-                                        - (icon.visible ? 18 + content.spacing : 0))
+                        width: Math.max(0, Math.min(captionMetrics.advanceWidth, seg.width - 2 * (seg.spec.pad - root._padCut)
+                                        - (icon.visible ? 18 + content.spacing : 0)))
                         elide: Text.ElideRight
                         // ужатый сегмент: шрифт чуть меньше (до 11 px) вместо многоточия
                         fontSizeMode: root._scale < 1 && Theme.fontScale <= 1 ? Text.HorizontalFit : Text.FixedSize
-                        wrapMode: Text.Wrap
+                        wrapMode: Theme.fontScale > 1 ? Text.Wrap : Text.NoWrap
                         maximumLineCount: Theme.fontScale > 1 ? 2 : 1
                         minimumPixelSize: 11
                         text: seg.label
