@@ -71,7 +71,7 @@ Item {
 
     property real cornerRadius: area.pressed ? _spec.pressedR : _selected ? _spec.squareR : height / 2
     Behavior on cornerRadius {
-        NumberAnimation { duration: Theme.motion.spatialFast; easing.type: Easing.OutBack; easing.overshoot: Theme.motion.overshoot }
+        NumberAnimation { duration: area.pressed ? Theme.motion.press : Theme.motion.spatialFast; easing.type: Theme.mobile ? Easing.OutCubic : Easing.OutBack; easing.overshoot: Theme.motion.overshoot }
     }
 
     implicitHeight: _spec.h

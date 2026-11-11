@@ -69,6 +69,11 @@ Item {
     }
 
     function show(from) {
+        // Повторное раскрытие отменяет уход, а не получает его запоздалый onFinished.
+        dismiss.stop()
+        _miniReleased = false
+        if (_dropY > 0)
+            dropBack.restart()
         if (from)
             origin = from
         if (!open)
@@ -86,7 +91,7 @@ Item {
             if (dismiss.running)
                 return
             dropBack.stop()
-            dismissMove.duration = Math.max(140, 240 * (1 - Math.min(1, _dropY / Math.max(1, height))))
+            dismissMove.duration = Math.max(100, Theme.motion.spatialFast * (1 - Math.min(1, _dropY / Math.max(1, height))))
             dismissMove.to = height
             dismiss.restart()
             return
@@ -131,8 +136,8 @@ Item {
     NumberAnimation {
         id: dropBack
         target: root; property: "_dropY"; to: 0
-        duration: Theme.motion.spatialDefault
-        easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.motion.springDefault
+        duration: Theme.motion.spatialFast
+        easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.motion.emphasizedDecelerate
     }
 
     // ---- Сворачивание в мини-плеер (телефон): свайп вниз ведёт его пальцем, кнопка и «Назад» — анимацией ----
@@ -142,7 +147,7 @@ Item {
     // этапы: верхняя панель гаснет первой (0…0,2), подписи и кнопки — следом (0,05…0,4), обложка — до конца
     readonly property real _detail: 1 - Math.max(0, Math.min(1, (collapse - 0.05) / 0.35))
     readonly property real _chrome: 1 - Math.max(0, Math.min(1, collapse / 0.2))
-    readonly property int _openMs: 660       // раскрытие плеера; сворачивание в мини-плеер — столько же
+    readonly property int _openMs: Theme.motion.playerReveal
     property Item collapseTarget: null       // плашка мини-плеера
     property Item collapseCover: null        // её обложка
     property real collapse: 0
@@ -170,7 +175,7 @@ Item {
     NumberAnimation {
         id: coverFlyOut
         target: root; property: "_coverDx"
-        duration: 180; easing.type: Easing.InCubic
+        duration: Theme.motion.effectsDefault; easing.type: Easing.OutCubic
         onFinished: {
             if (root._coverDir < 0)
                 Player.next()
@@ -184,7 +189,7 @@ Item {
         id: coverSettle
         target: root; property: "_coverDx"; to: 0
         duration: Theme.motion.spatialDefault
-        easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.motion.springDefault
+        easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.motion.emphasizedDecelerate
     }
     Timer { id: coverArrival; interval: 1500; onTriggered: root._coverArrive() }
     Connections {
@@ -318,7 +323,7 @@ Item {
             y: cy - d / 2
             width: d
             height: d
-            rotation: 240 * e1 + 50 * e2
+            rotation: (Theme.mobile ? 20 : 240) * e1 + (Theme.mobile ? 10 : 50) * e2
             color: "white"
             tinted: false
         }
@@ -648,7 +653,7 @@ Item {
                     target: playerColumn
                     property: "infoIn"
                     to: 1
-                    duration: 420
+                    duration: Theme.motion.spatialDefault
                     easing.type: Easing.BezierSpline
                     easing.bezierCurve: Theme.motion.emphasizedDecelerate
                 }

@@ -20,7 +20,7 @@ Item {
     opacity: shown ? 1 : 0
     // прячется быстро (плеер раскрывается поверх), появляется чуть дольше
     Behavior on opacity { NumberAnimation { duration: root.shown ? Theme.motion.effectsDefault : Theme.motion.effectsFast } }
-    // появляется, выезжая снизу и дорастая с лёгким пружинным перелётом; уходит вниз
+    // Короткое появление над навигацией: без большого прыжка и пружинного перелёта.
     transform: [
         Scale {
             origin.x: root.width / 2
@@ -28,15 +28,15 @@ Item {
             xScale: root._appear
             yScale: root._appear
         },
-        Translate { y: (1 - root._appear) * 160 }
+        Translate { y: Theme.reducedMotion ? 0 : (1 - root._appear) * 160 }
     ]
-    property real _appear: shown ? 1 : 0.8
+    property real _appear: Theme.reducedMotion || shown ? 1 : 0.94
     Behavior on _appear {
         enabled: Theme.reducedMotion !== true
         NumberAnimation {
             duration: root.shown ? Theme.motion.spatialDefault : Theme.motion.effectsDefault
             easing.type: Easing.BezierSpline
-            easing.bezierCurve: root.shown ? Theme.motion.springDefault : Theme.motion.emphasizedAccelerate
+            easing.bezierCurve: Theme.motion.emphasizedDecelerate
         }
     }
 
@@ -61,7 +61,7 @@ Item {
     NumberAnimation {
         id: flyOut
         target: root; property: "_dx"
-        duration: 160; easing.type: Easing.InCubic
+        duration: Theme.motion.effectsDefault; easing.type: Easing.OutCubic
         onFinished: {
             if (root._dir < 0)
                 Player.next()
@@ -125,7 +125,7 @@ Item {
         y: root._dy
         // нажатие чуть поджимает плашку — отклик сразу под пальцем, до открытия плеера
         scale: cardTap.pressed && !swipe.active ? 0.97 : 1
-        Behavior on scale { NumberAnimation { duration: Theme.motion.spatialFast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.motion.springFast } }
+        Behavior on scale { NumberAnimation { duration: Theme.motion.press; easing.type: Easing.OutCubic } }
         // ждёт новый трек за краем — прозрачная; въезжая, проявляется
         opacity: root._dir !== 0 && !flyOut.running ? 0 : 1 - Math.min(1, Math.abs(x) / root.width) * 0.7
 
@@ -268,8 +268,8 @@ Item {
                 }
                 SequentialAnimation {
                     id: playPop
-                    NumberAnimation { target: playToggle; property: "scale"; to: 0.78; duration: 70; easing.type: Easing.OutCubic }
-                    NumberAnimation { target: playToggle; property: "scale"; to: 1; duration: Theme.motion.spatialFast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.motion.springFast }
+                    NumberAnimation { target: playToggle; property: "scale"; to: 0.92; duration: Theme.motion.press; easing.type: Easing.OutCubic }
+                    NumberAnimation { target: playToggle; property: "scale"; to: 1; duration: Theme.motion.spatialFast; easing.type: Easing.OutCubic }
                 }
                 LoadingIndicator {
                     anchors.centerIn: parent

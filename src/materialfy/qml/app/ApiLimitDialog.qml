@@ -76,9 +76,9 @@ Item {
         height: Math.min(flick.contentHeight + 48, parent.height - 48)
         radius: Theme.shape.extraLarge
         color: Theme.surfaceContainerHigh
-        scale: root.opened ? 1 : 0.92
+        scale: Theme.reducedMotion || root.opened ? 1 : Theme.mobile ? 0.96 : 0.92
         opacity: root.opened ? 1 : 0
-        Behavior on scale { NumberAnimation { duration: Theme.motion.spatialFast; easing.type: Easing.OutBack } }
+        Behavior on scale { NumberAnimation { duration: Theme.motion.spatialFast; easing.type: Theme.mobile ? Easing.OutCubic : Easing.OutBack } }
         Behavior on opacity { NumberAnimation { duration: Theme.motion.effectsFast } }
         Keys.onEscapePressed: root.close()
 

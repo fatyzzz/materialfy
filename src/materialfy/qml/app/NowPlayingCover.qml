@@ -2,9 +2,8 @@ import QtQuick
 import Materialfy.Core
 import Md3
 
-// Обложка полноэкранного плеера. Смена трека — морф через фигуру: старая обложка, вращаясь,
-// сжимается в маленькую «печеньку» и тает; новая вырастает из неё, морфясь из цветка в свою
-// фигуру (с лёгким перелётом). Две обложки — двойной буфер: новая показывается, когда загрузилась.
+// Обложка полноэкранного плеера. На телефоне — короткое перекрёстное затухание с небольшим масштабом;
+// на десктопе — морф через фигуру. Двойной буфер: новая показывается, когда загрузилась.
 // pulse — «дыхание» фигуры в такт, spinning — медленное вращение рамки (обложка внутри неподвижна).
 Item {
     id: root
@@ -54,7 +53,7 @@ Item {
         outAnim.complete()
         inAnim.complete()
         const oldL = _layers[_front], newL = _layers[1 - _front]
-        if (instantSwap) {
+        if (instantSwap || Theme.reducedMotion || Theme.lowPower || !visible) {
             newL.jumpTo(restShape)
             newL.shape = Qt.binding(() => root.restShape)
             newL.scale = 1
@@ -67,15 +66,16 @@ Item {
             swapped()
             return
         }
-        newL.jumpTo("flower8")
-        newL.scale = 0.2
-        newL.rotation = 120 * direction
+        newL.jumpTo(Theme.mobile ? restShape : "flower8")
+        newL.scale = Theme.mobile ? 0.96 : 0.2
+        newL.rotation = Theme.mobile ? 0 : 120 * direction
         newL.opacity = 0
         newL.z = 1
         oldL.z = 0
-        oldL.shape = "cookie4"
+        if (!Theme.mobile)
+            oldL.shape = "cookie4"
         outAnim.target = oldL
-        outRot.to = -90 * direction
+        outRot.to = Theme.mobile ? 0 : -90 * direction
         inAnim.target = newL
         _front = 1 - _front
         newL.shape = Qt.binding(() => root.restShape)   // морф цветок → своя фигура
@@ -105,18 +105,18 @@ Item {
     ParallelAnimation {
         id: outAnim
         property Item target
-        NumberAnimation { target: outAnim.target; property: "scale"; to: 0.15; duration: 300; easing.type: Easing.InCubic }
-        NumberAnimation { id: outRot; target: outAnim.target; property: "rotation"; duration: 300; easing.type: Easing.InCubic }
-        NumberAnimation { target: outAnim.target; property: "opacity"; to: 0; duration: 300; easing.type: Easing.InQuad }
+        NumberAnimation { target: outAnim.target; property: "scale"; to: Theme.mobile ? 0.97 : 0.15; duration: Theme.mobile ? Theme.motion.effectsDefault : 300; easing.type: Theme.mobile ? Easing.OutCubic : Easing.InCubic }
+        NumberAnimation { id: outRot; target: outAnim.target; property: "rotation"; duration: Theme.mobile ? Theme.motion.effectsDefault : 300; easing.type: Theme.mobile ? Easing.OutCubic : Easing.InCubic }
+        NumberAnimation { target: outAnim.target; property: "opacity"; to: 0; duration: Theme.mobile ? Theme.motion.effectsDefault : 300; easing.type: Theme.mobile ? Easing.OutCubic : Easing.InQuad }
     }
     SequentialAnimation {
         id: inAnim
         property Item target
-        PauseAnimation { duration: 100 }
+        PauseAnimation { duration: Theme.mobile ? 0 : 100 }
         ParallelAnimation {
-            NumberAnimation { target: inAnim.target; property: "scale"; to: 1; duration: 540; easing.type: Easing.OutBack; easing.overshoot: 1.25 }
-            NumberAnimation { target: inAnim.target; property: "rotation"; to: 0; duration: 540; easing.type: Easing.OutCubic }
-            NumberAnimation { target: inAnim.target; property: "opacity"; to: 1; duration: 180; easing.type: Easing.OutQuad }
+            NumberAnimation { target: inAnim.target; property: "scale"; to: 1; duration: Theme.mobile ? Theme.motion.spatialDefault : 540; easing.type: Theme.mobile ? Easing.OutCubic : Easing.OutBack; easing.overshoot: 1.25 }
+            NumberAnimation { target: inAnim.target; property: "rotation"; to: 0; duration: Theme.mobile ? Theme.motion.spatialDefault : 540; easing.type: Easing.OutCubic }
+            NumberAnimation { target: inAnim.target; property: "opacity"; to: 1; duration: Theme.motion.effectsDefault; easing.type: Easing.OutCubic }
         }
     }
 }

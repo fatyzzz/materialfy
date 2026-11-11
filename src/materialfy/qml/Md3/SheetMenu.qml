@@ -25,7 +25,11 @@ FocusScope {
             _previousFocus = Window.window ? Window.window.activeFocusItem : null
         items = list
         _levels = [{ items: list, title: "", parentIndex: -1 }]
-        sheet.dragOffset = 0
+        dragBack.stop()
+        if (progress > 0.001)
+            dragBack.restart()
+        else
+            sheet.dragOffset = 0
         flick.contentY = 0
         opened = true
         forceActiveFocus()
@@ -77,7 +81,7 @@ FocusScope {
     property real progress: opened ? 1 : 0
     Behavior on progress {
         NumberAnimation {
-            duration: root.opened ? Theme.motion.spatialFast : Theme.motion.effectsDefault
+            duration: root.opened ? Theme.motion.spatialDefault : Theme.motion.effectsDefault
             easing.type: Easing.BezierSpline
             easing.bezierCurve: root.opened ? Theme.motion.emphasizedDecelerate : Theme.motion.emphasizedAccelerate
         }
@@ -85,6 +89,12 @@ FocusScope {
     visible: opened || progress > 0.001
     onVisibleChanged: visible ? BackStack.push(root) : BackStack.pop(root)
     Component.onDestruction: BackStack.pop(root)
+    NumberAnimation {
+        id: dragBack
+        target: sheet; property: "dragOffset"; to: 0
+        duration: Theme.motion.spatialFast
+        easing.type: Easing.OutCubic
+    }
 
     // Затемнение под листом: клики по приложению не проходят, тап — закрыть
     Rectangle {
@@ -106,7 +116,8 @@ FocusScope {
         width: Math.min(root.width, 640)
         height: Math.min(maxHeight, column.implicitHeight + 8 + Theme.safeBottom)
         anchors.horizontalCenter: parent.horizontalCenter
-        y: root.height - height * root.progress + dragOffset
+        y: root.height - height * (Theme.reducedMotion ? 1 : root.progress) + dragOffset
+        opacity: Theme.reducedMotion ? root.progress : 1
         topLeftRadius: Theme.shape.extraLarge
         topRightRadius: Theme.shape.extraLarge
         color: Theme.surfaceContainerLow
@@ -129,16 +140,22 @@ FocusScope {
                 opacity: 0.4
             }
             DragHandler {
+                enabled: root.opened
                 target: null
                 xAxis.enabled: false
+                onActiveChanged: if (active) dragBack.stop()
                 onTranslationChanged: if (active) sheet.dragOffset = Math.max(0, translation.y)   // в конце жеста translation сбрасывается в 0
                 onGrabChanged: transition => {
                     const released = transition === PointerDevice.UngrabExclusive
                     if (!released && transition !== PointerDevice.CancelGrabExclusive)
                         return
-                    if (released && sheet.dragOffset > sheet.height * 0.25)
+                    if (!root.opened)
+                        return
+                    if (released && sheet.dragOffset > sheet.height * 0.25) {
                         root.close()
-                    sheet.dragOffset = 0
+                    } else {
+                        dragBack.restart()
+                    }
                 }
             }
         }

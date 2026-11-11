@@ -62,8 +62,8 @@ Rectangle {
                 onActiveChanged: if (active && Theme.reducedMotion !== true) pop.restart()
                 SequentialAnimation {
                     id: pop
-                    NumberAnimation { target: icon; property: "popScale"; to: 1.18; duration: 90; easing.type: Easing.OutCubic }
-                    NumberAnimation { target: icon; property: "popScale"; to: 1; duration: Theme.motion.spatialFast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.motion.springFast }
+                    NumberAnimation { target: icon; property: "popScale"; to: 1.06; duration: Theme.motion.press; easing.type: Easing.OutCubic }
+                    NumberAnimation { target: icon; property: "popScale"; to: 1; duration: Theme.motion.spatialFast; easing.type: Easing.OutCubic }
                 }
 
                 Rectangle {

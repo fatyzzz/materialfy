@@ -345,14 +345,16 @@ Item {
     // Пружины MD3 Expressive аппроксимированы кривыми с перелётом (OutBack),
     // эффекты (цвет, прозрачность) — без перелёта.
     readonly property QtObject motion: QtObject {
-        // чуть короче токенов MD3 (350/500/650, 150/200/300): на телефоне интерфейс отзывчивее
-        readonly property int spatialFast: root.reducedMotion ? 0 : 300
-        readonly property int spatialDefault: root.reducedMotion ? 0 : 420
-        readonly property int spatialSlow: root.reducedMotion ? 0 : 550
-        readonly property int effectsFast: 130
-        readonly property int effectsDefault: 170
-        readonly property int effectsSlow: 250
-        readonly property real overshoot: 1.25
+        // Телефон: короткий отклик, спокойное перемещение; для больших раскрытий — отдельный токен.
+        readonly property int press: root.reducedMotion ? 0 : 100
+        readonly property int spatialFast: root.reducedMotion ? 0 : root.mobile ? 200 : 300
+        readonly property int spatialDefault: root.reducedMotion ? 0 : root.mobile ? 280 : 420
+        readonly property int spatialSlow: root.reducedMotion ? 0 : root.mobile ? 380 : 550
+        readonly property int playerReveal: root.reducedMotion ? 0 : root.mobile ? 440 : 660
+        readonly property int effectsFast: root.mobile ? 110 : 130
+        readonly property int effectsDefault: root.mobile ? 150 : 170
+        readonly property int effectsSlow: root.mobile ? 200 : 250
+        readonly property real overshoot: root.mobile ? 0.6 : 1.25
 
         readonly property var emphasized: [0.2, 0.0, 0.0, 1.0, 1.0, 1.0]
         // ровное перемещение «из точки в точку» (плеер → мини-плеер): мягкий разгон и мягкое торможение,

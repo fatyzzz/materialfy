@@ -390,25 +390,26 @@ Item {
         // Разделы (fade through): новая страница всплывает снизу и чуть «дорастает» до размера.
         // Вглубь/назад (shared axis X): страницы едут по горизонтали навстречу друг другу.
         const axis = kind === "fade" ? "y" : "x"
-        // телефон: смена раздела в нижней навигации — короткий fade through, без долгого «доезда»
-        const quick = kind === "fade" && Theme.mobile
-        inMove.duration = quick ? 260 : 440
-        inScale.duration = quick ? 260 : 440
-        outMove.duration = quick ? 170 : 240
-        outScale.duration = quick ? 170 : 240
-        const d = kind === "forward" ? 140 : kind === "back" ? -140 : 72
+        // На телефоне и разделы, и вложенные страницы проходят короткий путь.
+        const quick = Theme.mobile
+        inMove.duration = quick ? Theme.motion.spatialDefault : 440
+        inScale.duration = quick ? Theme.motion.spatialDefault : 440
+        outMove.duration = quick ? Theme.motion.effectsDefault : 240
+        outScale.duration = quick ? Theme.motion.effectsDefault : 240
+        const distance = quick ? 32 : 140
+        const d = kind === "forward" ? distance : kind === "back" ? -distance : quick ? 12 : 72
         outFade.target = from
         outMove.target = from
         outMove.property = axis
-        outMove.to = kind === "fade" ? -24 : -d / 2
+        outMove.to = kind === "fade" ? (quick ? -8 : -24) : -d / 2
         outScale.target = from
-        outScale.to = kind === "fade" ? 0.97 : 1
+        outScale.to = kind === "fade" ? (quick ? 0.985 : 0.97) : 1
         inFade.target = to
         inMove.target = to
         inMove.property = axis
         inMove.from = d
         inScale.target = to
-        inScale.from = kind === "fade" ? 0.94 : 1
+        inScale.from = kind === "fade" ? (quick ? 0.985 : 0.94) : 1
         to.x = 0
         to.y = 0
         to.visible = true
@@ -437,16 +438,16 @@ Item {
     ParallelAnimation {
         id: anim
 
-        NumberAnimation { id: outFade; property: "opacity"; to: 0; duration: 130; easing.type: Easing.OutCubic }
+        NumberAnimation { id: outFade; property: "opacity"; to: 0; duration: Theme.mobile ? Theme.motion.effectsFast : 130; easing.type: Easing.OutCubic }
         NumberAnimation {
             id: outMove; duration: 300
             easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.motion.emphasizedAccelerate
         }
         NumberAnimation { id: outScale; property: "scale"; duration: 300; easing.type: Easing.OutCubic }
         SequentialAnimation {
-            PauseAnimation { duration: 40 }
+            PauseAnimation { duration: Theme.mobile ? 0 : 40 }
             ParallelAnimation {
-                NumberAnimation { id: inFade; property: "opacity"; from: 0; to: 1; duration: 220; easing.type: Easing.OutCubic }
+                NumberAnimation { id: inFade; property: "opacity"; from: 0; to: 1; duration: Theme.mobile ? Theme.motion.effectsDefault : 220; easing.type: Easing.OutCubic }
                 NumberAnimation {
                     id: inMove; to: 0; duration: 560
                     easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.motion.emphasizedDecelerate

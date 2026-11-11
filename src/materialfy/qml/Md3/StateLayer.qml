@@ -97,7 +97,7 @@ MouseArea {
                 id: grow
                 NumberAnimation {
                     target: wave; property: "scaleFactor"; from: 0.1; to: 1
-                    duration: 450
+                    duration: Theme.mobile ? Theme.motion.spatialDefault : 450
                     easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.motion.emphasizedDecelerate
                 }
                 NumberAnimation { target: wave; property: "opacity"; to: Theme.stateLayer.pressed; duration: 75 }
@@ -105,13 +105,13 @@ MouseArea {
 
             NumberAnimation {
                 id: fade
-                target: wave; property: "opacity"; to: 0; duration: 300
+                target: wave; property: "opacity"; to: 0; duration: Theme.mobile ? Theme.motion.effectsDefault : 300
             }
         }
     }
 
     onPressed: mouse => {
-        if (!ripple)
+        if (!ripple || Theme.reducedMotion)
             return
         if (!_ripple)
             _ripple = rippleComponent.createObject(rippleSlot)
