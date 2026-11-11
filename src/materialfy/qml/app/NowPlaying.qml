@@ -832,6 +832,7 @@ Item {
                     IconButton {
                         id: bigMore
                         icon: "more_horiz"
+                        Accessible.name: I18n.t("More")
                         iconSize: 30
                         iconWeight: 700
                         enabled: Player.hasTrack

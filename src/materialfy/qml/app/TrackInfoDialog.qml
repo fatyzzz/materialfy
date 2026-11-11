@@ -199,7 +199,7 @@ Item {
                             id: infoRow
                             required property var modelData
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 36
+                            Layout.minimumHeight: 36
                             spacing: 12
                             Label {
                                 // русские подписи («Прослушивания», «Ненормативная…») длиннее английских: на телефоне
@@ -208,6 +208,8 @@ Item {
                                 text: infoRow.modelData.label
                                 type: "bodyMedium"
                                 color: Theme.fgSurfaceVariant
+                                wrapMode: Text.Wrap
+                                elide: Text.ElideNone
                             }
                             Label {
                                 Layout.fillWidth: true
