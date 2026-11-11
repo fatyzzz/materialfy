@@ -188,6 +188,9 @@ impl HistoryService {
             ended_ms,
             reason_start: play_report::reason_start(previous_natural),
             reason_end: play_report::reason_end(ended.natural),
+            duration_ms: ended.track.duration_ms,
+            bitrate_kbps: self.player.snapshot().codec.trim_start_matches("OGG ").parse().unwrap_or(0),
+            speed: f64::from(sf_player::engine::fx::speed()),
         };
         let http = self.auth.api().http();
         self.rt.spawn(async move {
