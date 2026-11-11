@@ -32,7 +32,7 @@ QtObject {id:theme;property bool mobile:true;property bool reducedMotion:false;p
     (md / "MorphImage.qml").write_text('''import QtQuick
 Item {property url source;property var shape;property bool eager;property real pulse;property int duration
  property string fallbackKind;property string fallbackArtist;property string fallbackTitle
- readonly property int status:Image.Ready
+ readonly property int status:source.toString().endsWith("slow")?Image.Loading:Image.Ready
  function jumpTo(value){shape=value}
 }''')
     (md / "MaskSpin.qml").write_text("import QtQuick\nQtObject {property Item target;property bool spinning}")
@@ -46,6 +46,7 @@ Window {width:360;height:640;visible:true
  NowPlayingCover {id:cover;anchors.fill:parent}
  function changeSource(value){cover.source=value}
  function reduceMotion(){Theme.reducedMotion=true}
+ function setCoverVisible(value){cover.visible=value}
  function state(){return JSON.stringify({front:cover._front,layers:cover._layers.map(item=>({scale:item.scale,rotation:item.rotation,opacity:item.opacity,source:item.source.toString()}))})}
 }'''
     engine = QQmlEngine()
@@ -76,6 +77,14 @@ Window {width:360;height:640;visible:true
         state = json.loads(window.state())
         incoming = state["layers"][state["front"]]
         assert incoming["scale"] == 1 and incoming["rotation"] == 0 and incoming["opacity"] == 1
+        window.changeSource("slow")
+        window.setCoverVisible(False)
+        window.changeSource("latest")
+        QTest.qWait(1600)
+        window.setCoverVisible(True)
+        state = json.loads(window.state())
+        incoming = state["layers"][state["front"]]
+        assert incoming["source"].endswith("latest"), "Pending old cover replaced the latest cover while the player was hidden"
         print("PASS: gentle cover crossfade, rapid source replacement, reduced-motion swap without spatial animation", flush=True)
     finally:
         window.close()

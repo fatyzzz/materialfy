@@ -25,6 +25,19 @@ Item {
     onSourceChanged: {
         const front = _layers[_front], back = _layers[1 - _front]
         if (front.source.toString() === "" || !visible) {   // первая обложка / плеер закрыт — без анимации
+            // Отложенная загрузка предыдущего трека не должна позднее вернуть старую обложку.
+            _pending = false
+            timeout.stop()
+            outAnim.complete()
+            inAnim.complete()
+            front.jumpTo(restShape)
+            front.shape = Qt.binding(() => root.restShape)
+            front.scale = 1
+            front.rotation = 0
+            front.opacity = 1
+            front.z = 1
+            back.opacity = 0
+            back.z = 0
             front.source = source
             return
         }
