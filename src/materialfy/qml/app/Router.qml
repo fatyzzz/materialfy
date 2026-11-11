@@ -81,8 +81,12 @@ Item {
                 { router: root, width: container.width, height: container.height, opacity: 0 },
                 Qt.Asynchronous)
             incubator.onStatusChanged = function() {
-                if (incubator.status !== Component.Ready)
+                if (incubator.status === Component.Loading)
                     return
+                if (incubator.status !== Component.Ready) {
+                    console.error("Router prewarm:", comp.errorString())
+                    return
+                }
                 const item = incubator.object
                 if (!item) {
                     console.error("Router prewarm:", comp.errorString())
@@ -97,6 +101,8 @@ Item {
                 item.visible = false
                 _kept[name] = item
             }
+            if (incubator.status !== Component.Loading)
+                incubator.onStatusChanged()
         }
     }
     property var _leaving: []               // элементы, которые уничтожить после анимации
@@ -238,6 +244,8 @@ Item {
             Qt.Asynchronous)
         _pending = { name: name, props: props ?? {}, comp: comp, incubator: incubator, prev: currentItem, kind: kind, keep: keepAlive.indexOf(name) >= 0 && Object.keys(props ?? {}).length === 0 }
         incubator.onStatusChanged = function() { _onIncubated(incubator) }
+        if (incubator.status !== Component.Loading)
+            _onIncubated(incubator)
     }
 
     function _onIncubated(incubator) {
