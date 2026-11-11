@@ -12,8 +12,8 @@ Window {
 
     property string startPage: "home"     // --set startPage=settings | artist:<id>
 
-    width: 412
-    height: 915
+    width: MobileShell.android ? Screen.width : 412
+    height: MobileShell.android ? Screen.height : 915
     visible: true
     title: Player.hasTrack ? Player.title + " — " + Player.artist + " · Materialfy" : "Materialfy"
     color: Theme.surface
