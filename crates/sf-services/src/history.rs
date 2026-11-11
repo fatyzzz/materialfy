@@ -9,6 +9,7 @@ use std::sync::{Arc, Mutex, Weak};
 
 use md3_model::{PlayContext, TrackItem, contexts};
 use sf_api::Operation;
+use sf_player::engine::play_report;
 use sf_player::{PlayerEvent, PlayerHandle};
 use tokio::runtime::Handle;
 use tokio::sync::broadcast;
@@ -103,11 +104,17 @@ impl HistoryService {
         let mut player = self.player.subscribe().events;
         let me = self.me.clone();
         self.rt.spawn(async move {
+            // прошлый трек доигран сам — следующий начался по trackdone
+            let mut previous_natural = false;
             loop {
                 match player.recv().await {
                     Ok(PlayerEvent::TrackEnded(ended)) => {
                         let Some(service) = me.upgrade() else { return };
                         if ended.local {
+                            if play_report::enabled() {
+                                service.report_play(&ended, previous_natural);
+                            }
+                            previous_natural = ended.natural;
                             service.note_played(ended.track, ended.context, ended.played);
                         }
                     }
@@ -163,6 +170,33 @@ impl HistoryService {
         lock(&self.state).journal.record(record);
         self.save_later();
         let _ = self.events.send(HistoryEvent::Changed);
+    }
+
+    /// Отчёт о прослушивании в Spotify (настройка reportPlays): одна попытка фоном, ошибка — только в лог.
+    fn report_play(&self, ended: &sf_player::TrackEnded, previous_natural: bool) {
+        let ms_played = (ended.played.max(0.0) * 1000.0) as u32;
+        if ms_played == 0 || ended.track.play_uri().ends_with(':') {
+            return;
+        }
+        let Some(session) = route::account_session(&self.auth.api(), &self.player) else { return };
+        let ended_ms = jiff::Timestamp::now().as_millisecond();
+        let play = play_report::Play {
+            uri: ended.track.play_uri(),
+            context_uri: ended.context.context_uri.clone().unwrap_or_default(),
+            ms_played,
+            started_ms: ended_ms - i64::from(ms_played),
+            ended_ms,
+            reason_start: play_report::reason_start(previous_natural),
+            reason_end: play_report::reason_end(ended.natural),
+        };
+        let http = self.auth.api().http();
+        self.rt.spawn(async move {
+            let sent = async { play_report::report(&session, &http.client().map_err(anyhow::Error::msg)?, &play).await };
+            match sent.await {
+                Ok(()) => tracing::info!("play reported: {} ({} ms)", play.uri, play.ms_played),
+                Err(error) => tracing::warn!("play not reported: {error:#}"),
+            }
+        });
     }
 
     fn save_later(&self) {
