@@ -427,7 +427,7 @@ Item {
             Item { Layout.fillWidth: true }
             DeviceButton { iconOnly: root.layoutCompact; usePanel: false }   // правая панель — под этим экраном
             ButtonGroup {
-                model: [{ icon: "title" }, { icon: "queue_music" }]
+                model: [{ icon: "title", accessibleName: I18n.t("Lyrics") }, { icon: "queue_music", accessibleName: I18n.t("Open queue") }]
                 autoSelect: false
                 currentIndex: root.layoutCompact && !root.sheetOpen ? -1 : root.tab === "lyrics" ? 0 : root.tab === "queue" ? 1 : -1
                 onActivated: i => {

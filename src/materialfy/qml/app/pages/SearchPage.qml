@@ -242,6 +242,9 @@ Page {
                 required property string modelData
                 Layout.fillWidth: true
                 implicitHeight: 52
+                Accessible.role: Accessible.Button
+                Accessible.name: modelData
+                Accessible.onPressAction: page.searchFor(recentRow.modelData)
                 StateLayer {
                     anchors.fill: parent
                     radius: Theme.shape.large

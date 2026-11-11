@@ -12,6 +12,15 @@ Item {
 
     signal clicked()
 
+    Accessible.role: Accessible.RadioButton
+    Accessible.name: text
+    Accessible.checkable: true
+    Accessible.checked: selected
+    Accessible.onPressAction: if (enabled) clicked()
+    activeFocusOnTab: true
+    Keys.onReturnPressed: if (enabled) clicked()
+    Keys.onSpacePressed: if (enabled) clicked()
+
     implicitHeight: 32
     // без текста — квадратный чип с одной иконкой
     readonly property bool _iconOnly: text === "" && _leading

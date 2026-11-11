@@ -66,6 +66,21 @@ Item {
                 readonly property bool first: index === 0
                 readonly property bool last: index === root.model.length - 1
                 readonly property string label: typeof modelData === "string" ? modelData : (modelData.text ?? "")
+                Accessible.role: Accessible.RadioButton
+                Accessible.name: typeof modelData === "string" ? modelData : (modelData.accessibleName ?? seg.label)
+                Accessible.checkable: true
+                Accessible.checked: seg.selected
+                Accessible.onPressAction: seg.activate()
+                activeFocusOnTab: true
+                Keys.onReturnPressed: seg.activate()
+                Keys.onSpacePressed: seg.activate()
+                function activate() {
+                    if (!enabled)
+                        return
+                    if (root.autoSelect)
+                        root.currentIndex = index
+                    root.activated(index)
+                }
                 readonly property string iconName: typeof modelData === "string" ? "" : (modelData.icon ?? "")
                 readonly property var spec: root.spec
                 readonly property bool showIcon: icon.n !== "" && !root._dropIcons
@@ -135,11 +150,7 @@ Item {
                     bottomLeftRadius: seg.leftR
                     topRightRadius: seg.rightR
                     bottomRightRadius: seg.rightR
-                    onClicked: {
-                        if (root.autoSelect)
-                            root.currentIndex = seg.index
-                        root.activated(seg.index)
-                    }
+                    onClicked: seg.activate()
                 }
             }
         }

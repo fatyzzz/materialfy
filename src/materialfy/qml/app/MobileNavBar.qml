@@ -41,7 +41,8 @@ Rectangle {
                 activeFocusOnTab: true
                 Accessible.role: Accessible.PageTab
                 Accessible.name: modelData.text
-                Accessible.selected: active
+                Accessible.selectable: true
+                Accessible.selected: tab.active
                 Accessible.onPressAction: tab.activate()
                 Keys.onReturnPressed: tab.activate()
                 Keys.onSpacePressed: tab.activate()

@@ -11,6 +11,7 @@ IconButton {
     readonly property bool liked: Library.likesRevision >= 0 && _id !== "" && Library.isLiked(_id)
 
     icon: "favorite"
+    Accessible.name: liked ? I18n.t("Remove from Liked Songs") : I18n.t("Save to Liked Songs")
     checkable: true
     autoToggle: false
     checked: liked
