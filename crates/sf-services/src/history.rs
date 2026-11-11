@@ -180,6 +180,7 @@ impl HistoryService {
         }
         let Some(session) = route::account_session(&self.auth.api(), &self.player) else { return };
         let ended_ms = jiff::Timestamp::now().as_millisecond();
+        let snapshot = self.player.snapshot();
         let play = play_report::Play {
             uri: ended.track.play_uri(),
             context_uri: ended.context.context_uri.clone().unwrap_or_default(),
@@ -189,8 +190,12 @@ impl HistoryService {
             reason_start: play_report::reason_start(previous_natural),
             reason_end: play_report::reason_end(ended.natural),
             duration_ms: ended.track.duration_ms,
-            bitrate_kbps: self.player.snapshot().codec.trim_start_matches("OGG ").parse().unwrap_or(0),
+            bitrate_kbps: snapshot.codec.trim_start_matches("OGG ").parse().unwrap_or(0),
             speed: f64::from(sf_player::engine::fx::speed()),
+            shuffle: snapshot.shuffle,
+            repeat_track: snapshot.repeat == sf_player::Repeat::One,
+            repeat_context: snapshot.repeat == sf_player::Repeat::All,
+            player_session_id: session.session_id(),
         };
         let http = self.auth.api().http();
         self.rt.spawn(async move {

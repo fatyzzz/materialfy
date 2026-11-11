@@ -83,6 +83,12 @@ pub struct Play {
     pub bitrate_kbps: u16,
     /// скорость воспроизведения (1.0 — как записано)
     pub speed: f64,
+    /// режимы плеера на конце трека
+    pub shuffle: bool,
+    pub repeat_track: bool,
+    pub repeat_context: bool,
+    /// id сессии Connect, в которой играл трек (PlayerState.session_id, его же librespot публикует)
+    pub player_session_id: String,
 }
 
 /// Файл, который играл librespot: id (20 байт) и подпись формата («Vorbis 320 kbps»).
@@ -189,9 +195,43 @@ pub fn raw_core_stream(play: &Play, audio: Option<&Audio>, playback_id: &[u8; 16
         out.write_string(24, &play.uri)?;
         out.write_string(28, "context")?;
         out.write_string(32, "none")?;
+        out.write_bool(21, play.shuffle)?;
         out.write_bool(39, true)?;
         out.write_bytes(53, stream_id)?;
-        out.write_int64(56, play.ended_ms)
+        out.write_bool(54, play.repeat_track)?;
+        out.write_bool(55, play.repeat_context)?;
+        out.write_int64(56, play.ended_ms)?;
+        out.write_string(59, &play.player_session_id)?;
+        out.write_string(64, "")
+    })
+}
+
+/// «Без значения» в позициях AudioSessionEvent — как пишет настольный клиент.
+const NO_POSITION: u64 = u64::MAX;
+
+/// AudioSessionEvent open (начало трека) и close (конец, с причиной и источником).
+pub fn audio_session_open(playback_id: &[u8; 16], speed: f64) -> Vec<u8> {
+    encode(|out| {
+        out.write_string(1, "open")?;
+        out.write_bytes(4, playback_id)?;
+        out.write_uint64(7, 0)?;
+        out.write_bool(8, false)?;
+        // скорость не 1× клиент пишет в своих единицах, которых мы не знаем; 1× — как у него
+        if speed == 1.0 {
+            out.write_uint64(9, 1)?;
+        }
+        out.write_uint64(10, NO_POSITION)?;
+        out.write_uint64(11, NO_POSITION)?;
+        out.write_uint64(13, NO_POSITION)
+    })
+}
+
+pub fn audio_session_close(play: &Play, playback_id: &[u8; 16]) -> Vec<u8> {
+    encode(|out| {
+        out.write_string(1, "close")?;
+        out.write_bytes(4, playback_id)?;
+        out.write_string(5, play.reason_end)?;
+        out.write_string(6, source(context_of(play)))
     })
 }
 
@@ -245,6 +285,8 @@ fn platform() -> &'static str {
 fn envelope(session: &Session, name: &'static str, message: &[u8], now_ms: i64) -> Vec<u8> {
     let run = &*RUN;
     let sequence = next_sequence(name);
+    // событие могло случиться раньше отправки (open — в начале трека): часы сдвигаются на столько же
+    let ago = (jiff::Timestamp::now().as_millisecond() - now_ms).max(0);
     let client_id = hex::decode(session.client_id()).unwrap_or_default();
     // установка = устройство Connect этого ПК (device_id стабилен между запусками)
     let installation: Vec<u8> = hex::decode(session.device_id()).unwrap_or_default().into_iter().take(16).collect();
@@ -272,7 +314,7 @@ fn envelope(session: &Session, name: &'static str, message: &[u8], now_ms: i64) 
             "context_monotonic_clock",
             &encode(|out| {
                 out.write_int64(1, run.clock_id)?;
-                out.write_int64(2, run.started.elapsed().as_millis() as i64)
+                out.write_int64(2, (run.started.elapsed().as_millis() as i64 - ago).max(0))
             }),
         ),
         fragment(
@@ -369,12 +411,13 @@ pub async fn report(session: &Session, http: &reqwest::Client, play: &Play) -> a
     let playback_id: [u8; 16] = rand::random();
     let stream_id: [u8; 16] = rand::random();
     let audio = played_file(session, &play.uri, play.bitrate_kbps).await;
-    let mut events = Vec::new();
+    let mut events = vec![envelope(session, "AudioSessionEvent", &audio_session_open(&playback_id, play.speed), play.started_ms)];
     if play.one_segment() {
         let segment = raw_core_stream_segment(play, audio.as_ref(), &playback_id, &stream_id);
         events.push(envelope(session, "RawCoreStreamSegment", &segment, play.ended_ms));
     }
     let message = raw_core_stream(play, audio.as_ref(), &playback_id, &stream_id);
+    events.push(envelope(session, "AudioSessionEvent", &audio_session_close(play, &playback_id), play.ended_ms));
     events.push(envelope(session, "RawCoreStream", &message, play.ended_ms));
     let body = encode(|out| events.iter().try_for_each(|event| out.write_bytes(1, event)));
     let reply = post(session, http, ENDPOINT, body).await?;
@@ -402,6 +445,10 @@ mod tests {
             duration_ms: 212_400,
             bitrate_kbps: 320,
             speed: 1.0,
+            shuffle: true,
+            repeat_track: false,
+            repeat_context: false,
+            player_session_id: "4URErHueDLa1WVcqTPgEGw".into(),
         }
     }
 
@@ -438,6 +485,11 @@ mod tests {
         // media_id — 20 байт id файла, как у настольного клиента
         assert_eq!(field(&message, 4).unwrap(), [7; 20]);
         assert_eq!(field(&message, 22).unwrap(), b"Vorbis 320 kbps");
+        assert_eq!(field(&message, 59).unwrap(), b"4URErHueDLa1WVcqTPgEGw");
+        assert_eq!(field(&message, 21).unwrap()[0], 1);
+        let close = audio_session_close(&play(), &[1; 16]);
+        assert_eq!(field(&close, 5).unwrap(), b"trackdone");
+        assert_eq!(field(&close, 6).unwrap(), b"playlist");
     }
 
     #[test]
