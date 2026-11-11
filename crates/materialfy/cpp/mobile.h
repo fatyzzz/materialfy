@@ -16,6 +16,7 @@ class MobileShell : public QObject
   Q_OBJECT
   // true — сборка под Android (раскладка телефона всегда, без окон и трея)
   Q_PROPERTY(bool android READ android CONSTANT)
+  Q_PROPERTY(qreal fontScale READ fontScale NOTIFY fontScaleChanged)
   // Плеер в «острове» системы (Live Updates Android 16, остров vivo): есть ли где показать и включён ли
   Q_PROPERTY(bool islandSupported READ islandSupported CONSTANT)
   Q_PROPERTY(bool islandEnabled READ islandEnabled WRITE setIslandEnabled NOTIFY islandEnabledChanged)
@@ -25,6 +26,9 @@ public:
   static MobileShell* instance();
 
   bool android() const;
+  qreal fontScale() const;
+  Q_INVOKABLE qreal textSize(qreal sp) const;
+  Q_INVOKABLE void prepareAccessibility(QObject* item, QObject* qmlOwner);
   bool islandSupported() const;
   bool islandEnabled() const;
   void setIslandEnabled(bool on);
@@ -56,6 +60,7 @@ public:
   Q_INVOKABLE void shareLog();
 
 signals:
+  void fontScaleChanged();
   void islandEnabledChanged();
   // Команды из уведомления, гарнитуры и экрана блокировки: "play", "pause", "toggle", "next", "previous",
   // "seek" (arg — мс), "stop"

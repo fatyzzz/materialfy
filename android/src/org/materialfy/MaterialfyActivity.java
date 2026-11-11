@@ -3,6 +3,7 @@ package org.materialfy;
 
 import android.Manifest;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.graphics.Color;
 import android.os.Build;
 import android.os.Bundle;
@@ -16,11 +17,13 @@ import org.qtproject.qt.android.bindings.QtActivity;
 public class MaterialfyActivity extends QtActivity
 {
     private static final int REQUEST_NOTIFICATIONS = 4101;
+    private float lastFontScale;
 
     @Override
     public void onCreate(Bundle savedInstanceState)
     {
         super.onCreate(savedInstanceState);
+        lastFontScale = getResources().getConfiguration().fontScale;
         Window window = getWindow();
         // Интерфейс рисуется под системными панелями (отступы — SafeArea в QML)
         window.setStatusBarColor(Color.TRANSPARENT);
@@ -38,6 +41,16 @@ public class MaterialfyActivity extends QtActivity
     }
 
     private Object backCallback;
+
+    @Override
+    public void onConfigurationChanged(Configuration config)
+    {
+        super.onConfigurationChanged(config);
+        if (Float.compare(lastFontScale, config.fontScale) != 0) {
+            lastFontScale = config.fontScale;
+            MobileBridge.send("fontScaleChanged", 0);
+        }
+    }
 
     // Android 13+: «Назад» (кнопка и жест) приходит в OnBackInvokedCallback, KEYCODE_BACK система больше не шлёт.
     // Qt регистрирует свой колбэк в onResume, а срабатывает последний зарегистрированный — поэтому свой ставим

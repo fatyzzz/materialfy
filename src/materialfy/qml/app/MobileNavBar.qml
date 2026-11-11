@@ -14,7 +14,8 @@ Rectangle {
     signal activated(string name)
     signal reselected(string name)
 
-    implicitHeight: 80 + Theme.safeBottom
+    readonly property real barHeight: Math.max(80, 56 + Theme.type.labelMedium.line * (Theme.fontScale > 1 ? 2 : 1))
+    implicitHeight: barHeight + Theme.safeBottom
     color: Theme.surfaceContainer
 
     // клики сквозь панель не проходят
@@ -24,7 +25,7 @@ Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.top: parent.top
-        height: 80
+        height: root.barHeight
         anchors.leftMargin: 8
         anchors.rightMargin: 8
         spacing: 8
@@ -102,7 +103,9 @@ Rectangle {
                     text: tab.modelData.text
                     type: "labelMedium"
                     // длинная подпись («Configurações» на 360 px) — мельче, а не с многоточием
-                    fontSizeMode: Text.HorizontalFit
+                    fontSizeMode: Theme.fontScale > 1 ? Text.FixedSize : Text.HorizontalFit
+                    wrapMode: Text.Wrap
+                    maximumLineCount: Theme.fontScale > 1 ? 2 : 1
                     minimumPixelSize: 9
                     weight: tab.active ? 700 : 500
                     color: tab.active ? Theme.fgSurface : Theme.fgSurfaceVariant

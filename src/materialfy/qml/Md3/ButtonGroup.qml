@@ -46,7 +46,7 @@ Item {
     }
 
     implicitWidth: _withIcons
-    implicitHeight: spec.h
+    implicitHeight: Math.max(spec.h, Theme.type.labelLarge.line * (Theme.fontScale > 1 ? 2 : 1) + 12)
     width: Math.min(implicitWidth, maxWidth)
 
     Row {
@@ -95,7 +95,7 @@ Item {
                 Behavior on leftR { NumberAnimation { duration: Theme.motion.spatialFast; easing.type: Easing.OutBack } }
                 Behavior on rightR { NumberAnimation { duration: Theme.motion.spatialFast; easing.type: Easing.OutBack } }
 
-                implicitHeight: spec.h
+                implicitHeight: root.implicitHeight
                 implicitWidth: ((showIcon ? fullWidth : bareWidth) - 2 * root._padCut) * root._scale
                 width: implicitWidth
                 height: implicitHeight
@@ -133,7 +133,9 @@ Item {
                                         - (icon.visible ? 18 + content.spacing : 0))
                         elide: Text.ElideRight
                         // ужатый сегмент: шрифт чуть меньше (до 11 px) вместо многоточия
-                        fontSizeMode: root._scale < 1 ? Text.HorizontalFit : Text.FixedSize
+                        fontSizeMode: root._scale < 1 && Theme.fontScale <= 1 ? Text.HorizontalFit : Text.FixedSize
+                        wrapMode: Text.Wrap
+                        maximumLineCount: Theme.fontScale > 1 ? 2 : 1
                         minimumPixelSize: 11
                         text: seg.label
                         type: "labelLarge"

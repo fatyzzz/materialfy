@@ -73,7 +73,7 @@ Item {
         NumberAnimation { duration: area.pressed ? Theme.motion.press : Theme.motion.spatialFast; easing.type: Theme.mobile ? Easing.OutCubic : Easing.OutBack; easing.overshoot: Theme.motion.overshoot }
     }
 
-    implicitHeight: _spec.h
+    implicitHeight: Math.max(_spec.h, Theme.type[_spec.type].line + 12)
     implicitWidth: content.implicitWidth + 2 * _spec.pad
     opacity: 1
 

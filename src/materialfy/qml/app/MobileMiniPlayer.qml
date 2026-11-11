@@ -12,7 +12,7 @@ Item {
     readonly property Item coverItem: coverBox
     signal openNowPlaying(point coverCenter)
 
-    implicitHeight: 64
+    implicitHeight: Math.max(64, Theme.type.titleSmall.line + Math.max(Theme.type.bodySmall.line, Theme.type.labelSmall.line) + 16)
     // полноэкранный плеер открыт — плашки нет; он уходит — она появляется сама (MobileMain: holdsMini)
     property bool suppressed: false
     readonly property bool shown: Player.hasTrack && !suppressed

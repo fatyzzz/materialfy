@@ -2,6 +2,7 @@ pragma Singleton
 import QtQuick
 import Materialfy.Core
 import "ColorMix.js" as Mix
+import "Typography.js" as Typography
 
 // Токены MD3 Expressive. Цвета берутся из ThemeEngine и плавно анимируются при смене обложки.
 Item {
@@ -299,7 +300,10 @@ Item {
     }
 
     // size / lineHeight / weight / letterSpacing (px)
-    readonly property var type: ({
+    readonly property real fontScale: mobile ? MobileShell.fontScale : 1
+    readonly property var type: Typography.scaled(_baseType, sp =>
+        root.mobile && root.fontScale !== 1 ? MobileShell.textSize(sp) : sp)
+    readonly property var _baseType: ({
         displayLarge:   { size: 57, line: 64, weight: 400, tracking: -0.25 },
         displayMedium:  { size: 45, line: 52, weight: 400, tracking: 0 },
         displaySmall:   { size: 36, line: 44, weight: 400, tracking: 0 },
@@ -316,6 +320,10 @@ Item {
         labelMedium:    { size: 12, line: 16, weight: 500, tracking: 0.5 },
         labelSmall:     { size: 11, line: 16, weight: 500, tracking: 0.5 }
     })
+
+    function trackRowHeight(compact) {
+        return Math.max(compact ? 56 : 64, type.bodyLarge.line + type.bodyMedium.line + (compact ? 12 : 20))
+    }
 
     // ---- Формы (радиусы скругления) -----------------------------------------
     readonly property QtObject shape: QtObject {

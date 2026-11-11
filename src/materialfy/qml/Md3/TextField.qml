@@ -1,4 +1,5 @@
 import QtQuick
+import Materialfy.Core
 
 // Поле ввода MD3: подпись сверху, поле 48 px с r = 16, в фокусе — обводка primary 2 px.
 // trailingIcon "visibility" у поля пароля переключает показ символов.
@@ -49,7 +50,7 @@ Item {
 
         Item {
             width: parent.width
-            height: 48
+            height: Math.max(48, Theme.type.bodyLarge.line + 16)
 
             Rectangle {
                 anchors.fill: parent
@@ -81,6 +82,8 @@ Item {
 
             TextInput {
                 id: input
+                Component.onCompleted: MobileShell.prepareAccessibility(input, root)
+                Accessible.name: root.label !== "" ? root.label : root.placeholderText
                 anchors.left: lead.visible ? lead.right : parent.left
                 anchors.leftMargin: lead.visible ? 10 : 16
                 anchors.right: trail.visible ? trail.left : parent.right

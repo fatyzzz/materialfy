@@ -181,7 +181,7 @@ FocusScope {
                 Item {
                     visible: root.header !== null && root._levels.length === 1
                     width: parent.width
-                    height: visible ? 64 : 0
+                    height: visible ? Math.max(64, Theme.type.titleMedium.line + Theme.type.bodySmall.line + 16) : 0
                     MorphImage {
                         x: 24
                         width: 48
@@ -284,7 +284,7 @@ FocusScope {
                         Keys.onSpacePressed: root._activate(index)
 
                         width: column.width
-                        height: isSeparator ? 17 : 52
+                        height: isSeparator ? 17 : Math.max(52, Theme.type.bodyLarge.line + 24)
                         // открытие: пункты проявляются каскадом снизу (от хода листа, без своих таймеров);
                         // при закрытии лист уезжает целиком
                         readonly property real _t: root.opened ? Math.max(0, Math.min(1, (root.progress - Math.min(index, 10) * 0.04) / 0.55)) : 1

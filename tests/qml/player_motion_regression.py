@@ -47,6 +47,7 @@ with TemporaryDirectory(prefix="materialfy-motion-test-") as directory:
     (md / "Theme.qml").write_text('''pragma Singleton
 import QtQuick
 QtObject { id:theme
+ property var type:({titleMedium:{line:24},bodySmall:{line:16},bodyLarge:{line:24}})
  property bool mobile:true; property bool lowPower:false; property bool reducedMotion:false
  property color scrim:"black";property color surfaceContainerLow:"white";property color fgSurface:"black";property color fgSurfaceVariant:"gray";property color outlineVariant:"gray";property color primary:"purple"
  property int safeTop:24;property int safeBottom:16

@@ -8,11 +8,15 @@
 #include <QtCore/QMetaObject>
 #include <QtCore/QPointer>
 #include <QtCore/QStandardPaths>
+#include <QtCore/QThread>
 #include <QtCore/QUrl>
 #include <QtCore/QtLogging>
 
 #include <cstdio>
+#include <cmath>
 #include <QtGui/QDesktopServices>
+#include <QtQml/QQmlEngine>
+#include <QtQml/QQmlProperty>
 
 #if defined(Q_OS_ANDROID)
 #include <QtCore/QJniEnvironment>
@@ -101,6 +105,49 @@ MobileShell::MobileShell(QObject* parent)
   g_instance = this;
 #if defined(Q_OS_ANDROID)
   register_natives();
+#endif
+}
+
+qreal
+MobileShell::fontScale() const
+{
+#if defined(Q_OS_ANDROID)
+  const jfloat scale = QJniObject::callStaticMethod<jfloat>(
+    BRIDGE, "fontScale", "(Landroid/content/Context;)F", context_object().object());
+  return std::isfinite(scale) && scale > 0 ? scale : 1;
+#else
+  return 1;
+#endif
+}
+
+qreal
+MobileShell::textSize(qreal sp) const
+{
+#if defined(Q_OS_ANDROID)
+  const jfloat size = QJniObject::callStaticMethod<jfloat>(
+    BRIDGE, "textSize", "(Landroid/content/Context;F)F", context_object().object(), jfloat(sp));
+  return std::isfinite(size) && size > 0 ? size : sp;
+#else
+  return sp;
+#endif
+}
+
+void
+MobileShell::prepareAccessibility(QObject* item, QObject* qmlOwner)
+{
+#if defined(Q_OS_ANDROID)
+  if (!item || !qmlOwner || item->thread() != QThread::currentThread())
+    return;
+  if (QQmlContext* context = QQmlEngine::contextForObject(qmlOwner)) {
+    // Qt creates this attached object lazily on accessibility activation. Reading its
+    // default role during component completion creates it on the item's GUI thread;
+    // it does not change the role or activate a system accessibility service.
+    QQmlProperty role(item, QStringLiteral("Accessible.role"), context);
+    role.read();
+  }
+#else
+  Q_UNUSED(item);
+  Q_UNUSED(qmlOwner);
 #endif
 }
 
@@ -333,8 +380,12 @@ mobile_post_media_command(const QString& command, qint64 arg)
   if (!app)
     return;
   QMetaObject::invokeMethod(app, [command, arg] {
-    if (MobileShell* shell = MobileShell::instance())
-      emit shell->mediaCommand(command, arg);
+    if (MobileShell* shell = MobileShell::instance()) {
+      if (command == QStringLiteral("fontScaleChanged"))
+        emit shell->fontScaleChanged();
+      else
+        emit shell->mediaCommand(command, arg);
+    }
   }, Qt::QueuedConnection);
 }
 

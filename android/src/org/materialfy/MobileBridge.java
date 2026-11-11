@@ -24,6 +24,19 @@ public final class MobileBridge
     // Регистрирует cpp/mobile.cpp (register_natives)
     public static native void onMediaCommand(String command, long arg);
 
+    public static float fontScale(Context context)
+    {
+        return context.getResources().getConfiguration().fontScale;
+    }
+
+    public static float textSize(Context context, float sp)
+    {
+        android.util.DisplayMetrics metrics = context.getResources().getDisplayMetrics();
+        return metrics.density > 0
+            ? android.util.TypedValue.applyDimension(android.util.TypedValue.COMPLEX_UNIT_SP, sp, metrics) / metrics.density
+            : sp;
+    }
+
     // Из Java-кода: команда в приложение. Нативная часть грузится вместе с активностью; если плеер системы
     // нажал кнопку раньше (процесс поднят ради MediaBrowser), команды некому принять — не падаем
     static void send(String command, long arg)

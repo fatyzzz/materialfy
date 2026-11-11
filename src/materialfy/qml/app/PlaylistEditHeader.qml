@@ -105,6 +105,8 @@ ColumnLayout {
                 implicitHeight: titleInput.implicitHeight + 8
                 TextInput {
                     id: titleInput
+                    Accessible.name: I18n.t("Name")
+                    Component.onCompleted: MobileShell.prepareAccessibility(titleInput, root)
                     width: parent.width
                     text: root.info.title ?? ""
                     readOnly: !root.own
@@ -153,6 +155,8 @@ ColumnLayout {
                 }
                 TextEdit {
                     id: descInput
+                    Accessible.name: I18n.t("Add a description")
+                    Component.onCompleted: MobileShell.prepareAccessibility(descInput, root)
                     x: 12
                     y: 10
                     width: parent.width - 24

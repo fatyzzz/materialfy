@@ -21,7 +21,7 @@ Item {
     Keys.onReturnPressed: if (enabled) clicked()
     Keys.onSpacePressed: if (enabled) clicked()
 
-    implicitHeight: 32
+    implicitHeight: Math.max(32, Theme.type.labelLarge.line + 12)
     // без текста — квадратный чип с одной иконкой
     readonly property bool _iconOnly: text === "" && _leading
     implicitWidth: _iconOnly ? 32 : _leftPad + content.implicitWidth + 16

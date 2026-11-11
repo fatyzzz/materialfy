@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Shapes
 import QtQuick.Templates as T
+import Materialfy.Core
 
 // Всплывающее меню MD3: карточка со списком пунктов у точки окна. Клик мимо или Esc — закрыть.
 // Меню — отдельное всплывающее окно (Popup.Window): выходит за края окна приложения (в мини-плеере
@@ -186,6 +187,7 @@ Item {
     // Всплывающее окно под одну карточку: прозрачное, с полем под тень; позиция — в глобальных координатах
     component CardPopup: T.Popup {
         id: pop
+        Component.onCompleted: MobileShell.prepareAccessibility(contentItem.parent, root)
         property rect area: Qt.rect(0, 0, 0, 0)
         property Item card: null
 

@@ -1,4 +1,5 @@
 import QtQuick
+import Materialfy.Core
 
 // Поле поиска-пилюля: обводка primary в фокусе, кнопка очистки.
 Item {
@@ -13,7 +14,7 @@ Item {
     signal accepted(string text)
 
     implicitWidth: 360
-    implicitHeight: 48
+    implicitHeight: Math.max(48, Theme.type.bodyLarge.line + 16)
 
     Rectangle {
         anchors.fill: parent
@@ -44,6 +45,7 @@ Item {
 
     TextInput {
         id: input
+        Component.onCompleted: MobileShell.prepareAccessibility(input, root)
         anchors.left: lead.right
         anchors.leftMargin: 12
         anchors.right: clear.left

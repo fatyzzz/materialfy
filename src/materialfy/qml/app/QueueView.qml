@@ -12,7 +12,7 @@ Item {
     property bool compact: false
 
     readonly property var queue: Player.queue
-    readonly property real rowHeight: compact ? 56 : 64
+    readonly property real rowHeight: Theme.trackRowHeight(compact)
     readonly property int contextPreview: 20     // столько строк контекста видно до «Ещё N треков»
 
     // ---- Границы секций (порядок в модели: current → manual → context) ----

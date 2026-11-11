@@ -23,7 +23,7 @@ Item {
     signal dragMoved(real dy)
     signal dragFinished()
 
-    implicitHeight: compact ? 56 : 64
+    implicitHeight: Theme.trackRowHeight(compact)
     implicitWidth: 300
 
     function openMenu(item, x, y) {
@@ -128,8 +128,8 @@ Item {
                 }
                 Rectangle {
                     visible: root.track.explicit === true
-                    implicitWidth: 16
-                    implicitHeight: 16
+                    implicitWidth: Math.max(16, Theme.type.labelSmall.size + 5)
+                    implicitHeight: Math.max(16, Theme.type.labelSmall.line)
                     radius: 4
                     color: Theme.surfaceContainerHighest
                     Label { anchors.centerIn: parent; text: "E"; type: "labelSmall"; color: Theme.fgSurfaceVariant }

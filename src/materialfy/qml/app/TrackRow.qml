@@ -70,11 +70,11 @@ Item {
     signal dragMoved(real dy, real sceneY)
     signal dragFinished()
 
-    implicitHeight: 64
+    implicitHeight: Theme.trackRowHeight(false)
 
     component ExplicitMark: Rectangle {
-        implicitWidth: 16
-        implicitHeight: 16
+        implicitWidth: Math.max(16, Theme.type.labelSmall.size + 5)
+        implicitHeight: Math.max(16, Theme.type.labelSmall.line)
         radius: 4
         color: Theme.surfaceContainerHighest
         Label { anchors.centerIn: parent; text: "E"; type: "labelSmall"; color: Theme.fgSurfaceVariant }

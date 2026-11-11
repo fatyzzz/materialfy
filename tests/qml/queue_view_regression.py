@@ -23,7 +23,7 @@ def module(path,name,types):
 module(md,'Md3',{
 'Theme':(True,'''pragma Singleton
 import QtQuick
-QtObject { property bool mobile:true; property bool reducedMotion:true;property color primary:"red"; property var shape:({large:12});property var motion:({spatialFast:0,spatialDefault:0,effectsFast:0,effectsDefault:0,emphasized:[0.2,0,0.2,1,1,1],emphasizedDecelerate:[0.2,0,0.2,1,1,1]}) }'''),
+QtObject { function trackRowHeight(compact){return compact?56:64} property bool mobile:true; property bool reducedMotion:true;property color primary:"red"; property var shape:({large:12});property var motion:({spatialFast:0,spatialDefault:0,effectsFast:0,effectsDefault:0,emphasized:[0.2,0,0.2,1,1,1],emphasizedDecelerate:[0.2,0,0.2,1,1,1]}) }'''),
 'Button':(False,'import QtQuick\nItem {property string text;property string icon;property string style;implicitHeight:40;implicitWidth:100;signal clicked()}'),
 'EmptyState':(False,'import QtQuick\nItem {property string text;property string icon;property string shape;property string title;property bool animated}'),
 'SmoothScroll':(False,'import QtQuick\nItem {property var flickable;property real wheelStep}'),

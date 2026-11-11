@@ -8,6 +8,7 @@ import Materialfy.Core
 // Закрывается по scrim, Esc и свайпу ручки вниз.
 T.Popup {
     id: root
+    Component.onCompleted: MobileShell.prepareAccessibility(contentItem.parent, root)
 
     readonly property bool _instant: Theme.reducedMotion === true
 
