@@ -9,7 +9,6 @@ import "app"
 // Системные панели Android прозрачные: интерфейс рисуется под ними, отступы — Theme.safeTop / safeBottom.
 Window {
     id: win
-    objectName: "materialfyMobileWindow"
 
     property string startPage: "home"     // --set startPage=settings | artist:<id>
 

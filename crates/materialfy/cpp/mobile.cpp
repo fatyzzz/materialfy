@@ -3,7 +3,6 @@
 #include <QtCore/QCoreApplication>
 #include <QtCore/QDir>
 #include <QtCore/QDirIterator>
-#include <QtCore/QEvent>
 #include <QtCore/QFile>
 #include <QtCore/QFileInfo>
 #include <QtCore/QMetaObject>
@@ -11,12 +10,9 @@
 #include <QtCore/QStandardPaths>
 #include <QtCore/QUrl>
 #include <QtCore/QtLogging>
-#include <QtCore/QtMath>
 
 #include <cstdio>
 #include <QtGui/QDesktopServices>
-#include <QtGui/QGuiApplication>
-#include <QtGui/QWindow>
 
 #if defined(Q_OS_ANDROID)
 #include <QtCore/QJniEnvironment>
@@ -55,67 +51,6 @@ native_media_command(JNIEnv* env, jclass, jstring command, jlong arg)
   mobile_post_media_command(text, static_cast<qint64>(arg));
 }
 
-// Android меняет density раньше, чем Qt обновляет DPR окна и экрана. Размер можно
-// пересчитать только после DevicePixelRatioChange, а не по фиксированной задержке.
-class MobileViewportSync final : public QObject
-{
-public:
-  explicit MobileViewportSync(QWindow* window)
-    : QObject(window), m_window(window)
-  {
-    setObjectName(QStringLiteral("materialfyDensitySync"));
-    window->installEventFilter(this);
-  }
-
-  void request(QSize pixels, qreal ratio)
-  {
-    m_pixels = pixels;
-    m_ratio = ratio;
-    apply();
-  }
-
-protected:
-  bool eventFilter(QObject* watched, QEvent* event) override
-  {
-    if (event->type() == QEvent::DevicePixelRatioChange)
-      QMetaObject::invokeMethod(this, [this] { apply(); }, Qt::QueuedConnection);
-    return QObject::eventFilter(watched, event);
-  }
-
-private:
-  void apply()
-  {
-    const qreal ratio = m_window->devicePixelRatio();
-    // Android dp = densityDpi / 160; в мобильной сборке дополнительный UI scale отключён.
-    if (m_pixels.isEmpty() || m_ratio <= 0 || qAbs(ratio - m_ratio) > 0.001)
-      return;
-    const QSize logical(qRound(m_pixels.width() / ratio), qRound(m_pixels.height() / ratio));
-    m_window->resize(logical);
-    qInfo("materialfy: density resize %dx%d pixels at %.3f -> %dx%d",
-          m_pixels.width(), m_pixels.height(), double(ratio), logical.width(), logical.height());
-  }
-
-  QWindow* m_window;
-  QSize m_pixels;
-  qreal m_ratio = 0;
-};
-
-void JNICALL
-native_window_metrics(JNIEnv*, jclass, jint pixel_width, jint pixel_height, jint density_dpi)
-{
-  if (!qApp || pixel_width <= 0 || pixel_height <= 0 || density_dpi <= 0)
-    return;
-  QMetaObject::invokeMethod(qApp, [pixel_width, pixel_height, density_dpi] {
-    for (QWindow* window : QGuiApplication::topLevelWindows()) {
-      if (window->objectName() != QStringLiteral("materialfyMobileWindow"))
-        continue;
-      QObject* existing = window->findChild<QObject*>(QStringLiteral("materialfyDensitySync"), Qt::FindDirectChildrenOnly);
-      auto* sync = existing ? static_cast<MobileViewportSync*>(existing) : new MobileViewportSync(window);
-      sync->request(QSize(pixel_width, pixel_height), density_dpi / 160.0);
-    }
-  }, Qt::QueuedConnection);
-}
-
 void
 register_natives()
 {
@@ -126,9 +61,8 @@ register_natives()
   QJniEnvironment env;
   const JNINativeMethod methods[] = {
     { "onMediaCommand", "(Ljava/lang/String;J)V", reinterpret_cast<void*>(native_media_command) },
-    { "onWindowMetricsChanged", "(III)V", reinterpret_cast<void*>(native_window_metrics) },
   };
-  if (!env.registerNativeMethods(BRIDGE, methods, 2))
+  if (!env.registerNativeMethods(BRIDGE, methods, 1))
     qWarning("materialfy: could not register MobileBridge natives");
 }
 
