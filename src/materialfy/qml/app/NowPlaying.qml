@@ -380,7 +380,7 @@ Item {
             z: 100
             DragHandler {
                 id: swipeDown
-                enabled: Theme.mobile && root.open && !(root.layoutCompact && root.sheetOpen)
+                enabled: Theme.mobile && root.open && !BackStack.hasOverlay && !(root.layoutCompact && root.sheetOpen)
                 target: null
                 xAxis.enabled: false
                 // Сохраняем скорость последнего кадра. Отмена захвата только возвращает плеер на место.
@@ -560,7 +560,7 @@ Item {
                     ]
                     DragHandler {
                         id: coverSwipe
-                        enabled: Theme.mobile && root.open && Player.hasTrack && root.collapse === 0 && root._dropY === 0 && !dismiss.running
+                        enabled: Theme.mobile && root.open && !BackStack.hasOverlay && Player.hasTrack && root.collapse === 0 && root._dropY === 0 && !dismiss.running
                         target: null
                         yAxis.enabled: false
                         // translation обнуляется раньше, чем приходит active=false: смещение и скорость запоминаем

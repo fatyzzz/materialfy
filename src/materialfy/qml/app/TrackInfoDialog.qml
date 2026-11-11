@@ -13,6 +13,8 @@ Item {
     property var details: ({})          // ответ trackDetailsReady (TrackDetails), пусто — ещё не пришёл
     property bool loading: false
     property bool opened: false
+    onVisibleChanged: visible ? BackStack.push(root) : BackStack.pop(root)
+    Component.onDestruction: BackStack.pop(root)
 
     function open(t) {
         track = t ?? ({})
@@ -100,7 +102,7 @@ Item {
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.AllButtons
-            onPressed: root.close()
+            onClicked: root.close()
             onWheel: wheel => {}
         }
     }

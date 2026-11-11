@@ -6,6 +6,8 @@ import QtQuick
 // если закрыло что-то) или close().
 QtObject {
     property var _items: []
+    // Модальные листы остаются здесь до конца исчезновения: жест не должен перейти нижнему слою.
+    readonly property bool hasOverlay: _items.length > 0
 
     function push(item) {
         _items = _items.filter(i => i !== item).concat([item])

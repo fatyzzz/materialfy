@@ -457,7 +457,7 @@ Item {
         DragHandler {
             id: queueSwipe
             target: null
-            enabled: Theme.mobile && !root.editable && root.available && root.uri !== ""
+            enabled: Theme.mobile && !BackStack.hasOverlay && !root.editable && root.available && root.uri !== ""
             yAxis.enabled: false
             // translation обнуляется раньше, чем приходит active=false: решение — по _swipeX
             onTranslationChanged: {

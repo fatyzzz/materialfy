@@ -83,6 +83,8 @@ FocusScope {
         }
     }
     visible: opened || progress > 0.001
+    onVisibleChanged: visible ? BackStack.push(root) : BackStack.pop(root)
+    Component.onDestruction: BackStack.pop(root)
 
     // Затемнение под листом: клики по приложению не проходят, тап — закрыть
     Rectangle {

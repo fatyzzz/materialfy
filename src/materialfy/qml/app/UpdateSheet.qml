@@ -11,7 +11,7 @@ Item {
     id: root
 
     property bool opened: false
-    onOpenedChanged: opened ? BackStack.push(root) : BackStack.pop(root)
+    onVisibleChanged: visible ? BackStack.push(root) : BackStack.pop(root)
     Component.onDestruction: BackStack.pop(root)
 
     function open() {
@@ -93,7 +93,7 @@ Item {
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.AllButtons
-            onPressed: root.close()
+            onClicked: root.close()
             onWheel: wheel => {}
         }
     }

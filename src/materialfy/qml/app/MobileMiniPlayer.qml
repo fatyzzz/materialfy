@@ -168,7 +168,7 @@ Item {
             id: cardTap
             anchors.fill: parent
             radius: Theme.shape.large
-            enabled: Player.hasTrack
+            enabled: Player.hasTrack && !BackStack.hasOverlay
             onClicked: root._open()
         }
 
@@ -291,7 +291,7 @@ Item {
         DragHandler {
             id: swipe
             target: null
-            enabled: Player.hasTrack
+            enabled: Player.hasTrack && !BackStack.hasOverlay
             // translation обнуляется раньше, чем приходит active=false: смещение и скорость запоминаем по ходу
             property point last: Qt.point(0, 0)
             property real vx: 0

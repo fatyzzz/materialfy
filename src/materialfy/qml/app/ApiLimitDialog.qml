@@ -10,7 +10,7 @@ Item {
     id: root
 
     property bool opened: false
-    onOpenedChanged: opened ? BackStack.push(root) : BackStack.pop(root)
+    onVisibleChanged: visible ? BackStack.push(root) : BackStack.pop(root)
     Component.onDestruction: BackStack.pop(root)
     property bool _shownThisRun: false
     // Client ID отправлен: ждём браузер и показываем, чем кончилось
@@ -64,7 +64,7 @@ Item {
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.AllButtons
-            onPressed: root.close()
+            onClicked: root.close()
             onWheel: wheel => {}
         }
     }
