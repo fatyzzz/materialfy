@@ -28,6 +28,9 @@ Page {
         { key: "updates", text: I18n.t("Updates"), icon: "download" }
     ]
     property string currentSection: "account"
+    // The scale is read by Qt at launch: after a change, offer a one-click relaunch.
+    // The launch scale comes from the process, not the page, which is rebuilt.
+    readonly property bool scalePending: Settings.uiScale !== Settings.uiScaleAtLaunch()
 
     readonly property int screenCount: Qt.application.screens ? Qt.application.screens.length : 1
 
@@ -150,8 +153,11 @@ Page {
         }
         return null
     }
+    function _cardTop(card) {
+        return card.mapToItem(page.flickable.contentItem, 0, 0).y
+    }
     function _cardY(card) {
-        return card.mapToItem(page.flickable.contentItem, 0, 0).y - nav.height - 16
+        return _cardTop(card) - nav.height - 16
     }
     function scrollToSection(key, animated) {
         const card = cardFor(key)
@@ -168,13 +174,28 @@ Page {
     function _followScroll() {
         if (!_following)
             return
-        const y = page.flickable.contentY
-        let cur = sections[0].key
+        // строка разделов прилипает сверху и закрывает полосу под собой — как в _cardY
+        const viewTop = page.flickable.contentY + nav.height + 16
+        const viewBottom = page.flickable.contentY + page.flickable.height
+        let cur = currentSection
+        let best = 0
+        // смотрим на видимую площадь, а не на верх карточки: следующая может начинаться
+        // ниже экрана, но уже занимать его почти целиком, пока предыдущая уехала наверх
         for (const s of sections) {
             const card = cardFor(s.key)
-            if (card && _cardY(card) <= y + 40)
+            if (!card)
+                continue
+            const top = _cardTop(card)
+            const visible = Math.min(top + card.height, viewBottom) - Math.max(top, viewTop)
+            // доля того, что карточка вообще может показать: короткая целиком на экране не проигрывает высокой соседке
+            const score = visible / Math.max(1, Math.min(card.height, viewBottom - viewTop))
+            if (score > best) {
+                best = score
                 cur = s.key
+            }
         }
+        if (page.flickable.contentY <= page.flickable.originY + 2)
+            cur = sections[0].key
         if (page.flickable.contentY >= page.flickable.maxY - 2)
             cur = sections[sections.length - 1].key
         currentSection = cur
@@ -605,8 +626,10 @@ Page {
             Layout.fillWidth: true
             text: Auth.tokenStorage === "keyring"
                   ? (Qt.platform.os === "android"
-                     ? I18n.t("Permissions are stored in the app's private storage. “Sign out” removes all three; the cache stays.")
-                     : I18n.t("Permissions are stored in Windows Credential Manager. “Sign out” removes all three; the cache stays."))
+                        ? I18n.t("Permissions are stored in the app's private storage. “Sign out” removes all three; the cache stays.")
+                        : Qt.platform.os === "windows"
+                        ? I18n.t("Permissions are stored in Windows Credential Manager. “Sign out” removes all three; the cache stays.")
+                        : I18n.t("Permissions are stored in the system keychain. “Sign out” removes all three; the cache stays."))
                   : I18n.t("Secret storage is unavailable: permissions last until the app closes. “Sign out” removes all three; the cache stays.")
             type: "bodySmall"
             color: Theme.fgSurfaceVariant
@@ -620,6 +643,16 @@ Page {
         id: appearanceCard
         title: I18n.t("Appearance")
         icon: "palette"
+
+        SettingsBanner {
+            kind: "info"
+            icon: "restart_alt"
+            shown: !Theme.mobile && page.scalePending
+            title: I18n.t("Restart to apply the scale")
+            text: I18n.t("The interface scale is read when the app starts. Apply now reopens the app at the new size.")
+            actionText: I18n.t("Apply now")
+            onAction: Settings.relaunch()
+        }
 
         SettingRow {
             title: I18n.t("Language")
@@ -651,6 +684,19 @@ Page {
                 size: page.compact ? "xs" : "s"
                 currentIndex: ["system", "light", "dark"].indexOf(Settings.themeMode)
                 onActivated: i => Settings.themeMode = ["system", "light", "dark"][i]
+            }
+        }
+
+        SettingRow {
+            visible: !Theme.mobile
+            title: I18n.t("Interface scale")
+            description: I18n.t("Size of text and controls. Takes effect after restarting the app")
+            ButtonGroup {
+                model: ["75%", "100%", "125%", "150%", "200%"]
+                autoSelect: false
+                size: page.compact ? "xs" : "s"
+                currentIndex: Math.max(0, [75, 100, 125, 150, 200].indexOf(Settings.uiScale))
+                onActivated: i => Settings.uiScale = [75, 100, 125, 150, 200][i]
             }
         }
 
@@ -847,18 +893,18 @@ Page {
             }
         }
 
-        // Плеер вне окна: островок — Windows и X11 (на Wayland окно не встанет у края экрана само),
+        // Плеер вне окна: островок — Windows, macOS и X11 (на Wayland окно не встанет у края экрана само),
         // панель задач — только Windows; где нет ни того ни другого, раздела нет
         FloatingPlayerPicker {
             id: floatingPicker
             modes: ["off"]
-                .concat(Qt.platform.os === "windows" || (Qt.platform.os === "linux" && !Qt.platform.pluginName.startsWith("wayland")) ? ["island"] : [])
+                .concat(Qt.platform.os === "windows" || Qt.platform.os === "osx" || (Qt.platform.os === "linux" && (!Qt.platform.pluginName.startsWith("wayland") || WindowShell.kwinAvailable())) ? ["island"] : [])
                 .concat(Qt.platform.os === "windows" ? ["taskbar", "both"] : [])
             visible: modes.length > 1
         }
 
         SettingRow {
-            visible: floatingPicker.visible && (Settings.floatingPlayer === "island" || Settings.floatingPlayer === "both") && page.screenCount > 1
+            visible: floatingPicker.visible && (Settings.floatingPlayer === "island" || Settings.floatingPlayer === "both") && page.screenCount > 1 && Qt.platform.os !== "osx"
             title: Settings.floatingPlayer === "both" ? I18n.t("Island displays") : I18n.t("Displays")
             description: I18n.t("Choose which monitors display the island player")
             Flow {
@@ -878,6 +924,54 @@ Page {
                         onClicked: Settings.floatingIslandScreens = page.toggleScreenSetting(Settings.floatingIslandScreens, modelData, page.screenCount)
                     }
                 }
+            }
+        }
+
+        SettingRow {
+            visible: floatingPicker.visible && (Settings.floatingPlayer === "island" || Settings.floatingPlayer === "both")
+                && (Qt.platform.os === "windows" || (Qt.platform.os === "linux" && WindowShell.kwinAvailable()))
+            title: I18n.t("Hide over fullscreen apps")
+            description: I18n.t("The island steps aside while a game, video or browser is fullscreen on its monitor")
+            Switch { checked: Settings.floatingHideFullscreen; onToggled: c => Settings.floatingHideFullscreen = c }
+        }
+
+        SettingRow {
+            visible: floatingPicker.visible && (Settings.floatingPlayer === "island" || Settings.floatingPlayer === "both")
+                && (Qt.platform.os === "windows" || (Qt.platform.os === "linux" && WindowShell.kwinAvailable()))
+            title: I18n.t("Hide over maximized windows")
+            description: I18n.t("The island steps aside while a maximized window fills its monitor")
+            Switch { checked: Settings.floatingHideMaximized; onToggled: c => Settings.floatingHideMaximized = c }
+        }
+
+        SettingRow {
+            visible: floatingPicker.visible && (Settings.floatingPlayer === "island" || Settings.floatingPlayer === "both") && Qt.platform.os !== "osx"
+            title: I18n.t("Island edge")
+            description: Settings.floatingEdge === "free" ? I18n.t("Drag the island anywhere on the screen")
+                : I18n.t("The screen edge the island sticks to")
+            ButtonGroup {
+                readonly property var keys: ["top", "bottom", "left", "right", "free"]
+                model: [I18n.t("Top"), I18n.t("Bottom"), I18n.t("Left"), I18n.t("Right"), I18n.t("Free")]
+                autoSelect: false
+                size: page.compact ? "xs" : "s"
+                currentIndex: Math.max(0, keys.indexOf(Settings.floatingEdge))
+                onActivated: i => Settings.floatingEdge = keys[i]
+            }
+        }
+
+        SettingRow {
+            visible: floatingPicker.visible && (Settings.floatingPlayer === "island" || Settings.floatingPlayer === "both") && Qt.platform.os !== "osx"
+                && Settings.floatingEdge !== "free"
+            title: I18n.t("Island position")
+            description: I18n.t("Or drag the island along the edge. 0 is the center of the edge")
+            Slider {
+                wheelEnabled: false
+                width: 220
+                from: -1000
+                to: 1000
+                stepSize: 10
+                value: Settings.floatingOffsetX
+                valueText: v => Math.round(v) + " px"
+                onMoved: v => Settings.floatingOffsetX = Math.round(v / 10) * 10
             }
         }
 
@@ -936,6 +1030,27 @@ Page {
             title: I18n.t("Compact sidebar")
             description: I18n.t("Icons only. Turns on automatically in a narrow window")
             Switch { checked: Settings.sidebarCollapsed; onToggled: c => Settings.sidebarCollapsed = c }
+        }
+
+        SettingRow {
+            title: I18n.t("Radio on Home")
+            description: I18n.t("The station scene at the top of Home. The Radio page and “Radio from this track” keep working")
+            Switch { checked: Settings.homeRadioHidden !== true; onToggled: c => Settings.homeRadioHidden = !c }
+        }
+
+        SettingRow {
+            visible: !Theme.mobile
+            title: I18n.t("Sidebar list")
+            description: Settings.sidebarLibrary === true
+                         ? I18n.t("What you added or played last: playlists, albums, artists, podcasts and Liked Songs")
+                         : I18n.t("Your playlist tree, folders included")
+            ButtonGroup {
+                model: [I18n.t("Playlists"), I18n.t("Library")]
+                autoSelect: false
+                size: page.compact ? "xs" : "s"
+                currentIndex: Settings.sidebarLibrary === true ? 1 : 0
+                onActivated: i => Settings.sidebarLibrary = i === 1
+            }
         }
 
         SettingRow {
@@ -1040,56 +1155,21 @@ Page {
         title: I18n.t("Lyrics")
         icon: "lyrics"
 
-        // Интерактивный предпросмотр строки текста в реальном времени
+        // Живое превью: заливка по слову, свечение и размытие как в LyricsView.
         Rectangle {
             Layout.fillWidth: true
-            implicitHeight: previewCol.implicitHeight + 28
+            implicitHeight: preview.implicitHeight + 28
             radius: Theme.shape.large
-            color: Settings.lyricsScrim === "strong" ? Qt.rgba(Theme.surfaceContainerLowest.r, Theme.surfaceContainerLowest.g, Theme.surfaceContainerLowest.b, 0.75)
-                 : Settings.lyricsScrim === "soft" ? Qt.rgba(Theme.surfaceContainerLowest.r, Theme.surfaceContainerLowest.g, Theme.surfaceContainerLowest.b, 0.4)
-                 : "transparent"
+            // The mounted view paints the scrim itself; tinting the card too would double it.
+            color: "transparent"
             border.width: 1
             border.color: Theme.outlineVariant
 
-            ColumnLayout {
-                id: previewCol
+            LyricsStylePreview {
+                id: preview
                 anchors.centerIn: parent
                 width: parent.width - 32
-                spacing: Math.round(6 * Settings.lyricsLineSpacing)
-
-                Label {
-                    Layout.fillWidth: true
-                    visible: Settings.lyricsVisibleLines !== "one"
-                    horizontalAlignment: Settings.lyricsTextAlign === "center" ? Text.AlignHCenter : Text.AlignLeft
-                    text: "♫  When the music starts to play"
-                    wrapMode: Text.WordWrap
-                    elide: Text.ElideNone
-                    type: "bodyLarge"
-                    color: Theme.fgSurfaceVariant
-                    opacity: Settings.lyricsBlurAmount > 0.4 ? 0.35 : 0.6
-                }
-                Label {
-                    Layout.fillWidth: true
-                    horizontalAlignment: Settings.lyricsTextAlign === "center" ? Text.AlignHCenter : Text.AlignLeft
-                    text: Settings.lyricsMode === "karaoke" ? "EVERY RHYTHM GUIDES THE WAY"
-                        : "Every rhythm guides the way"
-                    wrapMode: Text.WordWrap
-                    elide: Text.ElideNone
-                    font.bold: Settings.lyricsMode !== "normal"
-                    font.pixelSize: Math.round(18 * Settings.lyricsFontScale * (Settings.lyricsMode === "spicy" ? 1.25 : (Settings.lyricsMode === "karaoke" ? 1.15 : 1.0)))
-                    color: Theme.primary
-                }
-                Label {
-                    Layout.fillWidth: true
-                    visible: Settings.lyricsVisibleLines === "all"
-                    horizontalAlignment: Settings.lyricsTextAlign === "center" ? Text.AlignHCenter : Text.AlignLeft
-                    text: "Singing through the night and day"
-                    wrapMode: Text.WordWrap
-                    elide: Text.ElideNone
-                    type: "bodyLarge"
-                    color: Theme.fgSurfaceVariant
-                    opacity: Settings.lyricsBlurAmount > 0.4 ? 0.35 : 0.6
-                }
+                baseFontSize: 20
             }
         }
 
@@ -1206,18 +1286,6 @@ Page {
             }
         }
 
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
-            Item { Layout.fillWidth: true }
-            Button {
-                text: I18n.t("Reading")
-                icon: "visibility"
-                style: "tonal"
-                size: "xs"
-                onClicked: page.scrollToSection("reading", true)
-            }
-        }
     }
 
     // ================= Чтение =================
@@ -1404,18 +1472,6 @@ Page {
             }
         }
 
-        RowLayout {
-            Layout.fillWidth: true
-            spacing: 8
-            Item { Layout.fillWidth: true }
-            Button {
-                text: I18n.t("Lyrics")
-                icon: "lyrics"
-                style: "tonal"
-                size: "xs"
-                onClicked: page.scrollToSection("lyrics", true)
-            }
-        }
     }
 
     // ================= Воспроизведение =================

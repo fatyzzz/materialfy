@@ -16,3 +16,4 @@ target/
 /qt/
 # бинарник, который кладёт install.sh
 /bin/
+.pi/

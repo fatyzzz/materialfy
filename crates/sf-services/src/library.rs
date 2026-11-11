@@ -375,6 +375,43 @@ fn folder_tree(rootlist: &Rootlist) -> (Vec<String>, HashMap<String, Folder>) {
     (root, folders)
 }
 
+/// Сводка «последнее добавленное/обновлённое» из строк всех разделов: без папок, новые сверху.
+fn merge_recent(mut all: Vec<LibraryEntry>, limit: usize, pins: &[String]) -> Vec<LibraryEntry> {
+    all.retain(|entry| entry.kind != "folder");
+    // «последнее касание»: у плейлиста это добавление, у исполнителя — прослушивание
+    let touched = |entry: &LibraryEntry| entry.added_at.clone().max(entry.played_at.clone());
+    // закреплённые — первыми в порядке закрепления: поле строки есть у всех сразу, порядок задаёт только список
+    let pin_rank = |entry: &LibraryEntry| {
+        pins.iter()
+            .position(|uri| *uri == entry.uri)
+            .map_or(if entry.pinned { 0 } else { usize::MAX }, |rank| rank + 1)
+    };
+    all.sort_by_cached_key(|entry| (pin_rank(entry), std::cmp::Reverse(touched(entry))));
+    // у плейлистов не бывает added_at, поэтому они всегда последние и могли выпасть из обрезки целиком:
+    // сперва берём закреплённые и самую свежую строку каждого вида, остальное добираем по времени
+    let mut picked: Vec<LibraryEntry> = Vec::new();
+    let mut seen = HashSet::new();
+    let mut kinds = HashSet::new();
+    for entry in &all {
+        if picked.len() >= limit {
+            break;
+        }
+        let head = kinds.insert(entry.kind.clone());
+        if (pin_rank(entry) != usize::MAX || head) && seen.insert(entry.uri.clone()) {
+            picked.push(entry.clone());
+        }
+    }
+    for entry in &all {
+        if picked.len() >= limit {
+            break;
+        }
+        if seen.insert(entry.uri.clone()) {
+            picked.push(entry.clone());
+        }
+    }
+    picked
+}
+
 /// Сортировка строк экрана «Библиотека» (закреплённые — первыми в порядке закрепления).
 fn sort_entries(entries: &mut [LibraryEntry], sort: &str, pins: &[String]) {
     let pin_rank = |entry: &LibraryEntry| pins.iter().position(|uri| *uri == entry.uri).unwrap_or(usize::MAX);
@@ -549,12 +586,14 @@ impl State {
         if item.track_count > 0 {
             subtitle.push_str(&format!(" · {}", mf_i18n::n(item.track_count, "{0} track", "{0} tracks")));
         }
+        // DJ — не плейлист: у него нет списка треков, он только запускается (как кнопка)
+        let dj = item.uri == crate::data::home_feed::DJ_URI;
         LibraryEntry {
-            kind: "playlist".to_owned(),
+            kind: if dj { "dj".to_owned() } else { "playlist".to_owned() },
             id: item.playlist_id.clone(),
             uri: item.uri.clone(),
-            title: item.title.clone(),
-            subtitle,
+            title: if dj { "DJ".to_owned() } else { item.title.clone() },
+            subtitle: if dj { mf_i18n::t("Music and commentary picked for you").to_owned() } else { subtitle },
             cover: item.cover.clone(),
             covers: if item.cover.is_empty() { Vec::new() } else { vec![item.cover.clone()] },
             owner: item.owner.clone(),
@@ -3127,6 +3166,17 @@ impl LibraryService {
         entries
     }
 
+    /// Последние добавленные или обновлённые строки всех разделов — для боковой панели.
+    /// Папки остаются в дереве плейлистов: в «последних» они только мешают.
+    pub fn recent_entries(&self, limit: usize) -> Vec<LibraryEntry> {
+        let mut all = Vec::new();
+        for kind in [LibraryKind::Playlists, LibraryKind::Albums, LibraryKind::Artists, LibraryKind::Shows] {
+            all.extend(self.entries(kind, "all", "added"));
+        }
+        let pins = self.pins();
+        merge_recent(all, limit, &pins)
+    }
+
     pub fn folder_children(&self, folder_id: &str) -> Vec<LibraryEntry> {
         let times = self.history.context_times();
         let state = lock(&self.state);
@@ -3273,6 +3323,30 @@ mod tests {
     }
 
     #[test]
+    fn the_dj_is_a_button_not_a_playlist() {
+        let state = State::default();
+        let times = HashMap::new();
+        let dj = PlaylistItem {
+            playlist_id: "37i9dQZF1EYkqdzj48dyYq".into(),
+            uri: crate::data::home_feed::DJ_URI.into(),
+            title: "DJ".into(),
+            owner: "Spotify".into(),
+            ..Default::default()
+        };
+        let entry = state.playlist_entry(&dj, "", &times);
+        assert_eq!(entry.kind, "dj", "it has no track list, so it only plays");
+        assert_eq!(entry.uri, crate::data::home_feed::DJ_URI);
+
+        let ordinary = PlaylistItem {
+            playlist_id: "p".into(),
+            uri: "spotify:playlist:p".into(),
+            title: "Mine".into(),
+            ..Default::default()
+        };
+        assert_eq!(state.playlist_entry(&ordinary, "", &times).kind, "playlist");
+    }
+
+    #[test]
     fn library_kinds_from_qml_names() {
         assert_eq!(LibraryKind::from_name("podcasts"), LibraryKind::Shows);
         assert_eq!(LibraryKind::from_name("x"), LibraryKind::Playlists);
@@ -3289,6 +3363,65 @@ mod tests {
         sort_entries(&mut entries, "alpha", &["spotify:playlist:c".to_owned()]);
         let titles: Vec<&str> = entries.iter().map(|e| e.title.as_str()).collect();
         assert_eq!(titles, ["Liked Songs", "В", "А", "Б"]);
+    }
+
+    #[test]
+    fn recent_entries_merge_every_kind_newest_first() {
+        // у плейлиста added_at не бывает — так его и оставляем
+        let playlist = entry("playlist", "playlist", "spotify:playlist:p");
+        let mut album = entry("album", "album", "spotify:album:a");
+        album.added_at = "2026-09-01T00:00:00Z".into();
+        let mut artist = entry("artist", "artist", "spotify:artist:x");
+        artist.played_at = "2026-08-01T00:00:00Z".into();
+        let folder = entry("folder", "folder", "folder:1");
+        let merged = merge_recent(vec![playlist, folder, artist, album], 10, &[]);
+        let titles: Vec<&str> = merged.iter().map(|e| e.title.as_str()).collect();
+        assert_eq!(titles, ["album", "artist", "playlist"], "newest first, folders dropped");
+        assert_eq!(merge_recent(vec![entry("album", "only", "u")], 0, &[]).len(), 0, "limit is honoured");
+        // закреплённое — первым, даже если добавлено давно
+        let mut old = entry("playlist", "pinned", "spotify:playlist:pin");
+        old.added_at = "2020-01-01T00:00:00Z".into();
+        let mut new = entry("album", "fresh", "spotify:album:new");
+        new.added_at = "2026-09-01T00:00:00Z".into();
+        let merged = merge_recent(vec![new, old], 10, &["spotify:playlist:pin".to_owned()]);
+        let titles: Vec<&str> = merged.iter().map(|e| e.title.as_str()).collect();
+        assert_eq!(titles, ["pinned", "fresh"], "pins lead the summary");
+        // два закреплённых — в порядке закрепления, а не по времени (поле pinned у обоих истинно)
+        let mut pin_b = entry("album", "pin b", "spotify:album:b");
+        pin_b.pinned = true;
+        pin_b.added_at = "2026-09-01T00:00:00Z".into();
+        let mut pin_a = entry("album", "pin a", "spotify:album:a");
+        pin_a.pinned = true;
+        pin_a.added_at = "2020-01-01T00:00:00Z".into();
+        let pins = ["spotify:album:a".to_owned(), "spotify:album:b".to_owned()];
+        let merged = merge_recent(vec![pin_b, pin_a], 10, &pins);
+        let titles: Vec<&str> = merged.iter().map(|e| e.title.as_str()).collect();
+        assert_eq!(titles, ["pin a", "pin b"], "pinned rows keep the pin order");
+        // закрепление полем строки («Любимые») тоже ведёт сводку
+        let mut liked = entry("liked", "Liked Songs", "spotify:user:me:collection");
+        liked.pinned = true;
+        let mut fresh = entry("album", "fresh", "spotify:album:fresh");
+        fresh.added_at = "2026-09-01T00:00:00Z".into();
+        let merged = merge_recent(vec![fresh, liked], 10, &[]);
+        let titles: Vec<&str> = merged.iter().map(|e| e.title.as_str()).collect();
+        assert_eq!(titles, ["Liked Songs", "fresh"], "the field leads too");
+    }
+
+    #[test]
+    fn recent_entries_keep_a_playlist_without_added_at() {
+        // у плейлиста added_at пустой: он всегда последний по времени и раньше выпадал из обрезки целиком
+        let mut all = vec![entry("playlist", "playlist", "spotify:playlist:p")];
+        for day in 1..=50 {
+            let mut album = entry("album", &format!("album {day}"), &format!("spotify:album:{day}"));
+            album.added_at = format!("2026-01-01T00:{day:02}:00Z");
+            all.push(album);
+        }
+        let merged = merge_recent(all, 10, &[]);
+        assert_eq!(merged.len(), 10, "limit is honoured");
+        let playlists: Vec<&str> =
+            merged.iter().filter(|e| e.kind == "playlist").map(|e| e.uri.as_str()).collect();
+        assert_eq!(playlists, ["spotify:playlist:p"], "the playlist survives once");
+        assert_eq!(merged[0].title, "album 50", "the bulk stays newest first");
     }
 
     #[test]

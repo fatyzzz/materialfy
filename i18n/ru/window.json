@@ -66,5 +66,17 @@
   "Done: requests now go through your app": "Готово: запросы теперь идут через ваше приложение",
   "Don’t show again": "Больше не показывать",
   "Covers bypass the proxy": "Обложки мимо прокси",
-  "Load covers and pictures directly: faster on a slow proxy and saves its traffic. Spotify sees your real address for these images": "Загружать обложки и картинки напрямую: быстрее при медленном прокси и экономит его трафик. Для этих картинок Spotify увидит ваш настоящий адрес"
+  "Load covers and pictures directly: faster on a slow proxy and saves its traffic. Spotify sees your real address for these images": "Загружать обложки и картинки напрямую: быстрее при медленном прокси и экономит его трафик. Для этих картинок Spotify увидит ваш настоящий адрес",
+  "Hide over fullscreen apps": "Прятать над полноэкранными приложениями",
+  "The island steps aside while a game, video or browser is fullscreen on its monitor": "Островок убирается, пока на его мониторе игра, видео или браузер на весь экран",
+  "Island edge": "Край островка",
+  "Drag the island anywhere on the screen": "Перетащите островок в любое место экрана",
+  "The screen edge the island sticks to": "Край экрана, к которому прижат островок",
+  "Top": "Сверху",
+  "Bottom": "Снизу",
+  "Free": "Свободно",
+  "Or drag the island along the edge. 0 is the center of the edge": "Или перетащите островок вдоль края. 0 — центр края",
+  "Island position": "Положение островка",
+  "Hide over maximized windows": "Прятать над развёрнутыми окнами",
+  "The island steps aside while a maximized window fills its monitor": "Островок убирается, пока развёрнутое окно занимает его монитор"
 }

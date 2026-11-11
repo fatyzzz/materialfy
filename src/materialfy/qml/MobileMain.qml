@@ -268,7 +268,6 @@ Window {
                     // на каждый тап, на телефоне это заметная пауза
                     // «Любимые» — тоже: сборка ~150 строк занимала до 0,75 с между тапом и переходом
                     keepAlive: ["home", "search", "library", "settings", "liked"]
-                    prewarmKept: true
                     pushOnReset: ["account", "playback", "liked", "releases", "radio", "folder"]
                     Component.onCompleted: {
                         Qt.callLater(router._prewarm)

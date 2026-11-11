@@ -11,6 +11,7 @@
 // которым владеет сама панель: Windows держит его над ней и опускает вместе с ней под полноэкранное приложение.
 #include "floating.h"
 
+#include <QtCore/QEvent>
 #include <QtGui/QCursor>
 #include <QtGui/QGuiApplication>
 #include <QtGui/QPainterPath>
@@ -196,6 +197,16 @@ covers_monitor(HWND hwnd, HMONITOR monitor)
     GetWindowRect(hwnd, &r);
   const RECT& m = info.rcMonitor;
   return r.left <= m.left && r.top <= m.top && r.right >= m.right && r.bottom >= m.bottom;
+}
+
+// Развёрнутое окно на этом мониторе (кнопка «развернуть»: занимает рабочую область, панель задач остаётся)
+bool
+maximized_on_monitor(HWND hwnd, HMONITOR monitor)
+{
+  hwnd = hwnd ? GetAncestor(hwnd, GA_ROOT) : nullptr;
+  if (!hwnd || !IsWindowVisible(hwnd) || IsIconic(hwnd) || is_shell_window(hwnd) || !IsZoomed(hwnd))
+    return false;
+  return MonitorFromWindow(hwnd, MONITOR_DEFAULTTONULL) == monitor;
 }
 
 // ---- Панель задач и места на ней (физические пиксели экрана) ----
@@ -433,10 +444,20 @@ move_window(QWindow* window, HWND hwnd, const Bar& bar, bool embed, LONG x, int 
   return 2;
 }
 
-int
-size_h(const Bar& bar, int height)
+// Масштаб окна на панели: DPI самой панели × масштаб интерфейса. Не devicePixelRatio окна — до переезда
+// на панель он берётся с экрана, где окно было, и на мониторах с разным DPI первое размещение ошибается.
+double
+window_scale(const Bar& bar)
 {
-  return std::min(px(height, bar.scale), static_cast<int>(bar.rect.bottom - bar.rect.top) - 2 * px(4, bar.scale));
+  const double user = qEnvironmentVariable("QT_SCALE_FACTOR", QStringLiteral("1")).toDouble();
+  return bar.scale * (user > 0 ? user : 1.0);
+}
+
+int
+size_h(const Bar& bar, int height, double scale)
+{
+  // Высота окна — с масштабом интерфейса (window_scale), предел по высоте панели — в пикселях панели (bar.scale).
+  return std::min(px(height, scale), static_cast<int>(bar.rect.bottom - bar.rect.top) - 2 * px(4, bar.scale));
 }
 
 // Перетаскивание: где схватили (от левого края окна) и места на панели — на всё время перетаскивания
@@ -580,6 +601,21 @@ floating_fullscreen_on(QObject* object)
   return covers_monitor(WindowFromPoint(center), monitor);
 }
 
+bool
+floating_maximized_on(QObject* object)
+{
+  const HMONITOR monitor = monitor_for(target_screen(qobject_cast<QWindow*>(object)));
+  if (maximized_on_monitor(GetForegroundWindow(), monitor))
+    return true;
+  // переднее окно может быть на другом мониторе — смотрим, что видно в центре нашего
+  MONITORINFO info{};
+  info.cbSize = sizeof(info);
+  if (!GetMonitorInfoW(monitor, &info))
+    return false;
+  const POINT center{ (info.rcMonitor.left + info.rcMonitor.right) / 2, (info.rcMonitor.top + info.rcMonitor.bottom) / 2 };
+  return maximized_on_monitor(WindowFromPoint(center), monitor);
+}
+
 int
 floating_cursor_in(QObject* object, int x, int y, int w, int h)
 {
@@ -665,8 +701,9 @@ floating_taskbar_place(QObject* object, int width, int height, bool embed, const
     release_host(window);
     return 0;
   }
-  const int w = px(width, bar.scale);
-  const int h = size_h(bar, height);
+  const double scale = window_scale(bar);
+  const int w = px(width, scale);
+  const int h = size_h(bar, height, scale);
   // кнопки панели нужны только местам у значков и у левого края — у трея хватает TrayNotifyWnd
   const Places p = places(bar, w, pos != QLatin1String("tray"));
   if (h <= 0 || p.hi < p.lo) {
@@ -696,7 +733,8 @@ floating_taskbar_drag(QObject* object, int width, int height, int phase)
   RECT now{};
   if (!hwnd || !IsWindow(hwnd) || !read_bar(window, bar) || !GetCursorPos(&cursor) || !GetWindowRect(hwnd, &now))
     return {};
-  const int w = px(width, bar.scale);
+  const double scale = window_scale(bar);
+  const int w = px(width, scale);
   if (phase == 0) {
     drag.grab = cursor.x - now.left;
     drag.places = places(bar, w, true);
@@ -719,7 +757,7 @@ floating_taskbar_drag(QObject* object, int width, int height, int phase)
     x = position_x(p, pos);
   else
     pos = QString::number(p.hi > p.lo ? double(x - p.lo) / double(p.hi - p.lo) : 1.0, 'f', 4);
-  move_window(window, hwnd, bar, drag.embed, x, w, size_h(bar, height));
+  move_window(window, hwnd, bar, drag.embed, x, w, size_h(bar, height, scale));
   return pos;
 }
 
@@ -762,15 +800,45 @@ floating_key_hook(QObject* object, bool on)
 
 namespace mf {
 
+#if !defined(__APPLE__) // macOS — floating_mac.mm
+namespace {
+// Wayland не отдаёт глобальный курсор: после ухода мыши QCursor::pos() остаётся на последней точке внутри окна.
+// Вход и выход указателя ловим сами и кладём в свойство окна, его читает floating_cursor_in.
+class PointerTracker : public QObject
+{
+public:
+  using QObject::QObject;
+  bool eventFilter(QObject* watched, QEvent* event) override
+  {
+    if (event->type() == QEvent::Enter)
+      watched->setProperty("mfPointerIn", true);
+    else if (event->type() == QEvent::Leave)
+      watched->setProperty("mfPointerIn", false);
+    return false;
+  }
+};
+} // namespace
+
 bool
-floating_tool_window(QObject* window)
+floating_tool_window(QObject* object)
+{
+  auto* window = qobject_cast<QWindow*>(object);
+  if (!window || !QGuiApplication::platformName().startsWith(QLatin1String("wayland")))
+    return false;
+  window->installEventFilter(new PointerTracker(window));
+  return true;
+}
+#endif
+
+bool
+floating_fullscreen_on(QObject* window)
 {
   (void)window;
   return false;
 }
 
 bool
-floating_fullscreen_on(QObject* window)
+floating_maximized_on(QObject* window)
 {
   (void)window;
   return false;
@@ -782,7 +850,9 @@ floating_cursor_in(QObject* object, int x, int y, int w, int h)
   auto* window = qobject_cast<QWindow*>(object);
   if (!window || w <= 0 || h <= 0)
     return 0;
-  // X11 и macOS отдают глобальный курсор; Wayland — последний известный нам (островка там нет)
+  // X11 и macOS отдают глобальный курсор; Wayland — последний известный нам, поэтому вне окна он не в счёт
+  if (QGuiApplication::platformName().startsWith(QLatin1String("wayland")) && !window->property("mfPointerIn").toBool())
+    return 0;
   const QPoint p = window->mapFromGlobal(QCursor::pos(window->screen()));
   if (!QRect(x, y, w, h).contains(p))
     return 0;

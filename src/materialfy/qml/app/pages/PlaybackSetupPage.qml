@@ -559,13 +559,16 @@ Page {
                                 handleHeight: 28
                                 value: Settings.audioCacheMb
                                 valueText: v => page._cacheText(v)
-                                onPressedChanged: if (!pressed && Math.round(value) !== Settings.audioCacheMb) Settings.audioCacheMb = Math.round(value)
+                                // сохраняем при отпускании, а не на каждом шаге перетаскивания
+                                property int _pending: Settings.audioCacheMb
+                                onMoved: v => _pending = Math.round(v)
+                                onPressedChanged: if (!pressed && _pending !== Settings.audioCacheMb) Settings.audioCacheMb = _pending
                             }
                             Label {
                                 anchors.verticalCenter: parent.verticalCenter
                                 width: 48
                                 horizontalAlignment: Text.AlignRight
-                                text: page._cacheText(cacheSlider.value)
+                                text: page._cacheText(cacheSlider.pressed ? cacheSlider._pending : cacheSlider.value)
                                 type: "labelLarge"
                                 color: Theme.fgSurfaceVariant
                             }

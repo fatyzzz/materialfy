@@ -447,7 +447,9 @@ impl Engine {
             gapless: config.gapless,
             normalisation: config.normalisation,
             normalisation_type: NormalisationType::Auto,
-            position_update_interval: Some(Duration::from_secs(1)),
+            // 5 Hz: the UI clock interpolates between samples, and a 1 s gap made it
+            // overshoot with the old rate correction (the comment in LyricsView says 5 Hz).
+            position_update_interval: Some(Duration::from_millis(200)),
             // The fork reports each track's normalisation factor here, so
             // the tap can undo it for the visualisers: they show the music,
             // not the loudness housekeeping.
@@ -928,7 +930,7 @@ async fn run_events(
     audio: Arc<AudioControl>,
 ) {
     let mut play_request_id = None;
-    while let Some(event) = events.recv().await {
+    while let Some(mut event) = events.recv().await {
         if let PlayerEvent::PlayRequestIdChanged {
             play_request_id: next,
         } = &event
@@ -942,6 +944,8 @@ async fn run_events(
             continue;
         }
         audio.handle_player_event(&event);
+        // The progress bar and the lyrics must follow the sound, not the decoder.
+        pull_back_to_the_ear(&mut event, audio.backlog_ms());
         let snapshot = {
             let mut current = state.lock().unwrap_or_else(|p| p.into_inner());
             if apply_event(&mut current, event) {
@@ -972,6 +976,22 @@ fn start_replay(state: &mut LocalState) -> bool {
         true
     } else {
         false
+    }
+}
+
+/// librespot reports where the packet it has just read starts, while the sink still holds
+/// hundreds of milliseconds of decoded audio in front of the speaker. Move that packet's
+/// position back by the queue, so everything driven by the position follows the sound.
+/// `Playing` carries the position the stream will start at and can already have audio
+/// queued on a resume; a seek keeps its requested position because its queue is dropped.
+fn pull_back_to_the_ear(event: &mut PlayerEvent, backlog_ms: u32) {
+    match event {
+        PlayerEvent::PositionCorrection { position_ms, .. }
+        | PlayerEvent::PositionChanged { position_ms, .. }
+        | PlayerEvent::Playing { position_ms, .. } => {
+            *position_ms = position_ms.saturating_sub(backlog_ms);
+        }
+        _ => {}
     }
 }
 
@@ -1550,6 +1570,32 @@ mod tests {
         apply_event(&mut state, PlayerEvent::NarrationStarted { play_request_id: 2, track_id: uri() });
         apply_event(&mut state, PlayerEvent::Stopped { play_request_id: 2, track_id: uri() });
         assert!(!state.narrating);
+    }
+
+    /// librespot reports the packet it has just read, which is ahead of the sound by the
+    /// sink queue; the audible clock pulls it back, while seek positions stay as sent.
+    #[test]
+    fn the_reported_position_is_pulled_back_to_the_sound() {
+        let mut changed =
+            PlayerEvent::PositionChanged { play_request_id: 1, track_id: uri(), position_ms: 10_000 };
+        pull_back_to_the_ear(&mut changed, 267);
+        assert!(matches!(changed, PlayerEvent::PositionChanged { position_ms: 9_733, .. }));
+
+        let mut correction =
+            PlayerEvent::PositionCorrection { play_request_id: 1, track_id: uri(), position_ms: 10_000 };
+        pull_back_to_the_ear(&mut correction, 267);
+        assert!(matches!(correction, PlayerEvent::PositionCorrection { position_ms: 9_733, .. }));
+
+        // A resume with audio already queued starts at the paused position minus the queue;
+        // a fresh track starts at zero, where the saturation above keeps it.
+        let mut playing = PlayerEvent::Playing { play_request_id: 1, track_id: uri(), position_ms: 5_000 };
+        pull_back_to_the_ear(&mut playing, 267);
+        assert!(matches!(playing, PlayerEvent::Playing { position_ms: 4_733, .. }));
+
+        // A queue longer than the track position cannot push it below zero.
+        let mut start = PlayerEvent::PositionChanged { play_request_id: 1, track_id: uri(), position_ms: 100 };
+        pull_back_to_the_ear(&mut start, 500);
+        assert!(matches!(start, PlayerEvent::PositionChanged { position_ms: 0, .. }));
     }
 
     #[test]

@@ -199,6 +199,7 @@
   "Save": "Сохранить",
   "Remove": "Удалить",
   "Permissions are stored in Windows Credential Manager. “Sign out” removes all three; the cache stays.": "Разрешения хранятся в Диспетчере учётных данных Windows. «Выйти» удаляет все три; кэш остаётся.",
+  "Permissions are stored in the system keychain. “Sign out” removes all three; the cache stays.": "Разрешения хранятся в связке ключей системы. «Выйти» удаляет все три; кэш остаётся.",
   "Secret storage is unavailable: permissions last until the app closes. “Sign out” removes all three; the cache stays.": "Хранилище секретов недоступно: разрешения живут до закрытия приложения. «Выйти» удаляет все три; кэш остаётся.",
   "Audio restart needed": "Нужен перезапуск звука",
   "New settings take effect after a restart; the track will resume from the same spot.": "Новые параметры начнут работать после перезапуска; трек продолжится с того же места.",
@@ -364,5 +365,16 @@
   "Cascade delay": "Задержка каскада",
   "{0} ms between neighbouring lines; 0 moves the whole block together": "{0} мс между соседними строками; 0 перемещает весь блок вместе",
   "Inactive lines size": "Размер неактивных строк",
-  "{0}%: how much the lines around the singing one stay smaller": "{0}%: насколько строки вокруг поющейся остаются меньше"
+  "{0}%: how much the lines around the singing one stay smaller": "{0}%: насколько строки вокруг поющейся остаются меньше",
+  "Interface scale": "Масштаб интерфейса",
+  "Size of text and controls. Takes effect after restarting the app": "Размер текста и элементов. Применяется после перезапуска приложения",
+  "Restart to apply the scale": "Перезапустить, чтобы применить масштаб",
+  "The interface scale is read when the app starts. Apply now reopens the app at the new size.": "Масштаб интерфейса читается при запуске. «Применить» перезапустит приложение с новым размером.",
+  "Apply now": "Применить",
+  "Radio on Home": "«Радио» на главной",
+  "The station scene at the top of Home. The Radio page and “Radio from this track” keep working": "Сцена станций сверху главной. Страница «Радио» и «Радио по треку» продолжат работать",
+  "Sidebar list": "Список в боковой панели",
+  "What you added or played last: playlists, albums, artists, podcasts and Liked Songs": "Что добавлено или слушалось последним: плейлисты, альбомы, исполнители, подкасты и «Любимые треки»",
+  "Your playlist tree, folders included": "Дерево плейлистов, вместе с папками",
+  "Nothing in your library yet": "В библиотеке пока ничего нет"
 }

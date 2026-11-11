@@ -151,9 +151,25 @@ Item {
     }
 
     // ---- Действия ----
+    // Наведение на карточку: страница строится в фоне после паузы, клик открывает мгновенно.
+    property var _prewarmedEntry: null
+    function prewarmEntry(e) {
+        if (!e || e.kind !== "playlist")
+            return
+        _prewarmedEntry = { name: "playlist", props: { playlistId: e.id, playlistTitle: e.title ?? "", cover: e.cover ?? "" } }
+        router.prewarmHover(_prewarmedEntry.name, _prewarmedEntry.props)
+    }
+    function prewarmEntryCancel() {
+        if (_prewarmedEntry)
+            router.prewarmHoverCancel(_prewarmedEntry.name, _prewarmedEntry.props)
+    }
+
     function open(e) {
         const k = e.kind ?? ""
-        if (k === "liked")
+        // DJ — не плейлист: у него нет страницы, плитка просто запускает его
+        if (k === "dj")
+            play(e)
+        else if (k === "liked")
             router.push("liked")
         else if (k === "folder")
             router.push("folder", { folderId: e.id, folderTitle: e.title ?? "" })
@@ -582,6 +598,7 @@ Item {
                                 onClicked: page.open(e)
                                 onPlayClicked: page._isPlaying(e) ? Player.togglePlay() : page.play(e)
                                 onMenuRequested: p => page.showMenu(e, p)
+                                onHoveredChanged: hovered ? page.prewarmEntry(e) : page.prewarmEntryCancel()
                             }
                         }
                     }

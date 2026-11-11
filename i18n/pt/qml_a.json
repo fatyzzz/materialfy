@@ -199,6 +199,7 @@
   "Save": "Salvar",
   "Remove": "Remover",
   "Permissions are stored in Windows Credential Manager. “Sign out” removes all three; the cache stays.": "As permissões são guardadas no Gerenciador de Credenciais do Windows. “Sair” remove todas as três; o cache fica.",
+  "Permissions are stored in the system keychain. “Sign out” removes all three; the cache stays.": "As permissões são guardadas no chaveiro do sistema. “Sair” remove todas as três; o cache fica.",
   "Secret storage is unavailable: permissions last until the app closes. “Sign out” removes all three; the cache stays.": "O armazenamento de segredos não está disponível: as permissões duram até o app fechar. “Sair” remove todas as três; o cache fica.",
   "Audio restart needed": "É preciso reiniciar o áudio",
   "New settings take effect after a restart; the track will resume from the same spot.": "As novas configurações passam a valer depois de reiniciar; a faixa continua do mesmo ponto.",
@@ -364,5 +365,16 @@
   "Cascade delay": "Atraso da cascata",
   "{0} ms between neighbouring lines; 0 moves the whole block together": "{0} ms entre linhas vizinhas; 0 move o bloco todo junto",
   "Inactive lines size": "Tamanho das linhas inativas",
-  "{0}%: how much the lines around the singing one stay smaller": "{0}%: quanto as linhas ao redor da que está cantando ficam menores"
+  "{0}%: how much the lines around the singing one stay smaller": "{0}%: quanto as linhas ao redor da que está cantando ficam menores",
+  "Interface scale": "Escala da interface",
+  "Size of text and controls. Takes effect after restarting the app": "Tamanho do texto e dos controles. Aplica-se após reiniciar o aplicativo",
+  "Restart to apply the scale": "Reiniciar para aplicar a escala",
+  "The interface scale is read when the app starts. Apply now reopens the app at the new size.": "A escala da interface é lida quando o app inicia. Aplicar reabre o app no novo tamanho.",
+  "Apply now": "Aplicar agora",
+  "Radio on Home": "Rádio na tela inicial",
+  "The station scene at the top of Home. The Radio page and “Radio from this track” keep working": "A cena de estações no topo da tela inicial. A página Rádio e “Rádio desta faixa” continuam funcionando",
+  "Sidebar list": "Lista da barra lateral",
+  "What you added or played last: playlists, albums, artists, podcasts and Liked Songs": "O que você adicionou ou ouviu por último: playlists, álbuns, artistas, podcasts e Músicas curtidas",
+  "Your playlist tree, folders included": "Sua árvore de playlists, com pastas",
+  "Nothing in your library yet": "Ainda não há nada na sua biblioteca"
 }

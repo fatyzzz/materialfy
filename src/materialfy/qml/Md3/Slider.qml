@@ -21,7 +21,16 @@ Item {
     property color handleColor: Theme.primary
 
     readonly property alias pressed: area.pressed
-    readonly property real position: to === from ? 0 : (value - from) / (to - from)
+    // Значение во время перетаскивания/колеса: показываем его вместо value, чтобы не
+    // перезаписывать value императивно — иначе биндинг value навсегда отваливается, и
+    // два слайдера на одном Player.volume перестают синхронизироваться (пишут, не читают).
+    // NaN-сентинел: диапазоны бывают отрицательные (-500..500 у Sync), знак не годится
+    property real _live: NaN
+    property bool _liveActive: false
+    readonly property real position: {
+        const v = _liveActive ? _live : value
+        return to === from ? 0 : (v - from) / (to - from)
+    }
 
     signal moved(real value)
 
@@ -33,8 +42,9 @@ Item {
         let v = from + p * (to - from)
         if (stepSize > 0)
             v = from + Math.round((v - from) / stepSize) * stepSize
-        if (v !== value) {
-            value = v
+        if (_liveActive === false || v !== _live) {
+            _live = v
+            _liveActive = true
             moved(v)
         }
     }
@@ -119,7 +129,7 @@ Item {
             anchors.centerIn: parent
             type: "labelLarge"
             color: Theme.fgInverseSurface
-            text: root.valueText(root.value)
+            text: root.valueText(root._liveActive ? root._live : root.value)
         }
     }
 
@@ -130,14 +140,31 @@ Item {
         preventStealing: true
         onPressed: mouse => root._setFromX(mouse.x)
         onPositionChanged: mouse => { if (pressed) root._setFromX(mouse.x) }
+        onReleased: root._liveActive = false
+        onCanceled: root._liveActive = false
         onWheel: wheel => {
             if (!root.wheelEnabled) {
                 wheel.accepted = false
                 return
             }
             const step = root.stepSize > 0 ? root.stepSize : (root.to - root.from) / 50
-            const v = Math.max(root.from, Math.min(root.to, root.value + (wheel.angleDelta.y > 0 ? step : -step)))
-            if (v !== root.value) { root.value = v; root.moved(v) }
+            // База — live-значение, не биндинг: при лагающем свойстве (remote volume) быстрые
+            // шаги колеса в окне 150 мс считались бы от одного и того же старого value и терялись
+            const base = root._liveActive ? root._live : root.value
+            const v = Math.max(root.from, Math.min(root.to, base + (wheel.angleDelta.y > 0 ? step : -step)))
+            if (root._liveActive === false || v !== root._live) {
+                root._live = v
+                root._liveActive = true
+                root.moved(v)
+            }
+            // колесо не шлёт release: live держится, пока биндинг value не догонит
+            wheelLive.restart()
         }
+    }
+
+    Timer {
+        id: wheelLive
+        interval: 150
+        onTriggered: root._liveActive = false
     }
 }

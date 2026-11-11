@@ -171,6 +171,8 @@ impl ConnectBackend {
                     Err(error) => Err(format!("album tracks via the session: {error:?}")),
                 }
             }
+            // метаданные одного трека — Web API: их нет в кластере устройства
+            ApiCall::TrackInfo { .. } => return self.web.call(call).await,
         };
         match result {
             Ok(reply) => reply,

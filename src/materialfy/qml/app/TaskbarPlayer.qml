@@ -392,6 +392,7 @@ Window {
                 anchors.verticalCenter: parent.verticalCenter
                 size: 32
                 playing: Player.playing
+                loading: Player.buffering
                 containerColor: root.accent
                 iconColor: root.colorMode ? (root._onCover ? "#000000" : Theme.primaryContainer) : Theme.fgPrimaryFixed
                 spin: false

@@ -196,6 +196,32 @@ fn apply_gpu_preference(settings: &SettingsStore) {
     }
 }
 
+/// Масштаб интерфейса из настроек: QT_SCALE_FACTOR читается QGuiApplication при создании, поэтому
+/// переменная выставляется до app_create. Смена настройки применяется после перезапуска приложения.
+fn apply_ui_scale(settings: &SettingsStore) {
+    if cfg!(target_os = "android") {
+        return;
+    }
+    const MARKER: &str = "MATERIALFY_UI_SCALE";
+    // Перезапуск из самого приложения (обновление, AppImage) наследует переменные прошлого процесса:
+    // в этом случае настройка важнее унаследованного значения, иначе новый масштаб не применится.
+    let relaunched = std::env::var_os(MARKER).is_some();
+    if !relaunched && std::env::var_os("QT_SCALE_FACTOR").is_some_and(|value| !value.is_empty()) {
+        return; // явное значение пользователя важнее настройки
+    }
+    let percent = settings.get_int(SettingKey::UiScale);
+    let factor = format!("{:.2}", percent as f64 / 100.0);
+    let percent = percent.to_string();
+    // Через Qt: на Windows он читает переменные из копии C-рантайма, std::env::set_var её не меняет
+    // (см. qml_cache). std::env нужен, чтобы значение унаследовал перезапущенный процесс.
+    ffi::set_qt_env(&qstr("QT_SCALE_FACTOR"), &qstr(&factor));
+    // SAFETY: вызывается до создания QApplication и сторонних потоков
+    unsafe {
+        std::env::set_var("QT_SCALE_FACTOR", &factor);
+        std::env::set_var(MARKER, &percent);
+    }
+}
+
 /// Временный каталог настроек для --screenshot.
 fn make_temp_dir() -> PathBuf {
     let base = std::env::temp_dir();
@@ -335,6 +361,7 @@ pub fn run(cli: Cli) -> i32 {
     let config_dir = cli.config_dir.clone().or_else(|| cli.screenshot.as_ref().map(|_| make_temp_dir()));
     let settings = SettingsStore::open(config_dir);
     apply_gpu_preference(&settings);
+    apply_ui_scale(&settings);
 
     ffi::app_set_names(&qstr("Materialfy"), &qstr("materialfy"), &qstr("materialfy"));
     let args: Vec<String> = std::env::args_os().map(|a| a.to_string_lossy().into_owned()).collect();

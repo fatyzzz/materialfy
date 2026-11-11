@@ -94,6 +94,10 @@ done
     --icon-file "$APPDIR/usr/share/icons/hicolor/scalable/apps/materialfy.svg" \
     --plugin qt
 
+# appimagetool (since late Oct 2026) only takes a PNG for .DirIcon, not the SVG linuxdeploy links
+cp "$ROOT/materialfy.png" "$APPDIR/materialfy.png"
+ln -sfn materialfy.png "$APPDIR/.DirIcon"
+
 TARBALL="$OUT/materialfy-$VERSION-linux-$ARCH.tar.gz"
 tar -C "$OUT" --transform "s|^AppDir|materialfy-$VERSION|" -czf "$TARBALL" AppDir
 echo "tar.gz: $TARBALL"

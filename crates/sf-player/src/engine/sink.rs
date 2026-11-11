@@ -155,6 +155,20 @@ struct AudioTarget {
     /// The outgoing track while it fades under the next one.
     tail: Weak<rodio::Sink>,
     tail_envelope: Option<Arc<Envelope>>,
+    /// What the current output has queued but not played yet, for the audible clock.
+    queued: Weak<Queued>,
+    sample_rate: u32,
+    /// Latency the device reports for what it already took (mixer, Bluetooth), past our own queue.
+    clock: fastframe_audio::Clock,
+}
+
+/// The most device latency the audible position takes in, so an odd backend value cannot throw the lyrics far back.
+const DEVICE_LATENCY_CAP_MS: f64 = 400.0;
+
+/// Queued output plus what the device still holds, in track time (`speed` seconds of track per output second).
+fn backlog_in_track_time(output_ms: u64, device: Duration, speed: f64) -> u32 {
+    let device_ms = (device.as_secs_f64() * 1000.0).min(DEVICE_LATENCY_CAP_MS);
+    u32::try_from(((output_ms as f64 + device_ms) * speed.max(0.0)) as u64).unwrap_or(u32::MAX)
 }
 
 impl AudioControl {
@@ -180,13 +194,19 @@ impl AudioControl {
         match event {
             PlayerEvent::TrackChanged { .. } => self.track_changed(),
             PlayerEvent::Seeked { .. } => {
-                let target = self.target.lock().unwrap_or_else(PoisonError::into_inner);
-                if let Some(sink) = target.sink.upgrade() {
-                    sink.stop();
+                {
+                    let target = self.target.lock().unwrap_or_else(PoisonError::into_inner);
+                    if let Some(sink) = target.sink.upgrade() {
+                        sink.stop();
+                    }
+                    if let Some(tail) = target.tail.upgrade() {
+                        tail.stop();
+                    }
                 }
-                if let Some(tail) = target.tail.upgrade() {
-                    tail.stop();
-                }
+                // The stopped queue will never play; it must not pull the new position back.
+                // Clear before the reset below: the next write creates and re-registers a
+                // fresh queue, so a registration racing this clear is replaced, not lost.
+                self.clear_queue();
                 self.reset_output.store(true, Ordering::SeqCst);
                 self.reset_processing.store(true, Ordering::SeqCst);
                 // Previous can rewind the current track after interrupting
@@ -229,6 +249,7 @@ impl AudioControl {
         }
         self.reset_output.store(true, Ordering::SeqCst);
         self.reset_processing.store(true, Ordering::SeqCst);
+        self.clear_queue();
     }
 
     /// Waits for a fade to reach silence, or as long as one can take.
@@ -247,7 +268,15 @@ impl AudioControl {
 
     /// Releases the gate if the requested replacement stopped instead.
     pub fn stopped(&self) {
+        // очередь не чистим: Sink::stop её уже доиграл, а без сброса следующая сессия пишет в ту же
         self.waiting_for_track.store(false, Ordering::SeqCst);
+    }
+
+    /// The old output's queue no longer describes what will be heard.
+    fn clear_queue(&self) {
+        let mut target = self.target.lock().unwrap_or_else(PoisonError::into_inner);
+        target.queued = Weak::new();
+        target.sample_rate = 0;
     }
 
     fn waiting_for_track(&self) -> bool {
@@ -268,6 +297,39 @@ impl AudioControl {
         let mut target = self.target.lock().unwrap_or_else(PoisonError::into_inner);
         target.sink = Arc::downgrade(sink);
         target.envelope = Some(envelope);
+    }
+
+    /// The queue of the output now playing: frames written but not played yet.
+    fn register_queue(&self, queued: &Arc<Queued>, sample_rate: u32) {
+        let mut target = self.target.lock().unwrap_or_else(PoisonError::into_inner);
+        target.queued = Arc::downgrade(queued);
+        target.sample_rate = sample_rate;
+    }
+
+    fn register_clock(&self, clock: fastframe_audio::Clock) {
+        self.target.lock().unwrap_or_else(PoisonError::into_inner).clock = clock;
+    }
+
+    /// How far the sound being heard is behind the packet librespot reports, in milliseconds.
+    pub(crate) fn backlog_ms(&self) -> u32 {
+        // диджей играет на 1.0×, без растяжения
+        let speed = if self.report.narrating.load(Ordering::Relaxed) { 1.0 } else { super::fx::speed() };
+        self.backlog_ms_at(f64::from(speed))
+    }
+
+    /// `speed` is the time-stretch factor: the queue counts output frames, while the
+    /// track advances `speed` seconds per output second.
+    fn backlog_ms_at(&self, speed: f64) -> u32 {
+        let target = self.target.lock().unwrap_or_else(PoisonError::into_inner);
+        let Some(queued) = target.queued.upgrade() else {
+            return 0;
+        };
+        let rate = u64::from(target.sample_rate);
+        if rate == 0 {
+            return 0;
+        }
+        let output_ms = queued.frames().saturating_mul(1000) / rate;
+        backlog_in_track_time(output_ms, target.clock.latency(), speed)
     }
 
     /// The outgoing track of a crossfade, for a skip or seek to stop too.
@@ -623,6 +685,7 @@ impl Output {
         // The first sound has silence to come up from instead of a hard edge.
         self.transport = Envelope::closed(sample_rate, TRANSPORT_FADE);
         self.queued = Queued::new();
+        control.register_queue(&self.queued, self.sample_rate);
         self.fed = false;
         self.last_write = None;
         // The tail played on the old mixer, which this one replaces.
@@ -656,6 +719,7 @@ impl Output {
         control.register_tail(Some((&outgoing, Arc::clone(&self.envelope))));
         self.envelope = incoming;
         self.queued = Queued::new();
+        control.register_queue(&self.queued, self.sample_rate);
         self.tail = Some(outgoing);
         // An empty queue here is the handover, not an underrun.
         self.fed = false;
@@ -985,6 +1049,7 @@ impl Sink for RodioSink {
             output.sink = sink;
             output.envelope = envelope;
             output.queued = Queued::new();
+            self.control.register_queue(&output.queued, output.sample_rate);
             output.resampler =
                 Resampler::new(SAMPLE_RATE, output.sample_rate, NUM_CHANNELS as usize);
             output.fed = false;
@@ -1223,6 +1288,7 @@ fn open_output(
         tail: None,
     };
     output.attach((mixer, sample_rate), control);
+    control.register_clock(output.device.clock());
     Ok(output)
 }
 
@@ -1947,5 +2013,32 @@ mod tests {
         queued.wait_for_room(100);
         assert!(started.elapsed() < Duration::from_secs(2));
         assert_eq!(queued.wake_at.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn the_device_latency_adds_to_the_backlog_up_to_a_cap() {
+        let ms = Duration::from_millis;
+        assert_eq!(backlog_in_track_time(1_000, ms(0), 1.0), 1_000);
+        assert_eq!(backlog_in_track_time(1_000, ms(150), 1.0), 1_150);
+        assert_eq!(backlog_in_track_time(1_000, ms(150), 2.0), 2_300, "scaled by the speed like the queue");
+        assert_eq!(backlog_in_track_time(0, ms(5_000), 1.0), 400, "capped");
+    }
+
+    /// The queue counts output frames; the track position moves `speed` seconds per
+    /// output second, and the queue is the audio still to be heard.
+    #[test]
+    fn the_backlog_is_the_queued_audio_in_track_time() {
+        let control = AudioControl::new(DEFAULT_BUFFER_MS);
+        assert_eq!(control.backlog_ms_at(1.0), 0, "no output yet");
+        let queued = Queued::new();
+        queued.appended.store(44_100, Ordering::SeqCst);
+        control.register_queue(&queued, 44_100);
+        assert_eq!(control.backlog_ms_at(1.0), 1_000);
+        assert_eq!(control.backlog_ms_at(2.0), 2_000);
+        assert_eq!(control.backlog_ms_at(0.5), 500);
+        queued.consumed.store(22_050, Ordering::SeqCst);
+        assert_eq!(control.backlog_ms_at(1.0), 500);
+        control.clear_queue();
+        assert_eq!(control.backlog_ms_at(1.0), 0, "the stopped queue is gone");
     }
 }

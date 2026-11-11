@@ -238,5 +238,7 @@
   "“{0}” added to queue": "“{0}” adicionado à fila",
   "“{0}” didn’t show up in Spotify Connect — try again": "“{0}” não apareceu no Spotify Connect — tente novamente",
   "“{0}” is no longer visible on the network": "“{0}” não está mais visível na rede",
-  "Playback on this computer only works through an HTTP proxy — over SOCKS5 audio would bypass the proxy": "A reprodução neste computador só funciona por um proxy HTTP — via SOCKS5 o áudio ignoraria o proxy"
+  "Playback on this computer only works through an HTTP proxy — over SOCKS5 audio would bypass the proxy": "A reprodução neste computador só funciona por um proxy HTTP — via SOCKS5 o áudio ignoraria o proxy",
+  "This track isn't available — moving on": "Esta faixa não está disponível — seguindo em frente",
+  "“{0}” isn't available — moving on": "“{0}” não está disponível — seguindo em frente"
 }

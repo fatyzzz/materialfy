@@ -62,7 +62,7 @@ pub fn build_from_timed_lines(pairs: &[(f64, String)], duration: f64) -> Vec<Lin
         if end <= t {
             end = t + 0.5;
         }
-        lines.push(Line::Words { t: round3(t), e: round3(end), w: interpolate_words(text, t, end), i: true });
+        lines.push(Line::words(round3(t), round3(end), interpolate_words(text, t, end), true));
     }
     lines
 }
@@ -161,7 +161,7 @@ pub fn parse_yrc(yrc: &str) -> Vec<Line> {
         let words = group_syllables(&syllables);
         let Some(last) = words.last() else { continue };
         let e = round3((ls + ld).max(last.e));
-        lines.push(Line::Words { t: round3(ls), e, w: words, i: false });
+        lines.push(Line::words(round3(ls), e, words, false));
     }
     lines
 }
@@ -196,7 +196,7 @@ mod tests {
     }
 
     fn line(t: f64, e: f64) -> Line {
-        Line::Words { t, e, w: Vec::new(), i: false }
+        Line::words(t, e, Vec::new(), false)
     }
 
     // ── порт LyricsSourcesTest.kt ──

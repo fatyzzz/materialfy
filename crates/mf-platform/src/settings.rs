@@ -82,6 +82,8 @@ pub enum SettingKey {
     GpuPreference,
     /// язык интерфейса: "system" (как в ОС) | "en" | "ru" | "pt" (mf_i18n::parse_setting); меняется на лету
     Language,
+    /// масштаб интерфейса в процентах: 75 | 100 | 125 | 150 | 200 (QT_SCALE_FACTOR, после перезапуска)
+    UiScale,
     // Раскладка
     RightPanelOpen,
     RightPanelTab,
@@ -97,6 +99,10 @@ pub enum SettingKey {
     LibrarySort,
     /// скрытые полки главной через запятую (quick,recent,madeForYou,podcasts,topArtists,topTracks)
     HomeHidden,
+    /// сцена «Радио» на главной
+    HomeRadioHidden,
+    /// в боковой панели вместо списка плейлистов — последние добавленные/обновлённые
+    SidebarLibrary,
     // Воспроизведение (librespot)
     /// 96 | 160 | 320 кбит/с (смена — перезапуск движка)
     Bitrate,
@@ -151,6 +157,12 @@ pub enum SettingKey {
     TaskbarWidgetPos,
     /// сколько раз под раскрытым островком показана подсказка с клавишами (до 3)
     FloatingKeyHints,
+    FloatingHideFullscreen,
+    FloatingHideMaximized,
+    FloatingOffsetX,
+    FloatingEdge,
+    FloatingFreeX,
+    FloatingFreeY,
     /// мониторы для островка: "" / "0" (основной) | "0,1" | "all"
     FloatingIslandScreens,
     /// мониторы для панели задач: "" / "0" (основной) | "0,1" | "all"
@@ -183,7 +195,7 @@ pub enum SettingType {
 }
 
 impl SettingKey {
-    pub const ALL: [SettingKey; 81] = [
+    pub const ALL: [SettingKey; 90] = [
         SettingKey::ThemeMode,
         SettingKey::SchemeVariant,
         SettingKey::AccentFromCover,
@@ -219,6 +231,7 @@ impl SettingKey {
         SettingKey::LowPowerMode,
         SettingKey::GpuPreference,
         SettingKey::Language,
+        SettingKey::UiScale,
         SettingKey::RightPanelOpen,
         SettingKey::RightPanelTab,
         SettingKey::SidebarCollapsed,
@@ -230,6 +243,8 @@ impl SettingKey {
         SettingKey::LibraryView,
         SettingKey::LibrarySort,
         SettingKey::HomeHidden,
+        SettingKey::HomeRadioHidden,
+        SettingKey::SidebarLibrary,
         SettingKey::Bitrate,
         SettingKey::Normalisation,
         SettingKey::Gapless,
@@ -259,6 +274,12 @@ impl SettingKey {
         SettingKey::FloatingPlayerStyle,
         SettingKey::TaskbarWidgetPos,
         SettingKey::FloatingKeyHints,
+        SettingKey::FloatingHideFullscreen,
+        SettingKey::FloatingHideMaximized,
+        SettingKey::FloatingOffsetX,
+        SettingKey::FloatingEdge,
+        SettingKey::FloatingFreeX,
+        SettingKey::FloatingFreeY,
         SettingKey::FloatingIslandScreens,
         SettingKey::TaskbarScreens,
         SettingKey::TaskbarPositions,
@@ -306,6 +327,7 @@ impl SettingKey {
             LowPowerMode => "lowPowerMode",
             GpuPreference => "gpuPreference",
             Language => "language",
+            UiScale => "uiScale",
             RightPanelOpen => "rightPanelOpen",
             RightPanelTab => "rightPanelTab",
             SidebarCollapsed => "sidebarCollapsed",
@@ -317,6 +339,8 @@ impl SettingKey {
             LibraryView => "libraryView",
             LibrarySort => "librarySort",
             HomeHidden => "homeHidden",
+            HomeRadioHidden => "homeRadioHidden",
+            SidebarLibrary => "sidebarLibrary",
             Bitrate => "bitrate",
             Normalisation => "normalisation",
             Gapless => "gapless",
@@ -346,6 +370,12 @@ impl SettingKey {
             FloatingPlayerStyle => "floatingPlayerStyle",
             TaskbarWidgetPos => "taskbarWidgetPos",
             FloatingKeyHints => "floatingKeyHints",
+            FloatingHideFullscreen => "floatingHideFullscreen",
+            FloatingHideMaximized => "floatingHideMaximized",
+            FloatingOffsetX => "floatingOffsetX",
+            FloatingEdge => "floatingEdge",
+            FloatingFreeX => "floatingFreeX",
+            FloatingFreeY => "floatingFreeY",
             FloatingIslandScreens => "floatingIslandScreens",
             TaskbarScreens => "taskbarScreens",
             TaskbarPositions => "taskbarPositions",
@@ -407,6 +437,7 @@ impl SettingKey {
             LowPowerMode => Str("auto".into()),
             GpuPreference => Str("auto".into()),
             Language => Str("system".into()),
+            UiScale => Int(100),
             RightPanelOpen => Bool(false),
             RightPanelTab => Str("queue".into()),
             SidebarCollapsed => Bool(false),
@@ -418,6 +449,8 @@ impl SettingKey {
             LibraryView => Str("grid".into()),
             LibrarySort => Str("recent".into()),
             HomeHidden => Str(String::new()),
+            HomeRadioHidden => Bool(false),
+            SidebarLibrary => Bool(false),
             Bitrate => Int(320),
             Normalisation => Bool(true),
             Gapless => Bool(true),
@@ -447,6 +480,12 @@ impl SettingKey {
             FloatingPlayerStyle => Str("black".into()),
             TaskbarWidgetPos => Str("tray".into()),
             FloatingKeyHints => Int(0),
+            FloatingHideFullscreen => Bool(true),
+            FloatingHideMaximized => Bool(false),
+            FloatingOffsetX => Int(0),
+            FloatingEdge => Str("top".into()),
+            FloatingFreeX => Int(WINDOW_POS_UNSET),
+            FloatingFreeY => Int(WINDOW_POS_UNSET),
             FloatingIslandScreens => Str(String::new()),
             TaskbarScreens => Str(String::new()),
             TaskbarPositions => Str(String::new()),
@@ -508,6 +547,16 @@ impl SettingKey {
             (SettingKey::LyricsSyncMs, SettingValue::Int(ms)) => {
                 SettingValue::Int(ms.clamp(-500, 500))
             }
+            (SettingKey::UiScale, SettingValue::Int(percent)) => {
+                // пресеты из настроек; значение из конфига вне пресетов — ближайший
+                let percent = percent.clamp(50, 250);
+                SettingValue::Int(
+                    [75i64, 100, 125, 150, 200]
+                        .into_iter()
+                        .min_by_key(|preset| (preset - percent).abs())
+                        .unwrap_or(100),
+                )
+            }
             (SettingKey::LyricsTextAlign, SettingValue::Str(s)) => {
                 SettingValue::Str(match s.as_str() {
                     "center" => "center",
@@ -541,6 +590,16 @@ impl SettingKey {
                     _ => "off",
                 }.into())
             }
+            (SettingKey::FloatingEdge, SettingValue::Str(s)) => SettingValue::Str(
+                match s.as_str() {
+                    "bottom" => "bottom",
+                    "left" => "left",
+                    "right" => "right",
+                    "free" => "free",
+                    _ => "top",
+                }
+                .into(),
+            ),
             (SettingKey::FloatingPlayerStyle, SettingValue::Str(s)) => {
                 SettingValue::Str(if s == "color" { "color" } else { "black" }.into())
             }
@@ -1183,7 +1242,7 @@ mod tests {
 
     #[test]
     fn schema() {
-        assert_eq!(SettingKey::ALL.len(), 81);
+        assert_eq!(SettingKey::ALL.len(), 90);
         for key in SettingKey::ALL {
             assert_eq!(SettingKey::from_name(key.name()), Some(key));
             assert_eq!(key.default_value().value_type(), key.value_type());
@@ -1201,6 +1260,11 @@ mod tests {
         assert_eq!(SettingKey::PlaybackSpeed.normalize(Float(f64::NAN)), Float(1.0));
         assert_eq!(SettingKey::Crossfade.normalize(Int(-3)), Int(0));
         assert_eq!(SettingKey::Crossfade.normalize(Int(40)), Int(CROSSFADE_MAX_S));
+        assert_eq!(SettingKey::UiScale.normalize(Int(100)), Int(100));
+        assert_eq!(SettingKey::UiScale.normalize(Int(110)), Int(100));
+        assert_eq!(SettingKey::UiScale.normalize(Int(120)), Int(125));
+        assert_eq!(SettingKey::UiScale.normalize(Int(1)), Int(75));
+        assert_eq!(SettingKey::UiScale.normalize(Int(900)), Int(200));
         assert_eq!(SettingKey::LyricsTextAlign.normalize(Str("auto".into())), Str("left".into()));
         assert_eq!(SettingKey::LyricsTextAlign.normalize(Str("center".into())), Str("center".into()));
         assert_eq!(SettingKey::LyricsTextAlign.normalize(Str("right".into())), Str("right".into()));
@@ -1216,6 +1280,8 @@ mod tests {
         assert_eq!(SettingKey::FloatingPlayer.normalize(Str("notch".into())), Str("off".into()));
         assert_eq!(SettingKey::FloatingPlayerStyle.normalize(Str("color".into())), Str("color".into()));
         assert_eq!(SettingKey::FloatingPlayerStyle.normalize(Str("pink".into())), Str("black".into()));
+        assert_eq!(SettingKey::FloatingEdge.normalize(Str("left".into())), Str("left".into()));
+        assert_eq!(SettingKey::FloatingEdge.normalize(Str("up".into())), Str("top".into()));
         assert_eq!(SettingKey::TaskbarWidgetPos.normalize(Str("appsRight".into())), Str("appsRight".into()));
         assert_eq!(SettingKey::TaskbarWidgetPos.normalize(Str("0.5".into())), Str("0.5000".into()));
         assert_eq!(SettingKey::TaskbarWidgetPos.normalize(Str("7".into())), Str("1.0000".into()));
@@ -1525,10 +1591,10 @@ mod tests {
             "lyricsLineSpacing", "lyricsAnimate", "lyricsShowSource", "lyricsSyncMs",
             "animations", "lowPowerMode", "gpuPreference", "rightPanelOpen", "rightPanelTab", "sidebarCollapsed", "windowWidth",
             "windowHeight", "windowX", "windowY", "windowMaximized", "closeToTray", "wheelStep", "floatingPlayer", "floatingPlayerStyle",
-            "taskbarWidgetPos", "floatingKeyHints", "libraryView",
-            "librarySort", "homeHidden", "bitrate", "normalisation", "gapless", "autoplay", "volume", "audioDevice",
+            "taskbarWidgetPos", "floatingKeyHints", "floatingHideFullscreen", "floatingHideMaximized", "floatingOffsetX", "floatingEdge", "floatingFreeX", "floatingFreeY", "libraryView",
+            "librarySort", "homeHidden", "homeRadioHidden", "sidebarLibrary", "bitrate", "normalisation", "gapless", "autoplay", "volume", "audioDevice",
             "audioCache", "audioCacheMb", "playbackAuthorized", "deviceName", "webClientId", "apiLimitTipDismissed", "proxyMode", "proxyHost",
-            "proxyPort", "proxyUsername", "coversBypassProxy", "pins", "hiddenTracks", "radioSeeds", "language", "autoUpdateCheck",
+            "proxyPort", "proxyUsername", "coversBypassProxy", "pins", "hiddenTracks", "radioSeeds", "language", "uiScale", "autoUpdateCheck",
             "updateChannel", "skippedVersion",
         ] {
             assert!(names.contains(&name), "{name}");

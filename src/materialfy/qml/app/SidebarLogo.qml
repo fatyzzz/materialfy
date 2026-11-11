@@ -2,7 +2,6 @@ import QtQuick
 import QtQuick.Shapes
 import Md3
 import "../Md3/Shapes.js" as Shapes
-import "LogoPaths.js" as Logo
 
 // Шапка боковой панели: знак «Волна-M» и надпись «Materialfy» (локап как в wordmark.svg).
 // Знак — кнопка «свернуть / развернуть панель», как в ChatGPT и Claude: при наведении или фокусе с клавиатуры
@@ -10,6 +9,8 @@ import "LogoPaths.js" as Logo
 // Морф и смена иконки — переходы свойств по токенам Theme.motion; при Theme.reducedMotion — мгновенно.
 Item {
     id: root
+
+    LogoPaths { id: logo }
 
     property real markSize: 40                 // диаметр печеньки
     property bool expanded: true               // true — действие «свернуть», false — «развернуть»
@@ -80,12 +81,12 @@ Item {
                 fillGradient: LinearGradient {
                     x1: mark.width * 64 / 480; y1: mark.height * 24 / 480
                     x2: mark.width * 416 / 480; y2: mark.height * 456 / 480
-                    GradientStop { position: 0; color: Qt.tint(Logo.ultraviolet[0], Qt.alpha(Logo.lilac, mark.stateOpacity)) }
-                    GradientStop { position: 1; color: Qt.tint(Logo.ultraviolet[1], Qt.alpha(Logo.lilac, mark.stateOpacity)) }
+                    GradientStop { position: 0; color: Qt.tint(logo.ultraviolet[0], Qt.alpha(logo.lilac, mark.stateOpacity)) }
+                    GradientStop { position: 1; color: Qt.tint(logo.ultraviolet[1], Qt.alpha(logo.lilac, mark.stateOpacity)) }
                 }
                 PathPolyline {
                     // зубцы доворачиваются на полшага, пока сглаживаются в круг
-                    path: Shapes.outline(Logo.cookie, "circle", mark.t, 96, mark.width, mark.height, mark.t * Math.PI / 8, 0, 0, 0)
+                    path: Shapes.outline(logo.cookie, "circle", mark.t, 96, mark.width, mark.height, mark.t * Math.PI / 8, 0, 0, 0)
                 }
             }
         }
@@ -100,16 +101,16 @@ Item {
             ShapePath {
                 strokeColor: "transparent"
                 strokeWidth: 0
-                fillColor: Logo.lilac
+                fillColor: logo.lilac
                 scale: Qt.size(root._k, root._k)
-                PathSvg { path: Logo.glyph }
+                PathSvg { path: logo.glyph }
             }
             ShapePath {
                 strokeColor: "transparent"
                 strokeWidth: 0
-                fillColor: Logo.ember
+                fillColor: logo.ember
                 scale: Qt.size(root._k, root._k)
-                PathSvg { path: Logo.runner }
+                PathSvg { path: logo.runner }
             }
         }
 
@@ -118,7 +119,7 @@ Item {
             name: root.actionIcon
             size: 24
             weight: 500
-            color: Logo.lilac
+            color: logo.lilac
             opacity: mark.iconIn
             visible: opacity > 0
             scale: 0.6 + 0.4 * mark.iconIn
@@ -150,8 +151,8 @@ Item {
     // Надпись в кривых из wordmark.svg (без знака), цвет onSurface; гаснет в рейле
     Shape {
         id: wordmark
-        x: mark.x + Logo.textLeft * root._k
-        width: Logo.textWidth * root._k
+        x: mark.x + logo.textLeft * root._k
+        width: logo.textWidth * root._k
         height: root.markSize
         anchors.verticalCenter: parent.verticalCenter
         preferredRendererType: Shape.CurveRenderer
@@ -163,14 +164,14 @@ Item {
             strokeWidth: 0
             fillColor: Theme.fgSurface
             scale: Qt.size(root._k, root._k)
-            PathSvg { path: Logo.text }
+            PathSvg { path: logo.text }
         }
         ShapePath {
             strokeColor: "transparent"
             strokeWidth: 0
-            fillColor: Logo.ember
+            fillColor: logo.ember
             scale: Qt.size(root._k, root._k)
-            PathSvg { path: Logo.textDot }
+            PathSvg { path: logo.textDot }
         }
     }
 

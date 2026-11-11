@@ -258,8 +258,8 @@ Item {
                 IconButton {
                     id: playToggle
                     anchors.fill: parent
-                    icon: Player.playing ? "pause" : "play_arrow"
-                    Accessible.name: Player.playing ? I18n.t("Pause") : I18n.t("Play")
+                    icon: Player.buffering || Player.playing ? "pause" : "play_arrow"
+                    Accessible.name: Player.buffering || Player.playing ? I18n.t("Pause") : I18n.t("Play")
                     iconSize: 30
                     iconFill: 1
                     iconColor: Theme.fgSurface

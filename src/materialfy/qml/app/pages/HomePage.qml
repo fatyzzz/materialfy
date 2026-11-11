@@ -145,6 +145,9 @@ Page {
     // ---- Сцена «Радио» ----
     RadioOrbit {
         id: orbit
+        // сцена «Радио» видна по умолчанию; в настройках её можно скрыть — страница «Радио» и
+        // «Радио по треку» остаются
+        visible: Settings.homeRadioHidden !== true
         Layout.fillWidth: true
         Layout.topMargin: 8
         Layout.preferredHeight: implicitHeight
@@ -317,7 +320,11 @@ Page {
                         available: modelData.available ?? true
                         liked: Library.likesRevision >= 0 && Library.isLiked(trackId)
                         current: trackId !== "" && trackId === Player.trackId
-                        onActivated: Player.playUris(tracksCol.tracks.map(t => t.uri), index)
+                        onActivated: {
+                            // строка главной приходит из Web API, а не из каталога: без неё экран ждал бы звука
+                            Player.rememberTrack(modelData)
+                            Player.playUris(tracksCol.tracks.map(t => t.uri), index)
+                        }
                         onLikeClicked: Library.toggleLike(modelData)
                     }
                 }
@@ -474,6 +481,13 @@ Page {
                         onClicked: page.openEntry(e)
                         onPlayClicked: page.playEntry(e)
                         onMenuRequested: p => page.showMenu(e, p)
+                        onHoveredChanged: {
+                            if (e.kind !== "playlist")
+                                return
+                            const props = { playlistId: e.id, playlistTitle: e.title ?? "", cover: e.cover ?? "" }
+                            hovered ? router.prewarmHover("playlist", props)
+                                    : router.prewarmHoverCancel("playlist", props)
+                        }
                     }
                 }
                 Component {

@@ -295,26 +295,30 @@ Page {
         Repeater {
             model: page.artist ? page.artist.albums : null
             Loader {
-                id: slot
+                id: albumSlot
                 required property int index
                 required property var model
                 active: page.allAlbums || index < tilesPerRow.value * 2
                 visible: active
                 sourceComponent: MediaTile {
                     size: tilesPerRow.tile
-                    cover: slot.model.cover
+                    cover: albumSlot.model.cover
                     coverKind: "album"
                     coverArtist: page.info.name ?? ""
-                    coverTitle: slot.model.title
-                    title: slot.model.title
-                    subtitle: [slot.model.year || "", slot.model.kind ? I18n.any(slot.model.kind) : ""].filter(x => x).join(" · ")
-                    explicit: slot.model.explicit
+                    coverTitle: albumSlot.model.title
+                    title: albumSlot.model.title
+                    // первая плитка — самый свежий релиз (сервис ставит его первым): подпись объясняет,
+                    // почему он первый. Без года подписи нет — значит свежего релиза у исполнителя и нет
+                    subtitle: [albumSlot.index === 0 && albumSlot.model.year > 0 ? I18n.t("Latest release") : "",
+                               albumSlot.model.year || "",
+                               albumSlot.model.kind ? I18n.any(albumSlot.model.kind) : ""].filter(x => x).join(" · ")
+                    explicit: albumSlot.model.explicit
                     // «Слушать» по наведению, как на главной: играющий альбом ставится на паузу
-                    readonly property string albumUri: slot.model.uri || ("spotify:album:" + slot.model.albumId)
+                    readonly property string albumUri: albumSlot.model.uri || ("spotify:album:" + albumSlot.model.albumId)
                     showPlay: true
                     playing: Player.playing && Player.contextUri === albumUri
                     onPlayClicked: Player.contextUri === albumUri ? Player.togglePlay() : Player.playContext(albumUri, "")
-                    onClicked: Catalog.openAlbum(slot.model.albumId)
+                    onClicked: Catalog.openAlbum(albumSlot.model.albumId)
                 }
             }
         }
@@ -330,26 +334,26 @@ Page {
         Repeater {
             model: page.artist ? page.artist.alsoAlbums : null
             Loader {
-                id: slot
+                id: appearanceSlot
                 required property int index
                 required property var model
                 active: index < tilesPerRow.value
                 visible: active
                 sourceComponent: MediaTile {
                     size: tilesPerRow.tile
-                    cover: slot.model.cover
+                    cover: appearanceSlot.model.cover
                     coverKind: "album"
-                    coverArtist: (slot.model.artists ?? "").split(", ")[0]
-                    coverTitle: slot.model.title
-                    title: slot.model.title
-                    subtitle: slot.model.artists
-                    explicit: slot.model.explicit
+                    coverArtist: (appearanceSlot.model.artists ?? "").split(", ")[0]
+                    coverTitle: appearanceSlot.model.title
+                    title: appearanceSlot.model.title
+                    subtitle: appearanceSlot.model.artists
+                    explicit: appearanceSlot.model.explicit
                     // «Слушать» по наведению, как на главной: играющий альбом ставится на паузу
-                    readonly property string albumUri: slot.model.uri || ("spotify:album:" + slot.model.albumId)
+                    readonly property string albumUri: appearanceSlot.model.uri || ("spotify:album:" + appearanceSlot.model.albumId)
                     showPlay: true
                     playing: Player.playing && Player.contextUri === albumUri
                     onPlayClicked: Player.contextUri === albumUri ? Player.togglePlay() : Player.playContext(albumUri, "")
-                    onClicked: Catalog.openAlbum(slot.model.albumId)
+                    onClicked: Catalog.openAlbum(appearanceSlot.model.albumId)
                 }
             }
         }
@@ -404,7 +408,7 @@ Page {
         Repeater {
             model: page.artist ? page.artist.similar : null
             Loader {
-                id: slot
+                id: similarSlot
                 required property int index
                 required property var model
                 active: index < tilesPerRow.value
@@ -413,11 +417,11 @@ Page {
                     size: Theme.mobile ? tilesPerRow.tile : 148
                     round: true
                     placeholderIcon: "person"
-                    cover: slot.model.cover
+                    cover: similarSlot.model.cover
                     coverKind: "artist"
-                    coverArtist: slot.model.name
-                    title: slot.model.name
-                    onClicked: Catalog.openArtist(slot.model.artistId)
+                    coverArtist: similarSlot.model.name
+                    title: similarSlot.model.name
+                    onClicked: Catalog.openArtist(similarSlot.model.artistId)
                 }
             }
         }

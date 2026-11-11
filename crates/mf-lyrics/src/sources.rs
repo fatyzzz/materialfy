@@ -404,7 +404,7 @@ pub fn parse_richsync(body: &str) -> Result<Vec<Line>, String> {
         }
         let words = group_syllables(&sylls);
         if !words.is_empty() {
-            lines.push(Line::Words { t: round3(ts), e: round3(te), w: words, i: false });
+            lines.push(Line::words(round3(ts), round3(te), words, false));
         }
     }
     Ok(lines)
@@ -628,7 +628,7 @@ mod tests {
     fn richsync_chunks_become_words() {
         let body = r#"[{"ts": 1.0, "te": 3.0, "l": [{"c": "Hel", "o": 0}, {"c": "lo", "o": 0.5}, {"c": " ", "o": 0.9}, {"c": "world", "o": 1.0}]}]"#;
         let lines = parse_richsync(body).unwrap();
-        let Line::Words { t, e, w, i } = &lines[0] else { panic!() };
+        let Line::Words { t, e, w, i, .. } = &lines[0] else { panic!() };
         assert_eq!((*t, *e, *i), (1.0, 3.0, false));
         assert_eq!(w.iter().map(|w| w.x.as_str()).collect::<Vec<_>>(), vec!["Hello ", "world"]);
         assert_eq!(w[0].p, Some(vec![(3, 1.0, 1.5), (2, 1.5, 1.9)]));

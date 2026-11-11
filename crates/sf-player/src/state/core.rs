@@ -13,9 +13,9 @@ use super::map;
 use super::session::SessionData;
 use crate::engine::{LoadSpec, LocalState, Playback, PlayerCommand, RepeatMode};
 use crate::{
-    ASSUMED_CONTEXT_HOLD_MS, LocalPlayback, OPTIMISTIC_HOLD_MS, PLAYBACK_HOLD_MS, QUEUE_ADD_DEBOUNCE_MS,
-    QUEUE_RECHECK_MS, QUEUE_STALE_RETRIES, REMOTE_POLL_ACTIVE_S, REMOTE_POLL_IDLE_S, REMOTE_POLL_UNSEEN_S,
-    REMOTE_RECHECK_MS, RESTART_BEFORE_PREVIOUS_MS, Target, TrackEnded, TrackStarted,
+    ASSUMED_CONTEXT_HOLD_MS, INTENT_CEILING_MS, LocalPlayback, OPTIMISTIC_HOLD_MS, PLAYBACK_HOLD_MS,
+    QUEUE_ADD_DEBOUNCE_MS, QUEUE_RECHECK_MS, QUEUE_STALE_RETRIES, REMOTE_POLL_ACTIVE_S, REMOTE_POLL_IDLE_S,
+    REMOTE_POLL_UNSEEN_S, REMOTE_RECHECK_MS, RESTART_BEFORE_PREVIOUS_MS, Target, TrackEnded, TrackStarted,
 };
 
 pub(crate) const REMOTE_POLL_ACTIVE: Duration = Duration::from_secs(REMOTE_POLL_ACTIVE_S);
@@ -24,6 +24,7 @@ pub(crate) const REMOTE_POLL_UNSEEN: Duration = Duration::from_secs(REMOTE_POLL_
 pub(crate) const REMOTE_FRESH: Duration = Duration::from_secs(45);
 pub(crate) const OPTIMISTIC_HOLD: Duration = Duration::from_millis(OPTIMISTIC_HOLD_MS);
 pub(crate) const PLAYBACK_HOLD: Duration = Duration::from_millis(PLAYBACK_HOLD_MS);
+pub(crate) const INTENT_CEILING: Duration = Duration::from_millis(INTENT_CEILING_MS);
 pub(crate) const ASSUMED_CONTEXT_HOLD: Duration = Duration::from_millis(ASSUMED_CONTEXT_HOLD_MS);
 pub(crate) const REMOTE_RECHECK: Duration = Duration::from_millis(REMOTE_RECHECK_MS);
 pub(crate) const QUEUE_RECHECK: Duration = Duration::from_millis(QUEUE_RECHECK_MS);
@@ -87,6 +88,8 @@ pub enum ApiCall {
     AddMany { request: u64, uris: Vec<String>, device: Option<String> },
     /// все треки альбома по порядку (все страницы) или ошибка
     AlbumTracks { request: u64, id: String },
+    /// строка трека/выпуска по URI: списки Web API не всегда кладут её в кэш ядра, а кликнутый трек нужен сразу
+    TrackInfo { request: u64, uri: String },
 }
 
 #[derive(Clone, Debug)]
@@ -97,6 +100,7 @@ pub enum ApiReply {
     Transferred { device: String, name: Option<String>, result: Result<(), ApiError> },
     QueueBatchAdded { request: u64, added: usize, result: Result<(), ApiError> },
     AlbumTracks { request: u64, result: Result<Vec<TrackItem>, ApiError> },
+    TrackInfo { request: u64, uri: String, result: Result<TrackItem, ApiError> },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -410,6 +414,8 @@ pub struct Core {
     // --- прочее ---
     tracks: HashMap<String, TrackItem>,
     track_order: Vec<String>,
+    /// Запрошенные строки по URI (последний запрос побеждает: старый ответ уже не нужен).
+    info_requests: HashMap<String, u64>,
     pub error_text: String,
     pub levels_wanted: bool,
     pub direction: i32,
@@ -493,6 +499,7 @@ impl Core {
             persist,
             tracks: HashMap::new(),
             track_order: Vec::new(),
+            info_requests: HashMap::new(),
             error_text: String::new(),
             levels_wanted: false,
             direction: 1,
@@ -548,6 +555,10 @@ impl Core {
                 }
             }
         }
+        // пришла настоящая строка — запрос больше не нужен; безымянная заглушка его не отменяет
+        if !track.title.is_empty() {
+            self.info_requests.remove(&track.uri);
+        }
         self.tracks.insert(track.uri.clone(), track.clone());
     }
 
@@ -588,6 +599,13 @@ impl Core {
         }
     }
 
+    #[cfg(test)]
+    pub(crate) fn age_intent(&mut self, by: Duration) {
+        if let Some(intent) = &mut self.intent_track {
+            intent.at = intent.at.checked_sub(by).unwrap_or(intent.at);
+        }
+    }
+
     /// Контекст, показанный как играющий, включая ещё не подтверждённый запуск.
     pub fn playing_context_uri(&self) -> Option<String> {
         let remote = self.remote.as_ref().and_then(|remote| remote.state.context_uri.clone());
@@ -609,15 +627,26 @@ impl Core {
 
     /// Трек, показанный текущим, включая недавний неподтверждённый запуск.
     pub fn current_track_uri(&self) -> Option<String> {
-        if let Some(intent) = &self.intent_track
-            && (intent.at.elapsed() < PLAYBACK_HOLD || self.queued_play.is_some())
+        if self.intent_held()
+            && let Some(intent) = &self.intent_track
         {
             return Some(intent.uri.clone());
         }
         self.now_playing().map(|now| now.track.uri)
     }
 
+    /// Намерение ещё держится: короткое удержание, а пока движок грузит выбранный трек — до потолка (холодный
+    /// старт бывает дольше шести секунд, и на экране появлялся прошлый трек, будто клик не сработал).
+    fn intent_held(&self) -> bool {
+        let Some(intent) = &self.intent_track else { return false };
+        if self.queued_play.is_some() || intent.at.elapsed() < PLAYBACK_HOLD {
+            return true;
+        }
+        intent.at.elapsed() < INTENT_CEILING && matches!(self.target(), Target::Local) && self.local.loading
+    }
+
     pub(crate) fn expect_track(&mut self, uri: String, position_ms: u32) {
+        self.want_track_info(&uri);
         let confirmation = match self.target() {
             Target::Local => TrackConfirmation::Local,
             Target::Remote(_) => TrackConfirmation::Remote { after_poll: self.remote_poll_seq, mismatches: 0 },
@@ -629,6 +658,32 @@ impl Core {
             confirmation,
             from_uri: self.local.track.as_ref().map(|track| track.uri.clone()),
         });
+    }
+
+    /// Метки выбранного трека нужны сразу, а у списков Web API их нет в кэше: экран тогда переключался на
+    /// безымянную строку только вместе со звуком. Один запрос на URI, повторный только после ответа.
+    /// Строка очереди может быть безымянной заглушкой — такую спрашиваем, как и отсутствующую.
+    fn want_track_info(&mut self, uri: &str) {
+        let known = self.tracks.get(uri).is_some_and(|track| !track.title.is_empty());
+        if uri.is_empty() || known || self.info_requests.contains_key(uri) {
+            return;
+        }
+        let request = self.serial.wrapping_add(1);
+        self.serial = request;
+        self.info_requests.insert(uri.to_owned(), request);
+        self.api(ApiCall::TrackInfo { request, uri: uri.to_owned() });
+    }
+
+    fn handle_track_info(&mut self, request: u64, uri: String, result: Result<TrackItem, ApiError>) {
+        // пока ждали, трек уже пришёл с другой стороны — ответ не нужен
+        if self.info_requests.get(&uri).copied() != Some(request) {
+            return;
+        }
+        self.info_requests.remove(&uri);
+        match result {
+            Ok(track) => self.remember(&track),
+            Err(error) => tracing::debug!("track {uri} is not described: {error}"),
+        }
     }
 
     /// Локальный движок — источник истины: настоящая смена трека побеждает догадку очереди. Настоящая — это
@@ -681,16 +736,24 @@ impl Core {
     }
 
     fn requested_track_preview(&self) -> Option<NowPlaying> {
-        let intent = self.intent_track.as_ref()?;
-        if intent.at.elapsed() >= PLAYBACK_HOLD && self.queued_play.is_none() {
+        if !self.intent_held() {
             return None;
         }
+        let intent = self.intent_track.as_ref()?;
         let mut now = self.cached_track_preview(&intent.uri, intent.position_ms)?;
         let actual = self.now_playing_live();
         now.local = matches!(intent.confirmation, TrackConfirmation::Local);
-        now.playing = match self.optimistic_playing {
-            Some((playing, at)) if at.elapsed() < PLAYBACK_HOLD => playing,
-            _ => self.queued_play.is_some() || actual.as_ref().is_some_and(|now| now.playing),
+        // Смена трека на этом ПК: пока движок его не отдал, играет не он — и показывать «играет» нельзя,
+        // иначе строка идёт вперёд, а звука нет. Оптимистичный ответ нужен только паузе/продолжению
+        // того же трека, который уже звучит.
+        let switching = now.local && actual.as_ref().is_none_or(|live| live.track.uri != intent.uri);
+        now.playing = if switching {
+            false
+        } else {
+            match self.optimistic_playing {
+                Some((playing, at)) if at.elapsed() < PLAYBACK_HOLD => playing,
+                _ => self.queued_play.is_some() || actual.as_ref().is_some_and(|now| now.playing),
+            }
         };
         now.loading = true;
         now.resuming = false;
@@ -974,7 +1037,20 @@ impl Core {
         if let Some(error) = &state.error
             && self.local.error.as_deref() != Some(error.as_str())
         {
-            let text = engine_error_text(error);
+            // Недоступный трек librespot пропускает сам (spirc: Unavailable текущего → следующий), и без
+            // объяснения это выглядит как самовольная смена песни. Называем трек и говорим, что дальше.
+            let text = match error.strip_prefix(crate::engine::player::UNAVAILABLE) {
+                Some(uri) => {
+                    let uri = uri.trim().trim_start_matches(':').trim();
+                    let title = self.cached(uri).map(|track| track.title.clone()).unwrap_or_default();
+                    if title.is_empty() {
+                        mf_i18n::t("This track isn't available — moving on")
+                    } else {
+                        mf_i18n::tf("“{0}” isn't available — moving on", &[&title])
+                    }
+                }
+                None => engine_error_text(error),
+            };
             self.notice(text);
             // Испорченная сессия librespot лечится новой (воспроизведение подхватывается с той же позиции):
             // ключ не выдан — сразу (Spotify перестаёт выдавать ключи этой сессии, у новой они есть: в РФ без
@@ -1309,10 +1385,9 @@ impl Core {
         {
             self.optimistic_playing = None;
         }
-        if let Some(intent) = &self.intent_track
-            && intent.at.elapsed() >= PLAYBACK_HOLD
-            && self.queued_play.is_none()
-        {
+        // Выбранный трек держится на экране, пока движок его грузит, а не 6 с по часам: холодный старт дольше,
+        // и на экране появлялся прошлый трек, будто клик не сработал. Потолок — чтобы спиннер не висел вечно.
+        if self.intent_track.is_some() && !self.intent_held() {
             self.intent_track = None;
         }
         if self.pending_local_position.is_some_and(|(_, at)| at.elapsed() >= OPTIMISTIC_HOLD) {
@@ -2390,7 +2465,16 @@ impl Core {
         if self.device_lost && self.resume_lost_here() {
             return;
         }
-        let playing = self.now_playing().map(|now| now.playing);
+        // пока грузится следующий трек, строка показывает «не играет», но движок ещё играет: клик — пауза
+        let playing = self.now_playing().map(|now| {
+            now.playing
+                || (now.local
+                    && now.loading
+                    && match self.optimistic_playing {
+                        Some((playing, at)) if at.elapsed() < PLAYBACK_HOLD => playing,
+                        _ => self.queued_play.is_some() || self.local.playback == Playback::Playing,
+                    })
+        });
         match self.target() {
             Target::Local => {
                 if self.local.is_active() {
@@ -2832,6 +2916,7 @@ impl Core {
                 self.refresh_queue(true);
             }
             ApiReply::AlbumTracks { request, result } => self.receive_album_queue(request, result),
+            ApiReply::TrackInfo { request, uri, result } => self.handle_track_info(request, uri, result),
         }
     }
 

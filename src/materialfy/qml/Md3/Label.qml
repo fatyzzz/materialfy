@@ -13,6 +13,9 @@ Text {
     readonly property real naturalWidth: fade ? _metrics.advanceWidth : implicitWidth
     readonly property bool overflowing: fade && wrapMode === Text.NoWrap && width > 0 && naturalWidth > width + 0.5
     property real fadeLength: 28
+    // Затухание — не шире ~15% строки: в узкой плитке фиксированные 28 px съедали
+    // половину слова, и весь заголовок выглядел размытым, а не только концевой край.
+    readonly property real fadeWidth: Math.min(fadeLength, Math.max(0, width) * 0.15)
     readonly property var _t: Theme.type[type] ?? Theme.type.bodyMedium
     property real weight: _t.weight      // 400..700, ось wght
 
@@ -38,7 +41,7 @@ Text {
 
     layer.enabled: overflowing
     layer.effect: ShaderEffect {
-        readonly property real fadeFrom: Math.max(0, 1 - root.fadeLength / Math.max(1, root.width))
+        readonly property real fadeFrom: Math.max(0, 1 - root.fadeWidth / Math.max(1, root.width))
         fragmentShader: Qt.resolvedUrl("shaders/fadeedge.frag.qsb")
     }
 }

@@ -18,7 +18,15 @@ Item {
                                        || (Window.window && Window.window.layoutMode === "mini"))
         && Settings.coverPulse && Player.playing && Player.isLocal === true && !Theme.quiet
     property point origin: Qt.point(width / 2, height - 60)
-    property string tab: "lyrics"          // lyrics | queue
+    property string tab: "lyrics"          // lyrics | queue | "" ("" — центр-режим: без очереди/текста)
+    readonly property bool coverOnly: root.tab === ""
+    // Фоновая сборка вкладок после раскрытия плеера: первый клик без холодной сборки
+    property bool _tabsWarmed: false
+    Timer {
+        id: tabsWarmup
+        interval: 400
+        onTriggered: root._tabsWarmed = true
+    }
     // узкое окно: одна колонка; текст/очередь открываются вместо плеера (sheetOpen) переключателем сверху
     property bool compact: false
     property bool sheetOpen: false
@@ -68,6 +76,8 @@ Item {
         open = true
         sheetOpen = false
         forceActiveFocus()
+        if (!root._tabsWarmed)
+            tabsWarmup.restart()
     }
     function hide() {
         // телефон: плеер уезжает вниз, как лист, а мини-плеер появляется сам (holdsMini), а не принимает
@@ -419,11 +429,15 @@ Item {
             ButtonGroup {
                 model: [{ icon: "title" }, { icon: "queue_music" }]
                 autoSelect: false
-                currentIndex: root.layoutCompact && !root.sheetOpen ? -1 : root.tab === "lyrics" ? 0 : 1
+                currentIndex: root.layoutCompact && !root.sheetOpen ? -1 : root.tab === "lyrics" ? 0 : root.tab === "queue" ? 1 : -1
                 onActivated: i => {
                     const next = i === 0 ? "lyrics" : "queue"
                     if (root.layoutCompact && root.sheetOpen && root.tab === next) {
                         root.sheetOpen = false
+                    } else if (!root.layoutCompact && root.tab === next) {
+                        // Повторное нажатие активной вкладки — центр-режим: только плеер по центру
+                        root.tab = ""
+                        root.sheetOpen = false  // иначе после сужения окна — пустой экран
                     } else {
                         root.tab = next
                         root.sheetOpen = true
@@ -457,7 +471,7 @@ Item {
             }
         }
 
-        RowLayout {
+        Item {
             id: body
             anchors.top: topRow.bottom
             anchors.bottom: parent.bottom
@@ -467,21 +481,27 @@ Item {
             anchors.topMargin: 8
             // телефон: над полосой навигации системы
             anchors.bottomMargin: (root.layoutCompact ? 16 : 32) + Theme.safeBottom
-            spacing: 48
 
             // ---- Колонка плеера (слева, с отступом от края): обложка и управление ----
             ColumnLayout {
                 id: playerColumn
                 visible: !root.layoutCompact || !root.sheetOpen
-                Layout.fillHeight: true
-                Layout.fillWidth: root.layoutCompact
-                Layout.leftMargin: root.layoutCompact ? 0 : Math.max(16, root.width * 0.06)
-                Layout.preferredWidth: root.layoutCompact ? -1 : Math.min(460, root.width * 0.42)
-                Layout.maximumWidth: root.layoutCompact ? Number.POSITIVE_INFINITY : Layout.preferredWidth
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                // x/width интерполируются blend'ом (0 — обычный, 1 — центр): ресайз окна мгновенен,
+                // переход — плавный. Правая панель занимает остаток и тает по мере вытеснения.
+                property real _blend: root.coverOnly && !root.layoutCompact ? 1 : 0
+                Behavior on _blend { NumberAnimation { duration: Theme.motion.spatialDefault; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.motion.emphasizedDecelerate } }
+                readonly property real _normalW: Math.min(460, root.width * 0.42)
+                readonly property real _normalX: Math.max(16, root.width * 0.06)
+                readonly property real _coverW: Math.min(640, root.width * 0.55)
+                readonly property real _coverX: (body.width - _coverW) / 2
+                x: root.layoutCompact ? 0 : _normalX + (_coverX - _normalX) * _blend
+                width: root.layoutCompact ? body.width : _normalW + (_coverW - _normalW) * _blend
                 spacing: 12
                 // ширина колонки из размеров окна, а не из уже разложенной колонки: иначе обложка и подписи
                 // меняют ширину, от которой сами зависят (recursive rearrange)
-                readonly property real colWidth: root.layoutCompact ? body.width : Math.min(460, root.width * 0.42)
+                readonly property real colWidth: playerColumn.width
                 readonly property real controlWidth: root.layoutCompact && colWidth < 4 * 56 + 72 + 8
                                                      ? (Theme.mobile ? 48 : 40) : 56
                 readonly property string ctl: controlWidth < 56 ? "s" : "m"
@@ -514,9 +534,13 @@ Item {
                     id: bigCover
                     // Всё остальное в колонке занимает ~360 px (в узком окне ~310) — обложка берёт оставшееся
                     // плашка пульта (если видна) тоже забирает высоту
-                    // телефон: запас по бокам — «печенька» обложки, её пульс и вращение шире самой картинки
+                    // Центр-режим: панель справа убрана, колонка шире — обложке даём вырасти по ширине;
+                    // вертикальный бюджет тот же (текст и управление остаются)
+                    // Размер интерполируется blend'ом (0 — обычный, 1 — центр-режим): ресайз окна мгновенен
+                    property real _max: root.coverOnly ? 520 : 440
+                    Behavior on _max { NumberAnimation { duration: Theme.motion.spatialDefault; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.motion.emphasizedDecelerate } }
                     readonly property real s: root.layoutCompact ? Math.max(96, Math.min(playerColumn.colWidth * (Theme.mobile ? 0.84 : 1), body.height - 316 - npBanner.implicitHeight, 360))
-                                                           : Math.max(160, Math.min(playerColumn.colWidth, body.height - 360 - npBanner.implicitHeight, 440))
+                                                           : Math.max(160, Math.min(playerColumn.colWidth, body.height - 360 - npBanner.implicitHeight, _max))
                     Layout.alignment: Qt.AlignHCenter
                     Layout.preferredWidth: s
                     Layout.preferredHeight: s
@@ -525,6 +549,7 @@ Item {
                     // сворачивание: обложка заранее принимает форму обложки мини-плеера
                     restShape: Player.playing ? "cookie12" : root.collapse > 0.2 ? "softSquare" : "square"
                     direction: Player.direction
+                    pulse: root.wantsLevels ? playerColumn.beat : 0
                     instantSwap: root._coverDir !== 0
                     onSwapped: root._coverArrive()
                     // свайп: едет за пальцем с лёгким наклоном и тает к краю; ждёт новую обложку за краем невидимой
@@ -628,16 +653,30 @@ Item {
                     opacity: playerColumn.infoIn * root._detail
                     transform: Translate { y: (1 - playerColumn.infoIn) * 14 }
                 }
+                ArtistLinks {
+                    Layout.alignment: Qt.AlignHCenter
+                    Layout.preferredWidth: Math.min(naturalWidth, playerColumn.colWidth)
+                    Layout.maximumWidth: playerColumn.colWidth
+                    Layout.topMargin: -6
+                    centered: true
+                    visible: Player.isEpisode !== true
+                    refs: Player.track ? (Player.track.artistRefs ?? []) : []
+                    text: Player.artist
+                    opacity: Math.max(0, playerColumn.infoIn * 1.3 - 0.3)    // чуть позже названия
+                    transform: Translate { y: (1 - playerColumn.infoIn) * 18 }
+                    type: "titleMedium"
+                    color: Theme.fgSurfaceVariant
+                }
                 LinkLabel {
                     Layout.alignment: Qt.AlignHCenter
                     Layout.maximumWidth: playerColumn.colWidth
                     Layout.topMargin: -6
                     horizontalAlignment: Text.AlignHCenter
+                    visible: Player.isEpisode === true
                     // у выпуска подкаста под названием — подкаст: ссылка на его страницу
-                    linkEnabled: Player.isEpisode ? (Player.track.showId ?? "") !== "" : (Player.track.artistRefs ?? []).length > 0
-                    previewArtistId: !Player.isEpisode && (Player.track.artistRefs ?? []).length === 1 ? Player.track.artistRefs[0].id : ""
-                    onClicked: Player.isEpisode ? Catalog.openShow(Player.track.showId ?? "") : Catalog.openArtists(Player.track.artistRefs ?? [])
-                    opacity: Math.max(0, playerColumn.infoIn * 1.3 - 0.3) * root._detail    // чуть позже названия
+                    linkEnabled: (Player.track.showId ?? "") !== ""
+                    onClicked: Catalog.openShow(Player.track.showId ?? "")
+                    opacity: Math.max(0, playerColumn.infoIn * 1.3 - 0.3) * root._detail
                     transform: Translate { y: (1 - playerColumn.infoIn) * 18 }
                     text: Player.artist
                     type: "titleMedium"
@@ -717,6 +756,7 @@ Item {
                     PlayButton {
                         size: root.layoutCompact ? 72 : 96
                         playing: Player.playing
+                        loading: Player.buffering
                         spin: Player.isLocal === true
                         containerColor: Theme.primaryContainer
                         iconColor: Theme.fgPrimaryContainer
@@ -828,12 +868,21 @@ Item {
             // Смена вкладки — shared axis X (порядок как у переключателя: текст слева, очередь справа):
             // уходящая уезжает в свою сторону и гаснет, новая выезжает с другой.
             Item {
-                visible: !root.layoutCompact || root.sheetOpen
-                Layout.fillWidth: true
-                Layout.fillHeight: true
+                // Центр-режим: панель тает и сжимается, место отдаётся колонке плеера
+                opacity: root.coverOnly ? 0 : 1
+                Behavior on opacity { NumberAnimation { duration: Theme.motion.effectsDefault } }
+                visible: opacity > 0.001 && (!root.layoutCompact || root.sheetOpen)
+                enabled: !root.coverOnly
+                anchors.top: parent.top
+                anchors.bottom: parent.bottom
+                // Геометрия — целевая (не от анимированной колонки): текст и очередь при возврате
+                // из центра раскладываются сразу, анимируется только прозрачность
+                x: root.layoutCompact ? 0 : playerColumn._normalX + playerColumn._normalW + 48
+                width: root.layoutCompact ? parent.width
+                    : Math.max(0, parent.width - x - Math.max(16, root.width * 0.06))
 
                 component TabShift: NumberAnimation {
-                    duration: 460
+                    duration: Theme.motion.spatialDefault
                     easing.type: Easing.BezierSpline
                     easing.bezierCurve: Theme.motion.emphasizedDecelerate
                 }
@@ -849,21 +898,34 @@ Item {
                     // во время выезда строкам очереди нечего пересчитывать: отключаем интерактив,
                     // чтобы hover-морфы и StateLayer не инвалидировали кадры анимации
                     enabled: shown > 0.99
-                    QueueView {
+                    // Сборка очереди асинхронно: холодная сборка на клик давала фриз
+                    Loader {
                         anchors.fill: parent
-                        compact: true
+                        asynchronous: true
+                        active: queueTab.shown > 0.001 || root._tabsWarmed
+                        sourceComponent: QueueView { anchors.fill: parent; compact: true }
                     }
                 }
 
-                LyricsView {
-                    id: lyricsView
+                // Текст песни собирается асинхронно: холодная сборка на клик давала фриз
+                Item {
+                    id: lyricsTab
                     property real shown: root.tab === "lyrics" ? 1 : 0
                     Behavior on shown { TabShift {} }
                     anchors.fill: parent
                     visible: shown > 0.001 && root.visible
                     opacity: Math.pow(shown, 1.6)
-                    transform: Translate { x: -(1 - lyricsView.shown) * 80 }
-                    baseFontSize: Math.max(26, Math.min(40, root.width / 36))
+                    transform: Translate { x: -(1 - lyricsTab.shown) * 80 }
+                    enabled: shown > 0.99
+                    Loader {
+                        anchors.fill: parent
+                        asynchronous: true
+                        active: lyricsTab.shown > 0.001 || root._tabsWarmed
+                        sourceComponent: LyricsView {
+                            anchors.fill: parent
+                            baseFontSize: Math.max(26, Math.min(40, root.width / 36))
+                        }
+                    }
                 }
             }
         }

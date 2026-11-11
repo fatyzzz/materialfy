@@ -71,6 +71,8 @@ pub mod qobject {
         #[qproperty(QString, gpu_preference, cxx_name = "gpuPreference", READ, WRITE = set_gpu_preference, NOTIFY = gpu_preference_changed)]
         /// "system" | "en" | "ru" | "pt"; the applied language and the dictionary — Translations (Md3/I18n.qml)
         #[qproperty(QString, language, READ, WRITE = set_language, NOTIFY = language_changed)]
+        /// 75 | 100 | 125 | 150 | 200 — QT_SCALE_FACTOR, after a restart
+        #[qproperty(i32, ui_scale, cxx_name = "uiScale", READ, WRITE = set_ui_scale, NOTIFY = ui_scale_changed)]
         #[qproperty(bool, right_panel_open, cxx_name = "rightPanelOpen", READ, WRITE = set_right_panel_open, NOTIFY = right_panel_open_changed)]
         #[qproperty(QString, right_panel_tab, cxx_name = "rightPanelTab", READ, WRITE = set_right_panel_tab, NOTIFY = right_panel_tab_changed)]
         #[qproperty(bool, sidebar_collapsed, cxx_name = "sidebarCollapsed", READ, WRITE = set_sidebar_collapsed, NOTIFY = sidebar_collapsed_changed)]
@@ -82,6 +84,10 @@ pub mod qobject {
         #[qproperty(QString, library_view, cxx_name = "libraryView", READ, WRITE = set_library_view, NOTIFY = library_view_changed)]
         #[qproperty(QString, library_sort, cxx_name = "librarySort", READ, WRITE = set_library_sort, NOTIFY = library_sort_changed)]
         #[qproperty(QString, home_hidden, cxx_name = "homeHidden", READ, WRITE = set_home_hidden, NOTIFY = home_hidden_changed)]
+        /// сцена «Радио» на главной
+        #[qproperty(bool, home_radio_hidden, cxx_name = "homeRadioHidden", READ, WRITE = set_home_radio_hidden, NOTIFY = home_radio_hidden_changed)]
+        /// в боковой панели вместо плейлистов — последние добавленные/обновлённые
+        #[qproperty(bool, sidebar_library, cxx_name = "sidebarLibrary", READ, WRITE = set_sidebar_library, NOTIFY = sidebar_library_changed)]
         #[qproperty(i32, bitrate, READ, WRITE = set_bitrate, NOTIFY = bitrate_changed)]
         #[qproperty(bool, normalisation, READ, WRITE = set_normalisation, NOTIFY = normalisation_changed)]
         #[qproperty(bool, gapless, READ, WRITE = set_gapless, NOTIFY = gapless_changed)]
@@ -114,6 +120,14 @@ pub mod qobject {
         #[qproperty(QString, taskbar_widget_pos, cxx_name = "taskbarWidgetPos", READ, WRITE = set_taskbar_widget_pos, NOTIFY = taskbar_widget_pos_changed)]
         /// сколько раз показана подсказка с клавишами под островком (0..3)
         #[qproperty(i32, floating_key_hints, cxx_name = "floatingKeyHints", READ, WRITE = set_floating_key_hints, NOTIFY = floating_key_hints_changed)]
+        /// островок прячется, когда на его мониторе приложение на весь экран
+        #[qproperty(bool, floating_hide_fullscreen, cxx_name = "floatingHideFullscreen", READ, WRITE = set_floating_hide_fullscreen, NOTIFY = floating_hide_fullscreen_changed)]
+        /// островок прячется, когда на его мониторе окно развёрнуто
+        #[qproperty(QString, floating_edge, cxx_name = "floatingEdge", READ, WRITE = set_floating_edge, NOTIFY = floating_edge_changed)]
+        #[qproperty(i32, floating_free_x, cxx_name = "floatingFreeX", READ, WRITE = set_floating_free_x, NOTIFY = floating_free_x_changed)]
+        #[qproperty(i32, floating_free_y, cxx_name = "floatingFreeY", READ, WRITE = set_floating_free_y, NOTIFY = floating_free_y_changed)]
+        #[qproperty(i32, floating_offset_x, cxx_name = "floatingOffsetX", READ, WRITE = set_floating_offset_x, NOTIFY = floating_offset_x_changed)]
+        #[qproperty(bool, floating_hide_maximized, cxx_name = "floatingHideMaximized", READ, WRITE = set_floating_hide_maximized, NOTIFY = floating_hide_maximized_changed)]
         #[qproperty(QString, floating_island_screens, cxx_name = "floatingIslandScreens", READ, WRITE = set_floating_island_screens, NOTIFY = floating_island_screens_changed)]
         #[qproperty(QString, taskbar_screens, cxx_name = "taskbarScreens", READ, WRITE = set_taskbar_screens, NOTIFY = taskbar_screens_changed)]
         #[qproperty(QString, taskbar_positions, cxx_name = "taskbarPositions", READ, WRITE = set_taskbar_positions, NOTIFY = taskbar_positions_changed)]
@@ -166,6 +180,7 @@ pub mod qobject {
         fn set_low_power_mode(self: Pin<&mut Settings>, value: QString);
         fn set_gpu_preference(self: Pin<&mut Settings>, value: QString);
         fn set_language(self: Pin<&mut Settings>, value: QString);
+        fn set_ui_scale(self: Pin<&mut Settings>, value: i32);
         fn set_right_panel_open(self: Pin<&mut Settings>, value: bool);
         fn set_right_panel_tab(self: Pin<&mut Settings>, value: QString);
         fn set_sidebar_collapsed(self: Pin<&mut Settings>, value: bool);
@@ -177,6 +192,8 @@ pub mod qobject {
         fn set_library_view(self: Pin<&mut Settings>, value: QString);
         fn set_library_sort(self: Pin<&mut Settings>, value: QString);
         fn set_home_hidden(self: Pin<&mut Settings>, value: QString);
+        fn set_home_radio_hidden(self: Pin<&mut Settings>, value: bool);
+        fn set_sidebar_library(self: Pin<&mut Settings>, value: bool);
         fn set_bitrate(self: Pin<&mut Settings>, value: i32);
         fn set_normalisation(self: Pin<&mut Settings>, value: bool);
         fn set_gapless(self: Pin<&mut Settings>, value: bool);
@@ -199,6 +216,12 @@ pub mod qobject {
         fn set_floating_player_style(self: Pin<&mut Settings>, value: QString);
         fn set_taskbar_widget_pos(self: Pin<&mut Settings>, value: QString);
         fn set_floating_key_hints(self: Pin<&mut Settings>, value: i32);
+        fn set_floating_hide_fullscreen(self: Pin<&mut Settings>, value: bool);
+        fn set_floating_hide_maximized(self: Pin<&mut Settings>, value: bool);
+        fn set_floating_offset_x(self: Pin<&mut Settings>, value: i32);
+        fn set_floating_edge(self: Pin<&mut Settings>, value: QString);
+        fn set_floating_free_x(self: Pin<&mut Settings>, value: i32);
+        fn set_floating_free_y(self: Pin<&mut Settings>, value: i32);
         fn set_floating_island_screens(self: Pin<&mut Settings>, value: QString);
         fn set_taskbar_screens(self: Pin<&mut Settings>, value: QString);
         fn set_taskbar_positions(self: Pin<&mut Settings>, value: QString);
@@ -309,6 +332,9 @@ pub mod qobject {
         #[cxx_name = "languageChanged"]
         fn language_changed(self: Pin<&mut Settings>);
         #[qsignal]
+        #[cxx_name = "uiScaleChanged"]
+        fn ui_scale_changed(self: Pin<&mut Settings>);
+        #[qsignal]
         #[cxx_name = "rightPanelOpenChanged"]
         fn right_panel_open_changed(self: Pin<&mut Settings>);
         #[qsignal]
@@ -341,6 +367,12 @@ pub mod qobject {
         #[qsignal]
         #[cxx_name = "homeHiddenChanged"]
         fn home_hidden_changed(self: Pin<&mut Settings>);
+        #[qsignal]
+        #[cxx_name = "homeRadioHiddenChanged"]
+        fn home_radio_hidden_changed(self: Pin<&mut Settings>);
+        #[qsignal]
+        #[cxx_name = "sidebarLibraryChanged"]
+        fn sidebar_library_changed(self: Pin<&mut Settings>);
         #[qsignal]
         #[cxx_name = "bitrateChanged"]
         fn bitrate_changed(self: Pin<&mut Settings>);
@@ -420,6 +452,24 @@ pub mod qobject {
         #[cxx_name = "floatingKeyHintsChanged"]
         fn floating_key_hints_changed(self: Pin<&mut Settings>);
         #[qsignal]
+        #[cxx_name = "floatingHideFullscreenChanged"]
+        fn floating_hide_fullscreen_changed(self: Pin<&mut Settings>);
+        #[qsignal]
+        #[cxx_name = "floatingHideMaximizedChanged"]
+        fn floating_hide_maximized_changed(self: Pin<&mut Settings>);
+        #[qsignal]
+        #[cxx_name = "floatingOffsetXChanged"]
+        fn floating_offset_x_changed(self: Pin<&mut Settings>);
+        #[qsignal]
+        #[cxx_name = "floatingEdgeChanged"]
+        fn floating_edge_changed(self: Pin<&mut Settings>);
+        #[qsignal]
+        #[cxx_name = "floatingFreeXChanged"]
+        fn floating_free_x_changed(self: Pin<&mut Settings>);
+        #[qsignal]
+        #[cxx_name = "floatingFreeYChanged"]
+        fn floating_free_y_changed(self: Pin<&mut Settings>);
+        #[qsignal]
         #[cxx_name = "floatingIslandScreensChanged"]
         fn floating_island_screens_changed(self: Pin<&mut Settings>);
         #[qsignal]
@@ -464,6 +514,14 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "applyEngineSettings"]
         fn apply_engine_settings(self: Pin<&mut Settings>);
+        /// Reopen the app: the interface scale is read only when Qt starts.
+        #[qinvokable]
+        #[cxx_name = "relaunch"]
+        fn relaunch(self: &Settings);
+        /// The scale this process started with: a relaunch is needed while uiScale differs from it.
+        #[qinvokable]
+        #[cxx_name = "uiScaleAtLaunch"]
+        fn ui_scale_at_launch(self: &Settings) -> i32;
         /// Применить прокси (пароль — в хранилище секретов, не в настройки).
         #[qinvokable]
         #[cxx_name = "applyProxy"]
@@ -640,6 +698,7 @@ settings! {
     low_power_mode: QString = LowPowerMode, set_low_power_mode, low_power_mode_changed;
     gpu_preference: QString = GpuPreference, set_gpu_preference, gpu_preference_changed;
     language: QString = Language, set_language, language_changed;
+    ui_scale: i32 = UiScale, set_ui_scale, ui_scale_changed;
     right_panel_open: bool = RightPanelOpen, set_right_panel_open, right_panel_open_changed;
     right_panel_tab: QString = RightPanelTab, set_right_panel_tab, right_panel_tab_changed;
     sidebar_collapsed: bool = SidebarCollapsed, set_sidebar_collapsed, sidebar_collapsed_changed;
@@ -651,6 +710,8 @@ settings! {
     library_view: QString = LibraryView, set_library_view, library_view_changed;
     library_sort: QString = LibrarySort, set_library_sort, library_sort_changed;
     home_hidden: QString = HomeHidden, set_home_hidden, home_hidden_changed;
+    home_radio_hidden: bool = HomeRadioHidden, set_home_radio_hidden, home_radio_hidden_changed;
+    sidebar_library: bool = SidebarLibrary, set_sidebar_library, sidebar_library_changed;
     bitrate: i32 = Bitrate, set_bitrate, bitrate_changed;
     normalisation: bool = Normalisation, set_normalisation, normalisation_changed;
     gapless: bool = Gapless, set_gapless, gapless_changed;
@@ -673,6 +734,12 @@ settings! {
     floating_player_style: QString = FloatingPlayerStyle, set_floating_player_style, floating_player_style_changed;
     taskbar_widget_pos: QString = TaskbarWidgetPos, set_taskbar_widget_pos, taskbar_widget_pos_changed;
     floating_key_hints: i32 = FloatingKeyHints, set_floating_key_hints, floating_key_hints_changed;
+    floating_hide_fullscreen: bool = FloatingHideFullscreen, set_floating_hide_fullscreen, floating_hide_fullscreen_changed;
+    floating_hide_maximized: bool = FloatingHideMaximized, set_floating_hide_maximized, floating_hide_maximized_changed;
+    floating_offset_x: i32 = FloatingOffsetX, set_floating_offset_x, floating_offset_x_changed;
+    floating_edge: QString = FloatingEdge, set_floating_edge, floating_edge_changed;
+    floating_free_x: i32 = FloatingFreeX, set_floating_free_x, floating_free_x_changed;
+    floating_free_y: i32 = FloatingFreeY, set_floating_free_y, floating_free_y_changed;
     floating_island_screens: QString = FloatingIslandScreens, set_floating_island_screens, floating_island_screens_changed;
     taskbar_screens: QString = TaskbarScreens, set_taskbar_screens, taskbar_screens_changed;
     taskbar_positions: QString = TaskbarPositions, set_taskbar_positions, taskbar_positions_changed;
@@ -746,6 +813,56 @@ impl qobject::Settings {
 
     fn apply_engine_settings(self: Pin<&mut Self>) {
         ctx().services.auth.restart_engine();
+    }
+
+    /// Reopen the app after a setting that Qt reads only at startup (the interface scale).
+    /// The AppImage is the executable; a plain build relaunches its own binary. The shell
+    /// waits for this process to exit, so the new one finds the config and the MPRIS name free.
+    fn ui_scale_at_launch(&self) -> i32 {
+        // engine::apply_ui_scale sets the marker; without it QT_SCALE_FACTOR came from the user and the setting does nothing
+        std::env::var("MATERIALFY_UI_SCALE").ok().and_then(|v| v.parse().ok()).unwrap_or(*self.ui_scale())
+    }
+
+    fn relaunch(&self) {
+        if cfg!(target_os = "android") {
+            return;
+        }
+        let exe = std::env::var_os("APPIMAGE")
+            .map(std::path::PathBuf::from)
+            .or_else(|| std::env::current_exe().ok());
+        let Some(exe) = exe else { return };
+        let pid = std::process::id();
+        #[cfg(unix)]
+        {
+            let script =
+                format!("while kill -0 {pid} 2>/dev/null; do sleep 0.1; done; exec \"$0\"");
+            let _ = std::process::Command::new("/bin/sh")
+                .arg("-c")
+                .arg(script)
+                .arg(&exe)
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .spawn();
+        }
+        #[cfg(windows)]
+        {
+            use std::os::windows::process::CommandExt;
+            let path = exe.display().to_string().replace('\'', "''");
+            let script = format!(
+                "Wait-Process -Id {pid} -ErrorAction SilentlyContinue; Start-Process -FilePath '{path}'"
+            );
+            // like the updater: powershell from System32, not from PATH
+            let powershell = std::env::var_os("SystemRoot")
+                .map(|root| std::path::PathBuf::from(root).join(r"System32\WindowsPowerShell\v1.0\powershell.exe"))
+                .filter(|p| p.is_file())
+                .unwrap_or_else(|| "powershell.exe".into());
+            let _ = std::process::Command::new(powershell)
+                .args(["-NoProfile", "-WindowStyle", "Hidden", "-Command", &script])
+                .creation_flags(0x0000_0200 | 0x0800_0000) // CREATE_NEW_PROCESS_GROUP | CREATE_NO_WINDOW
+                .spawn();
+        }
+        crate::qt::ffi::ffi::post_quit();
     }
 
     fn apply_proxy(
