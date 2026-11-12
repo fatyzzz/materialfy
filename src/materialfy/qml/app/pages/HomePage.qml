@@ -452,7 +452,7 @@ Page {
                         shape: e.kind === "radio" ? "flower8" : e.kind === "dj" ? "cookie12" : e.kind === "artist" ? "circle" : "softSquare"
                         badge: e.kind === "radio" ? I18n.t("RADIO") : ""
                         placeholderIcon: ({ playlist: "queue_music", album: "album", artist: "person", show: "podcasts", radio: "radio", dj: "graphic_eq" })[e.kind] ?? "album"
-                        showPlay: true
+                        showPlay: e.kind !== "upcoming"   // анонс ещё не вышел: играть нечего
                         playing: page.isPlaying(e)
                         onClicked: page.openEntry(e)
                         onPlayClicked: page.playEntry(e)

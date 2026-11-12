@@ -1,6 +1,6 @@
 //! Главная (исполнитель «services-extra»): полки как spotifast/src/ui/home.rs + App::load_home —
 //! «Быстрый доступ» (Любимые + 5 плейлистов), «Недавно прослушанное» (история: сессия/Web API + локальная),
-//! «Сделано для вас» и личные разделы главной Spotify с их заголовками («Рекомендуемые станции»…),
+//! «Сделано для вас» и разделы главной Spotify с их заголовками («Рекомендуемые станции»…),
 //! «Новинки» (ReleasesService), «Продолжить подкасты», «Топ-исполнители», «Топ-треки».
 //! Главная, «Для тебя» и топ читаются через сессию librespot (data::home_feed: GraphQL и spclient) — без квоты
 //! Web API. Web API — только запасной путь без сессии, с таймаутом: 429 не держит и не роняет главную. Пустой
@@ -56,7 +56,7 @@ struct HomeData {
     /// сессия встала во время обновления без неё — по его окончании обновить ещё раз
     session_pending: bool,
     made_for_you: Vec<LibraryEntry>,
-    /// личные разделы главной Spotify — полками после «Сделано для вас»
+    /// разделы главной Spotify — полками после «Сделано для вас»
     feed: Vec<HomeShelf>,
     /// «Любимые исполнители» главной Spotify — запасной топ
     favorite_artists: Vec<ArtistItem>,
@@ -246,14 +246,18 @@ impl HomeService {
                         let liked = self.library.liked().len() as i64;
                         vec![shelves::shelf(key, &shelves::quick_tiles(&liked_uri, liked, &playlists))]
                     }
-                    shelves::RECENT => vec![shelves::shelf(key, &shelves::recent_tiles(self.plays(), &playlists))],
-                    // за «Сделано для вас» — личные разделы главной Spotify
+                    shelves::RECENT => match data.feed.iter().find(|s| s.key == feed::RECENTLY_PLAYED_SHELF) {
+                        Some(spotify) => vec![spotify.clone()],
+                        None => vec![shelves::shelf(key, &shelves::recent_tiles(self.plays(), &playlists))],
+                    },
+                    // за «Сделано для вас» — разделы главной Spotify
                     shelves::MADE_FOR_YOU => std::iter::once(shelves::shelf(key, &data.made_for_you))
-                        .chain(data.feed.iter().filter(|s| !hidden.contains(&s.key)).cloned())
+                        .chain(data.feed.iter().filter(|s| !hidden.contains(&s.key) && s.key != feed::RECENTLY_PLAYED_SHELF).cloned())
                         .collect(),
                     shelves::NEW_RELEASES => {
                         vec![shelves::shelf(key, &shelves::new_release_tiles(fresh.radar.as_ref(), &fresh.releases))]
                     }
+                    shelves::UPCOMING => vec![shelves::shelf(key, &shelves::upcoming_tiles(&fresh.upcoming))],
                     shelves::PODCASTS => vec![shelves::shelf(key, &data.podcasts)],
                     shelves::TOP_ARTISTS if !data.top_artists.is_empty() => vec![shelves::shelf(key, &data.top_artists)],
                     shelves::TOP_ARTISTS if !data.favorite_artists.is_empty() => {

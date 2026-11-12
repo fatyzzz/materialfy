@@ -6,6 +6,7 @@ use serde::Serialize;
 use sf_api::util::{station_seed, uri_id, uri_kind};
 
 use crate::extra::seeds::station_title;
+use crate::data::artist_overview::PreRelease;
 use crate::releases::NewRelease;
 
 /// Поисковые термины «Сделано для вас» (reference model.rs DISCOVER_TERMS).
@@ -28,12 +29,14 @@ pub const RECENT: &str = "recent";
 pub const MADE_FOR_YOU: &str = "madeForYou";
 /// «Новинки»: «Радар новинок» + свежие релизы исполнителей (ReleasesService)
 pub const NEW_RELEASES: &str = "newReleases";
+/// «Скоро»: анонсы исполнителей (обратный отсчёт в телефоне)
+pub const UPCOMING: &str = "upcoming";
 pub const PODCASTS: &str = "podcasts";
 pub const TOP_ARTISTS: &str = "topArtists";
 pub const TOP_TRACKS: &str = "topTracks";
 
 /// Порядок полок на главной.
-pub const ORDER: &[&str] = &[QUICK, RECENT, MADE_FOR_YOU, NEW_RELEASES, PODCASTS, TOP_ARTISTS, TOP_TRACKS];
+pub const ORDER: &[&str] = &[QUICK, RECENT, MADE_FOR_YOU, UPCOMING, NEW_RELEASES, PODCASTS, TOP_ARTISTS, TOP_TRACKS];
 
 /// Английский исходник; в снимок полки — через mf_i18n::t (shelf).
 pub fn title(key: &str) -> &'static str {
@@ -42,6 +45,7 @@ pub fn title(key: &str) -> &'static str {
         RECENT => "Recently played",
         MADE_FOR_YOU => "Made for you",
         NEW_RELEASES => "New releases",
+        UPCOMING => "Coming soon",
         PODCASTS => "Continue your podcasts",
         TOP_ARTISTS => "Top artists",
         TOP_TRACKS => "Top tracks",
@@ -151,6 +155,32 @@ pub fn new_release_tiles(radar: Option<&PlaylistItem>, releases: &[NewRelease]) 
                 ..Default::default()
             }
         }))
+        .take(NEW_RELEASE_TILES)
+        .collect()
+}
+
+/// Плитки анонсов: до выхода релиз не открыть — плитка ведёт к исполнителю; подпись — исполнитель и день выхода.
+pub fn upcoming_tiles(upcoming: &[PreRelease]) -> Vec<LibraryEntry> {
+    let zone = jiff::tz::TimeZone::system();
+    let today = jiff::Zoned::now().date();
+    upcoming
+        .iter()
+        .map(|pre| {
+            let day = pre.release_at.parse::<jiff::Timestamp>().map(|at| at.to_zoned(zone.clone()).date());
+            let when = day.map(|day| crate::releases::date_label(day, today)).unwrap_or_default();
+            let details: Vec<&str> = [pre.artist.as_str(), when.as_str()].into_iter().filter(|s| !s.is_empty()).collect();
+            LibraryEntry {
+                kind: "upcoming".into(),
+                id: pre.artist_id.clone(),
+                uri: format!("spotify:artist:{}", pre.artist_id),
+                title: pre.name.clone(),
+                subtitle: details.join(" · "),
+                cover: pre.cover.clone(),
+                covers: if pre.cover.is_empty() { Vec::new() } else { vec![pre.cover.clone()] },
+                read_only: true,
+                ..Default::default()
+            }
+        })
         .take(NEW_RELEASE_TILES)
         .collect()
 }
