@@ -14,40 +14,17 @@ pub const FEED_PREFIX: &str = "feed:";
 pub const MADE_FOR_SECTION: &str = "spotify:section:0JQ5DAUnp4wcj0bCb3wh3S";
 /// «Любимые исполнители» — запасной «Топ-исполнители».
 pub const FAVORITE_ARTISTS_SECTION: &str = "spotify:section:0JQ5DAnM3wGh0gz1MXnu3z";
-/// «Рекомендуемые станции» (плейлисты «… Radio»).
-const STATIONS_SECTION: &str = "spotify:section:0JQ5DAnM3wGh0gz1MXnu3R";
-/// «Лучшие треки» (This Is …).
-const BEST_OF_ARTISTS_SECTION: &str = "spotify:section:0JQ5DAnM3wGh0gz1MXnu3n";
-/// «Новые релизы для тебя» — у главной уже есть «Новинки» (ReleasesService).
-const NEW_RELEASES_SECTION: &str = "spotify:section:0JQ5DAKjwZmJ0lVR7e0D2E";
 /// «Слушать музыку» — одиночные треки, плитками не играются.
 const START_LISTENING_SECTION: &str = "spotify:section:0JQ5DBa4E2rlwCe7ty23US";
-/// Личные разделы — отдельными полками; прочие — только если в них в основном личные миксы (MIX_FORMATS).
-/// Атрибут madeFor.username Spotify ставит и редакционным плейлистам — по нему не судим.
-const PERSONAL_SECTIONS: &[&str] = &[STATIONS_SECTION, BEST_OF_ARTISTS_SECTION];
-const SKIPPED_SECTIONS: &[&str] =
-    &[MADE_FOR_SECTION, FAVORITE_ARTISTS_SECTION, NEW_RELEASES_SECTION, START_LISTENING_SECTION];
-/// Полок из разделов Spotify, не больше: главная — не витрина редакции.
-pub const MAX_FEED_SHELVES: usize = 4;
+const SKIPPED_SECTIONS: &[&str] = &[MADE_FOR_SECTION, FAVORITE_ARTISTS_SECTION, START_LISTENING_SECTION];
+/// Раздел из одной карточки — хвост главной («Для фанатов …» по одному плейлисту), полкой не показываем.
+const MIN_FEED_TILES: usize = 2;
 pub const FEED_TILES: usize = 16;
 pub const MADE_FOR_YOU_TILES: usize = 24;
 /// Из одного раздела «Для тебя» (жанровых миксов там до сотни).
 pub const MADE_FOR_YOU_PER_SECTION: usize = 6;
 /// format плейлистов «Для тебя», которым не место среди миксов (станции — своя полка).
 const NOT_MIXES: &[&str] = &["concerts-near-you", "inspiredby-mix"];
-/// format личных миксов Spotify (проверено 2026-10; у редакционных — editorial, artistsets, format-shows-shuffle).
-const MIX_FORMATS: &[&str] = &[
-    "discover-weekly",
-    "release-radar",
-    "daily-mix",
-    "daylist",
-    "on-repeat",
-    "repeat-rewind",
-    "topic-mix",
-    "artist-mix-reader",
-    "descripto",
-    crate::data::home_feed::RESOLVED,
-];
 /// Самые личные — первыми в «Сделано для вас» (миксы дня приходят без format и дочитываются сессией).
 const FIRST_FORMATS: &[&str] =
     &["discover-weekly", "release-radar", "daily-mix", "daylist", "on-repeat", "repeat-rewind", crate::data::home_feed::RESOLVED];
@@ -175,16 +152,12 @@ fn section_id(uri: &str) -> &str {
     uri.rsplit(':').next().unwrap_or(uri)
 }
 
-/// Личные разделы главной Spotify — полками с заголовками Spotify, ≤ MAX_FEED_SHELVES.
+/// Разделы главной Spotify — полками с заголовками Spotify, в его порядке, как в телефоне.
 pub fn feed_shelves(home: &[FeedSection]) -> Vec<HomeShelf> {
     home.iter()
         .filter(|s| !s.title.is_empty() && !SKIPPED_SECTIONS.contains(&s.uri.as_str()))
-        .filter(|s| {
-            let mixes = s.cards.iter().filter(|c| MIX_FORMATS.contains(&c.format.as_str())).count();
-            PERSONAL_SECTIONS.contains(&s.uri.as_str()) || mixes > 0 && mixes * 2 >= s.cards.len()
-        })
         .filter_map(section_shelf)
-        .take(MAX_FEED_SHELVES)
+        .filter(|shelf| shelf.items.len() >= MIN_FEED_TILES)
         .collect()
 }
 
@@ -365,25 +338,30 @@ mod tests {
     }
 
     #[test]
-    fn feed_shelves_keep_personal_sections_with_spotify_titles() {
+    fn feed_shelves_keep_spotify_sections_in_order() {
         let home = vec![
-            section(STATIONS_SECTION, "Рекомендуемые станции", vec![mix("spotify:playlist:r1", "IMANU Radio", "inspiredby-mix")]),
+            section("spotify:section:stations", "Рекомендуемые станции", vec![
+                mix("spotify:playlist:r1", "IMANU Radio", "inspiredby-mix"),
+                mix("spotify:playlist:r2", "KK Radio", "inspiredby-mix"),
+            ]),
             section(FAVORITE_ARTISTS_SECTION, "Любимые исполнители", vec![card("spotify:artist:a1", "IMANU")]),
-            section("spotify:section:editorial", "Bollywood", vec![mix("spotify:playlist:b", "Bollywood & Chill", "editorial")]),
-            section("spotify:section:radios", "Популярные радиостанции", vec![mix("spotify:playlist:r2", "KK Radio", "inspiredby-mix")]),
+            section("spotify:section:like", "Похоже на Muse", vec![card("spotify:album:al", "Drones"), mix("spotify:playlist:p", "Muse Radio", "")]),
+            section("spotify:section:tail", "Для фанатов Muse", vec![mix("spotify:playlist:t", "This Is Muse", "")]),
             section("spotify:section:mixes", "Миксы", vec![mix("spotify:playlist:m", "Mix", "topic-mix"), card("spotify:episode:e", "Ep")]),
-            section(BEST_OF_ARTISTS_SECTION, "Лучшие треки", vec![card("spotify:artist:a2", "Muse")]),
+            section("spotify:section:episodes", "Выпуски для тебя", vec![card("spotify:episode:e1", "Ep 1"), card("spotify:episode:e2", "Ep 2")]),
+            section("spotify:section:artists", "Лучшие треки", vec![card("spotify:artist:a2", "Muse"), card("spotify:artist:a3", "Queen")]),
         ];
         let shelves = feed_shelves(&home);
         let keys: Vec<_> = shelves.iter().map(|s| (s.key.as_str(), s.kind.as_str(), s.title.as_str())).collect();
         assert_eq!(keys, [
-            ("feed:0JQ5DAnM3wGh0gz1MXnu3R", "tiles", "Рекомендуемые станции"),
-            ("feed:mixes", "tiles", "Миксы"),
-            ("feed:0JQ5DAnM3wGh0gz1MXnu3n", "artists", "Лучшие треки"),
-        ]);
+            ("feed:stations", "tiles", "Рекомендуемые станции"),
+            ("feed:like", "tiles", "Похоже на Muse"),
+            ("feed:episodes", "episodes", "Выпуски для тебя"),
+            ("feed:artists", "artists", "Лучшие треки"),
+        ], "one-card sections and a mix shelf left with one tile are dropped");
         assert_eq!(shelves[0].items[0]["subtitle"], "Playlist · Spotify");
-        assert_eq!(shelves[1].items.len(), 1, "an episode is never a tile");
-        assert_eq!(shelves[2].items[0]["artistId"], "a2");
+        assert_eq!(shelves[1].items[0]["kind"], "album");
+        assert_eq!(shelves[3].items[0]["artistId"], "a2");
         assert_eq!(favorite_artists(&home)[0].name, "IMANU");
     }
 
