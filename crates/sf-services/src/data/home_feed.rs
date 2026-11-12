@@ -488,8 +488,8 @@ pub async fn made_for_you(http: &Http, session: &Session) -> anyhow::Result<Vec<
 }
 
 /// Топ исполнителей и треков за 4 недели (как «Топ» профиля веб-плеера).
-pub async fn top(http: &Http, session: &Session, limit: u32) -> anyhow::Result<(Vec<Artist>, Vec<Track>)> {
-    let input = json!({ "offset": 0, "limit": limit, "sortBy": "AFFINITY", "timeRange": "SHORT_TERM" });
+pub async fn top(http: &Http, session: &Session, limit: u32, time_range: &str) -> anyhow::Result<(Vec<Artist>, Vec<Track>)> {
+    let input = json!({ "offset": 0, "limit": limit, "sortBy": "AFFINITY", "timeRange": time_range });
     let variables = json!({
         "includeTopArtists": true,
         "topArtistsInput": input,

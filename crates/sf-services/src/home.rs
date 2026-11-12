@@ -303,6 +303,37 @@ impl HomeService {
     }
 
     /// Сессия, подождав её до SESSION_WAIT: после входа движок librespot поднимается не сразу.
+    /// Топ аккаунта за период ("SHORT_TERM" — 4 недели, "MEDIUM_TERM" — 6 месяцев, "LONG_TERM" — год), как
+    /// статистика в телефоне: GraphQL через сессию, без неё или при сбое — Web API.
+    pub async fn account_top(&self, time_range: &str, limit: u32) -> Result<(Vec<ArtistItem>, Vec<TrackItem>), String> {
+        let api = self.auth.api();
+        let http = api.http();
+        if let Some(session) = self.wait_session().await {
+            match tokio::time::timeout(SESSION_TIMEOUT, home_feed::top(&http, &session, limit, time_range)).await {
+                Ok(Ok((artists, tracks))) => {
+                    return Ok((
+                        artists.iter().map(sf_api::map::artist_item).collect(),
+                        tracks.iter().map(sf_api::map::track_item).collect(),
+                    ));
+                }
+                Ok(Err(error)) => tracing::debug!("account top via session: {error:#}"),
+                Err(_) => tracing::debug!("account top via session: timeout"),
+            }
+        }
+        let range = time_range.to_lowercase();
+        let read = async {
+            let client = api.client_for(Operation::UserData).await?;
+            let artists = client.top_artists(&range, limit).await?;
+            let tracks = client.top_tracks(&range, limit, 0).await?;
+            Ok::<_, sf_api::ApiError>((artists, tracks))
+        };
+        let (artists, tracks) = web(read).await?;
+        Ok((
+            artists.items.iter().map(sf_api::map::artist_item).collect(),
+            tracks.items.iter().map(sf_api::map::track_item).collect(),
+        ))
+    }
+
     async fn wait_session(&self) -> Option<Session> {
         let started = Instant::now();
         loop {
@@ -420,7 +451,7 @@ impl HomeService {
         // топ за 4 недели: GraphQL через сессию (пустой — тоже ответ: заменит история), без сессии — Web API
         let top = async {
             if let Some(session) = &session {
-                match tokio::time::timeout(SESSION_TIMEOUT, home_feed::top(&http, session, shelves::TOP_LIMIT)).await {
+                match tokio::time::timeout(SESSION_TIMEOUT, home_feed::top(&http, session, shelves::TOP_LIMIT, "SHORT_TERM")).await {
                     Ok(Ok((artists, tracks))) => {
                         let artists: Vec<ArtistItem> = artists.iter().map(sf_api::map::artist_item).collect();
                         let tracks: Vec<TrackItem> = tracks.iter().map(sf_api::map::track_item).collect();

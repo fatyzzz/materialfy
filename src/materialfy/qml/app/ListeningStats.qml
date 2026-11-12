@@ -4,7 +4,8 @@ import Md3
 import Materialfy.Core
 
 // Статистика прослушиваний этого ПК (Library.listeningStats): время за сегодня/неделю/месяц/всё, столбики
-// по последним дням и топ треков и исполнителей. Только локальная история: у Spotify нет времени прослушивания.
+// по последним дням — только локальная история (у Spotify нет времени прослушивания). Топ треков и исполнителей —
+// из аккаунта Spotify за выбранный период, как в телефоне; не ответил — топ этого ПК.
 ColumnLayout {
     id: root
 
@@ -13,6 +14,19 @@ ColumnLayout {
     readonly property var stats: { void Library.historyRevision; return Library.listeningStats(days) }
     readonly property var dayList: stats.days ?? []
     readonly property int peak: Math.max(1, ...dayList.map(d => d.seconds))
+    readonly property var ranges: ["SHORT_TERM", "MEDIUM_TERM", "LONG_TERM"]
+    property string range: "SHORT_TERM"
+    readonly property var account: Library.accountTop ?? {}
+    readonly property bool fromSpotify: account.ok === true && account.range === range
+                                        && ((account.tracks ?? []).length > 0 || (account.artists ?? []).length > 0)
+    Component.onCompleted: Library.loadAccountTop(range)
+    onRangeChanged: Library.loadAccountTop(range)
+    // страница открылась раньше входа: топ перечитывается, когда аккаунт или сессия готовы
+    Connections {
+        target: Auth
+        function onStateChanged() { if (Auth.state === "signedIn" && !root.fromSpotify) Library.loadAccountTop(root.range) }
+        function onPlaybackChanged() { if (Auth.playbackState === "ready" && !root.fromSpotify) Library.loadAccountTop(root.range) }
+    }
 
     spacing: 12
 
@@ -122,21 +136,48 @@ ColumnLayout {
         }
     }
 
+    RowLayout {
+        visible: root.fromSpotify || (root.stats.plays ?? 0) > 0
+        Layout.fillWidth: true
+        Layout.topMargin: 8
+        spacing: 16
+        ColumnLayout {
+            Layout.fillWidth: true
+            spacing: 2
+            Label { text: I18n.t("Your top"); type: "titleLarge"; weight: 600 }
+            Label {
+                Layout.fillWidth: true
+                text: root.fromSpotify ? I18n.t("From your Spotify account, as on your phone")
+                                       : I18n.t("From this computer, Spotify did not answer")
+                type: "bodySmall"
+                color: Theme.fgSurfaceVariant
+                wrapMode: Text.WordWrap
+            }
+        }
+        ButtonGroup {
+            model: [I18n.t("4 weeks"), I18n.t("6 months"), I18n.t("1 year")]
+            autoSelect: false
+            size: "xs"
+            currentIndex: Math.max(0, root.ranges.indexOf(root.range))
+            onActivated: i => root.range = root.ranges[i]
+        }
+    }
+
     GridLayout {
-        visible: (root.stats.plays ?? 0) > 0
+        visible: root.fromSpotify || (root.stats.plays ?? 0) > 0
         Layout.fillWidth: true
         columns: root.narrow ? 1 : 2
         columnSpacing: 24
         rowSpacing: 12
         TopList {
             title: I18n.t("Top songs")
-            entries: root.stats.topTracks ?? []
+            entries: root.fromSpotify ? root.account.tracks : (root.stats.topTracks ?? [])
             onPicked: entry => Player.playUris([entry.id], 0)
         }
         TopList {
             title: I18n.t("Top artists")
             artists: true
-            entries: root.stats.topArtists ?? []
+            entries: root.fromSpotify ? root.account.artists : (root.stats.topArtists ?? [])
             onPicked: entry => { if (entry.id !== "") Catalog.openUri("spotify:artist:" + entry.id) }
         }
     }
@@ -172,7 +213,7 @@ ColumnLayout {
                 // в истории фото исполнителя нет: ищем по имени тем же поиском, что и запасные обложки
                 property string photo: ""
                 property string _photoKey: ""
-                Component.onCompleted: if (list.artists) _photoKey = Covers.find("artist", modelData.title ?? "", "")
+                Component.onCompleted: if (list.artists && !modelData.cover) _photoKey = Covers.find("artist", modelData.title ?? "", "")
                 Connections {
                     target: row._photoKey !== "" ? Covers : null
                     function onFound(key, url) {
@@ -198,10 +239,10 @@ ColumnLayout {
                         Layout.preferredHeight: 40
                         Avatar { visible: list.artists; anchors.fill: parent; size: 40; name: row.modelData.title ?? "" }
                         MorphImage {
-                            visible: !list.artists || (row.photo !== "" && status === Image.Ready)
+                            visible: !list.artists || ((row.modelData.cover || row.photo) !== "" && status === Image.Ready)
                             eager: true
                             anchors.fill: parent
-                            source: list.artists ? row.photo : (row.modelData.cover ?? "")
+                            source: list.artists ? (row.modelData.cover || row.photo) : (row.modelData.cover ?? "")
                             fallbackKind: list.artists ? "" : "track"
                             fallbackArtist: (row.modelData.subtitle ?? "").split(", ")[0]
                             fallbackTitle: row.modelData.title ?? ""
@@ -214,12 +255,14 @@ ColumnLayout {
                         Label { Layout.fillWidth: true; text: row.modelData.title ?? ""; type: "bodyLarge" }
                         Label {
                             Layout.fillWidth: true
-                            text: list.artists ? root.duration(row.modelData.seconds ?? 0) : (row.modelData.subtitle ?? "")
+                            text: list.artists && row.modelData.seconds !== undefined ? root.duration(row.modelData.seconds)
+                                                                                      : (row.modelData.subtitle ?? "")
                             type: "bodyMedium"
                             color: Theme.fgSurfaceVariant
                         }
                     }
                     Label {
+                        visible: row.modelData.plays !== undefined
                         text: I18n.n(row.modelData.plays ?? 0, "{0} play", "{0} plays")
                         type: "labelLarge"
                         color: Theme.fgSurfaceVariant

@@ -46,6 +46,8 @@ pub mod qobject {
         #[qproperty(i32, pages_loaded, cxx_name = "pagesLoaded", READ, NOTIFY = pages_changed)]
         #[qproperty(i32, pages_total, cxx_name = "pagesTotal", READ, NOTIFY = pages_changed)]
         #[qproperty(i32, history_revision, cxx_name = "historyRevision", READ, NOTIFY = history_changed)]
+        /// топ аккаунта Spotify: { range, ok, error, tracks, artists } (loadAccountTop)
+        #[qproperty(QMap_QString_QVariant, account_top, cxx_name = "accountTop", READ, NOTIFY = account_top_changed)]
         type Library = super::LibraryRust;
 
         fn playlists_ptr(self: &Library) -> *mut QObject;
@@ -75,6 +77,9 @@ pub mod qobject {
         #[qsignal]
         #[cxx_name = "historyChanged"]
         fn history_changed(self: Pin<&mut Library>);
+        #[qsignal]
+        #[cxx_name = "accountTopChanged"]
+        fn account_top_changed(self: Pin<&mut Library>);
         /// дерево/сортировка изменились — модели items()/folderChildren() уже обновлены
         #[qsignal]
         #[cxx_name = "entriesChanged"]
@@ -109,6 +114,10 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "listeningStats"]
         fn listening_stats(self: &Library, days: i32) -> QMap_QString_QVariant;
+        /// топ аккаунта за период ("SHORT_TERM" | "MEDIUM_TERM" | "LONG_TERM") → accountTop
+        #[qinvokable]
+        #[cxx_name = "loadAccountTop"]
+        fn load_account_top(self: Pin<&mut Library>, range: &QString);
         #[qinvokable]
         #[cxx_name = "canEdit"]
         fn can_edit(self: &Library, playlist_id: &QString) -> bool;
@@ -221,6 +230,7 @@ pub struct LibraryRust {
     pages_loaded: i32,
     pages_total: i32,
     history_revision: i32,
+    account_top: QVariantMap,
 }
 
 impl Default for LibraryRust {
@@ -250,6 +260,7 @@ impl Default for LibraryRust {
             pages_loaded: 0,
             pages_total: 0,
             history_revision: 0,
+            account_top: QVariantMap::default(),
         }
     }
 }
@@ -393,6 +404,31 @@ impl qobject::Library {
 
     fn listening_stats(&self, days: i32) -> QVariantMap {
         to_qmap(&ctx().services.history.listening_stats(days.clamp(1, 366) as usize))
+    }
+
+    fn load_account_top(self: Pin<&mut Self>, range: &QString) {
+        let range = range.to_string();
+        let thread = self.qt_thread();
+        ctx().rt.spawn(async move {
+            // строки в форме TopEntry локальной статистики: одна разметка списка на оба источника
+            let answer = match ctx().services.home.account_top(&range, 10).await {
+                Ok((artists, tracks)) => serde_json::json!({
+                    "range": range,
+                    "ok": true,
+                    "tracks": tracks.iter().map(|t| serde_json::json!({
+                        "id": t.play_uri(), "title": t.title, "subtitle": t.artists, "cover": t.cover,
+                    })).collect::<Vec<_>>(),
+                    "artists": artists.iter().map(|a| serde_json::json!({
+                        "id": a.artist_id, "title": a.name, "subtitle": a.genres, "cover": a.cover,
+                    })).collect::<Vec<_>>(),
+                }),
+                Err(error) => serde_json::json!({ "range": range, "ok": false, "error": error }),
+            };
+            let _ = thread.queue(move |mut library| {
+                library.as_mut().rust_mut().get_mut().account_top = to_qmap(&answer);
+                library.account_top_changed();
+            });
+        });
     }
 
     fn playlist_info(&self, playlist_id: &QString) -> QVariantMap {
