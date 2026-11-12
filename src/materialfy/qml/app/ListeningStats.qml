@@ -54,6 +54,15 @@ ColumnLayout {
         wrapMode: Text.WordWrap
     }
 
+    Label {
+        visible: (root.stats.plays ?? 0) > 0
+        Layout.fillWidth: true
+        text: I18n.t("Only what played in Materialfy on this computer: Spotify does not share listening time with desktop apps.")
+        type: "bodyMedium"
+        color: Theme.fgSurfaceVariant
+        wrapMode: Text.WordWrap
+    }
+
     GridLayout {
         visible: (root.stats.plays ?? 0) > 0
         Layout.fillWidth: true
