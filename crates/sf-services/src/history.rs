@@ -23,6 +23,7 @@ use crate::lock;
 const REMOTE_KEPT: usize = 200;
 /// Недавних контекстов у сессии (столько же, сколько у веб-плеера).
 const SESSION_RECENT: u32 = 50;
+const REMOTE_AFTER_PLAY: std::time::Duration = std::time::Duration::from_secs(15);
 /// Чтение недавнего через сессию и запасной Web API.
 const READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
 
@@ -109,6 +110,14 @@ impl HistoryService {
                         let Some(service) = me.upgrade() else { return };
                         if ended.local {
                             service.note_played(ended.track, ended.context, ended.played);
+                            // доигранное здесь появляется в истории Spotify через несколько секунд
+                            let me = me.clone();
+                            tokio::spawn(async move {
+                                tokio::time::sleep(REMOTE_AFTER_PLAY).await;
+                                if let Some(service) = me.upgrade() {
+                                    service.refresh();
+                                }
+                            });
                         }
                     }
                     Ok(_) | Err(broadcast::error::RecvError::Lagged(_)) => {}
@@ -182,9 +191,15 @@ impl HistoryService {
         plays
     }
 
-    /// «Недавнее» по дням для страницы «Недавнее» (как в телефоне).
+    /// «Недавнее» по дням для страницы «Недавнее»: то же, что в телефоне, — история Spotify, раз она
+    /// прочитана; локальная только без неё (офлайн, сбой).
     pub fn recent_days(&self, limit: usize) -> Vec<crate::data::recents::RecentDay> {
-        crate::data::recents::by_day(&self.recent(limit), &jiff::tz::TimeZone::system())
+        let plays: Vec<PlayRecord> = {
+            let state = lock(&self.state);
+            let source = if state.remote.is_empty() { state.journal.plays() } else { &state.remote };
+            source.iter().take(limit).cloned().collect()
+        };
+        crate::data::recents::by_day(&plays, &jiff::tz::TimeZone::system())
     }
 
     /// Недавние уникальные контексты (для сидов радио и «Недавно прослушанное»).

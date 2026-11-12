@@ -86,7 +86,7 @@ Page {
                             Label {
                                 Layout.fillWidth: true
                                 text: row.isTrack ? (row.modelData.subtitle ?? "")
-                                      : [page.kindLabel(row.modelData.kind), I18n.n(row.modelData.tracks, "{0} track", "{0} tracks")]
+                                      : [page.kindLabel(row.modelData.kind), row.modelData.tracks > 1 ? I18n.n(row.modelData.tracks, "{0} track", "{0} tracks") : ""]
                                             .filter(x => x).join(" · ")
                                 type: "bodyMedium"
                                 color: Theme.fgSurfaceVariant
