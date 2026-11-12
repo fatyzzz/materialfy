@@ -96,6 +96,32 @@ pub struct Play {
 pub struct Audio {
     pub file_id: Vec<u8>,
     pub format: String,
+    /// audio_id из AudioFilesExtensionResponse (поле 4); пусто — не ответил
+    pub audio_id: Vec<u8>,
+}
+
+/// Версия клиента в событиях. С версией librespot (1.2.52) приёмник событие берёт, но в историю оно
+/// не попадает; с этой — попадает (librespot-org/librespot#1759, проверено на живом аккаунте).
+const REPORTING_VERSION: &str = "1.2.96.518";
+const REPORTING_VERSION_CODE: i64 = 129600518;
+const REPORTING_CORE_VERSION: i64 = 6005400000002005;
+
+/// audio_id записи: extended metadata AUDIO_FILES, AudioFilesExtensionResponse.audio_id = 4.
+async fn audio_id(session: &Session, uri: &librespot_core::SpotifyUri) -> Vec<u8> {
+    use librespot_protocol::extension_kind::ExtensionKind;
+    let Ok(data) = session.spclient().get_metadata(ExtensionKind::AUDIO_FILES, uri).await else {
+        return Vec::new();
+    };
+    let mut input = protobuf::CodedInputStream::from_bytes(&data);
+    while let Ok(Some(tag)) = input.read_raw_tag_or_eof() {
+        if tag == (4 << 3 | 2) {
+            return input.read_bytes().unwrap_or_default();
+        }
+        if input.skip_field(protobuf::rt::WireType::new(tag & 7).unwrap_or(protobuf::rt::WireType::LengthDelimited)).is_err() {
+            break;
+        }
+    }
+    Vec::new()
 }
 
 impl Play {
@@ -122,7 +148,7 @@ async fn played_file(session: &Session, uri: &str, bitrate_kbps: u16) -> Option<
         _ => return None,
     };
     let uri = librespot_core::SpotifyUri::from_uri(uri).ok()?;
-    let item = AudioItem::get_file(session, uri).await.ok()?;
+    let item = AudioItem::get_file(session, uri.clone()).await.ok()?;
     let (format, file) = order.iter().find_map(|format| item.files.get(format).map(|file| (*format, file)))?;
     let label = match format {
         F::OGG_VORBIS_96 => "Vorbis 96 kbps",
@@ -134,7 +160,7 @@ async fn played_file(session: &Session, uri: &str, bitrate_kbps: u16) -> Option<
         F::MP3_320 => "MP3 320 kbps",
         _ => return None,
     };
-    Some(Audio { file_id: file.0.to_vec(), format: label.to_owned() })
+    Some(Audio { file_id: file.0.to_vec(), format: label.to_owned(), audio_id: audio_id(session, &uri).await })
 }
 
 /// Причина конца: доигран сам — trackdone, иначе — endplay (пропуск, выбор другого, стоп).
@@ -202,7 +228,31 @@ pub fn raw_core_stream(play: &Play, audio: Option<&Audio>, playback_id: &[u8; 16
         out.write_bool(55, play.repeat_context)?;
         out.write_int64(56, play.ended_ms)?;
         out.write_string(59, &play.player_session_id)?;
-        out.write_string(64, "")
+        out.write_string(64, "")?;
+        // остальное — как в librespot-org/librespot#1759, с которым прослушивание попадает в историю
+        out.write_string(3, "")?;
+        for field in [16, 17, 19, 40, 46, 50, 51, 67] {
+            out.write_int32(field, 0)?;
+        }
+        out.write_string(25, "")?;
+        out.write_bool(20, false)?;
+        out.write_bool(26, false)?;
+        out.write_bool(27, false)?;
+        out.write_string(29, "unknown")?;
+        out.write_int64(37, REPORTING_CORE_VERSION)?;
+        out.write_string(38, "full")?;
+        out.write_bool(42, false)?;
+        out.write_bool(43, false)?;
+        out.write_string(44, "local")?;
+        out.write_string(45, "boombox")?;
+        if let Some(audio) = audio.filter(|audio| !audio.audio_id.is_empty()) {
+            out.write_bytes(63, hex::encode(&audio.audio_id).as_bytes())?;
+        }
+        out.write_string(69, "boombox")?;
+        out.write_string(71, "context-player")?;
+        out.write_string(78, "librespot")?;
+        out.write_string(79, "librespot")?;
+        out.write_string(80, "computer")
     })
 }
 
@@ -297,8 +347,8 @@ fn envelope(session: &Session, name: &'static str, message: &[u8], now_ms: i64) 
         fragment(
             "context_application_desktop",
             &encode(|out| {
-                out.write_string(1, librespot_core::version::SPOTIFY_SEMANTIC_VERSION)?;
-                out.write_int64(2, librespot_core::version::SPOTIFY_VERSION as i64)?;
+                out.write_string(1, REPORTING_VERSION)?;
+                out.write_int64(2, REPORTING_VERSION_CODE)?;
                 out.write_bytes(3, &run.app_session)
             }),
         ),
@@ -453,7 +503,7 @@ mod tests {
     }
 
     fn audio() -> Audio {
-        Audio { file_id: vec![7; 20], format: "Vorbis 320 kbps".into() }
+        Audio { file_id: vec![7; 20], format: "Vorbis 320 kbps".into(), audio_id: vec![0xab; 16] }
     }
 
     /// Поле `number` сообщения как сырые байты/varint (для проверки без сгенерированных типов).
