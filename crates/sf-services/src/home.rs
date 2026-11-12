@@ -246,10 +246,13 @@ impl HomeService {
                         let liked = self.library.liked().len() as i64;
                         vec![shelves::shelf(key, &shelves::quick_tiles(&liked_uri, liked, &playlists))]
                     }
-                    shelves::RECENT => vec![shelves::shelf(key, &shelves::recent_tiles(self.plays(), &playlists))],
+                    shelves::RECENT => match data.feed.iter().find(|s| s.key == feed::RECENTLY_PLAYED_SHELF) {
+                        Some(spotify) => vec![spotify.clone()],
+                        None => vec![shelves::shelf(key, &shelves::recent_tiles(self.plays(), &playlists))],
+                    },
                     // за «Сделано для вас» — разделы главной Spotify
                     shelves::MADE_FOR_YOU => std::iter::once(shelves::shelf(key, &data.made_for_you))
-                        .chain(data.feed.iter().filter(|s| !hidden.contains(&s.key)).cloned())
+                        .chain(data.feed.iter().filter(|s| !hidden.contains(&s.key) && s.key != feed::RECENTLY_PLAYED_SHELF).cloned())
                         .collect(),
                     shelves::NEW_RELEASES => {
                         vec![shelves::shelf(key, &shelves::new_release_tiles(fresh.radar.as_ref(), &fresh.releases))]

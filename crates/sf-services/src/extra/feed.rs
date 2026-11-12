@@ -14,6 +14,8 @@ pub const FEED_PREFIX: &str = "feed:";
 pub const MADE_FOR_SECTION: &str = "spotify:section:0JQ5DAUnp4wcj0bCb3wh3S";
 /// «Любимые исполнители» — запасной «Топ-исполнители».
 pub const FAVORITE_ARTISTS_SECTION: &str = "spotify:section:0JQ5DAnM3wGh0gz1MXnu3z";
+/// Полка «Недавно прослушано» главной Spotify — встаёт на место своей «Недавнее» (у Spotify полнее, как в телефоне).
+pub const RECENTLY_PLAYED_SHELF: &str = "feed:0JQ5DAob0KZzPQKc9YbqhR";
 /// «Слушать музыку» — одиночные треки, плитками не играются.
 const START_LISTENING_SECTION: &str = "spotify:section:0JQ5DBa4E2rlwCe7ty23US";
 const SKIPPED_SECTIONS: &[&str] = &[MADE_FOR_SECTION, FAVORITE_ARTISTS_SECTION, START_LISTENING_SECTION];
