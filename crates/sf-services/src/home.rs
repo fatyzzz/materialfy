@@ -257,6 +257,7 @@ impl HomeService {
                     shelves::NEW_RELEASES => {
                         vec![shelves::shelf(key, &shelves::new_release_tiles(fresh.radar.as_ref(), &fresh.releases))]
                     }
+                    shelves::UPCOMING => vec![shelves::shelf(key, &shelves::upcoming_tiles(&fresh.upcoming))],
                     shelves::PODCASTS => vec![shelves::shelf(key, &data.podcasts)],
                     shelves::TOP_ARTISTS if !data.top_artists.is_empty() => vec![shelves::shelf(key, &data.top_artists)],
                     shelves::TOP_ARTISTS if !data.favorite_artists.is_empty() => {

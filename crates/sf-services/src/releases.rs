@@ -32,6 +32,7 @@ use tokio::sync::{broadcast, watch};
 use crate::ServiceError;
 use crate::auth::{AuthEvent, AuthService};
 use crate::data::home_feed::{self, FeedCard};
+use crate::data::artist_overview::{self, PreRelease};
 use crate::data::{fsio, route};
 use crate::history::HistoryService;
 use crate::library::{LibraryEvent, LibraryService};
@@ -47,6 +48,8 @@ pub const MAX_ARTISTS: usize = 150;
 pub const MAX_RELEASES: usize = 60;
 /// Часто слушаемых исполнителей из локальной истории.
 const FREQUENT_ARTISTS: usize = 20;
+/// У скольких исполнителей спрашивать анонсы (часто слушаемые первыми): страница исполнителя — запрос на каждого.
+const UPCOMING_ARTISTS: usize = 60;
 const HISTORY_PLAYS: usize = 400;
 /// Одновременных чтений записей исполнителей; пачек подробностей — меньше (они крупнее).
 const CONCURRENCY: usize = 4;
@@ -67,7 +70,8 @@ const START_DELAY: Duration = Duration::from_secs(5);
 const RADAR_TIMEOUT: Duration = Duration::from_secs(30);
 /// Сколько ждать сессию, пока движок librespot подключается.
 const SESSION_WAIT: Duration = Duration::from_secs(20);
-const CACHE_VERSION: u32 = 1;
+/// 2 — анонсы (upcoming): старый кэш без них прождал бы 6 часов
+const CACHE_VERSION: u32 = 2;
 
 /// Свежий релиз: AlbumItem (ключи плиток) + дата.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
@@ -91,6 +95,8 @@ pub struct ReleasesSnapshot {
     /// поиск «Радара» закончен (иначе страница показывает загрузку, а не «не найден»)
     pub radar_checked: bool,
     pub releases: Arc<Vec<NewRelease>>,
+    /// анонсы: ещё не вышедшие релизы, ближайшие первыми
+    pub upcoming: Arc<Vec<PreRelease>>,
     pub error_text: String,
 }
 
@@ -103,6 +109,7 @@ struct State {
     radar_from_session: bool,
     radar_checked: bool,
     releases: Vec<NewRelease>,
+    upcoming: Vec<PreRelease>,
     /// id релиза → release_date всех виденных релизов (подробности спрашиваются только у новых)
     known: HashMap<String, String>,
     /// последний обход шёл через сессию (иначе, когда она появится, обойти ещё раз)
@@ -121,6 +128,7 @@ struct Cached {
     radar: Option<PlaylistItem>,
     radar_from_session: bool,
     releases: Vec<NewRelease>,
+    upcoming: Vec<PreRelease>,
     known: HashMap<String, String>,
     /// обход шёл через сессию: после входа его не повторять, когда она встанет
     via_session: bool,
@@ -129,6 +137,7 @@ struct Cached {
 /// Итог обхода: релизы, даты виденных и шёл ли он через сессию.
 struct Crawl {
     releases: Vec<NewRelease>,
+    upcoming: Vec<PreRelease>,
     known: HashMap<String, String>,
     via_session: bool,
 }
@@ -216,21 +225,23 @@ impl ReleasesService {
 
     fn publish(&self) {
         let today = jiff::Zoned::now().date();
-        let (radar, radar_checked, releases) = {
+        let (radar, radar_checked, releases, upcoming) = {
             let state = lock(&self.state);
             (
                 state.radar.clone(),
                 state.radar_checked,
                 labelled(&state.releases, today),
+                upcoming_list(state.upcoming.clone(), jiff::Timestamp::now()),
             )
         };
         self.snapshot.send_if_modified(|s| {
-            if s.radar == radar && s.radar_checked == radar_checked && *s.releases == releases {
+            if s.radar == radar && s.radar_checked == radar_checked && *s.releases == releases && *s.upcoming == upcoming {
                 return false;
             }
             s.radar = radar;
             s.radar_checked = radar_checked;
             s.releases = Arc::new(releases);
+            s.upcoming = Arc::new(upcoming);
             true
         });
     }
@@ -258,6 +269,7 @@ impl ReleasesService {
             Ok(crawl) => {
                 self.store(generation, |s| {
                     s.releases = crawl.releases;
+                    s.upcoming = crawl.upcoming;
                     s.known = crawl.known;
                     s.via_session = crawl.via_session;
                 });
@@ -390,7 +402,8 @@ impl ReleasesService {
 
     /// Чьи релизы смотреть: подписки (коллекция сессии → библиотека → Web API), потом часто слушаемые.
     /// Err — подписки не узнать ни одним путём, а истории нет: «ничего нового» было бы неправдой.
-    async fn artist_ids(&self, session: Option<&Session>) -> Result<Vec<String>, String> {
+    /// Второй список — у кого спрашивать анонсы: часто слушаемые, потом подписки.
+    async fn artist_ids(&self, session: Option<&Session>) -> Result<(Vec<String>, Vec<String>), String> {
         let mut followed = Vec::new();
         let mut answered = false;
         if let Some(session) = session {
@@ -422,19 +435,21 @@ impl ReleasesService {
             .into_iter()
             .map(|play| play.track.artist_refs.into_iter().map(|a| a.id).collect())
             .collect();
-        let pool = artist_pool(&followed, &frequent_artists(&plays, FREQUENT_ARTISTS), MAX_ARTISTS);
+        let frequent = frequent_artists(&plays, FREQUENT_ARTISTS);
+        let pool = artist_pool(&followed, &frequent, MAX_ARTISTS);
         if pool.is_empty() && !answered {
             return Err(mf_i18n::t("Spotify didn’t return the artists you follow — new releases will update later"));
         }
-        Ok(pool)
+        Ok((pool, artist_pool(&frequent, &followed, UPCOMING_ARTISTS)))
     }
 
     async fn crawl(&self) -> Result<Crawl, String> {
         let session = self.wait_session().await;
-        let pool = self.artist_ids(session.as_ref()).await?;
+        let (pool, upcoming_pool) = self.artist_ids(session.as_ref()).await?;
         if pool.is_empty() {
             return Ok(Crawl {
                 releases: Vec::new(),
+                upcoming: Vec::new(),
                 known: HashMap::new(),
                 via_session: session.is_some(),
             });
@@ -445,7 +460,13 @@ impl ReleasesService {
         };
         let today = jiff::Zoned::now().date();
         match session {
-            Some(session) => session_crawl(&session, &pool, known, &previous, today).await,
+            Some(session) => {
+                let (crawl, upcoming) = tokio::join!(
+                    session_crawl(&session, &pool, known, &previous, today),
+                    upcoming(&self.http, &session, &upcoming_pool)
+                );
+                crawl.map(|crawl| Crawl { upcoming, ..crawl })
+            }
             None => {
                 let api = self.auth.api();
                 // фоновый обход: уступает страницам и не идёт в сеть, пока Web API ограничен
@@ -454,6 +475,7 @@ impl ReleasesService {
                     Ok(result) => result
                         .map(|releases| Crawl {
                             releases,
+                            upcoming: Vec::new(),
                             known,
                             via_session: false,
                         })
@@ -487,6 +509,7 @@ impl ReleasesService {
                 radar: state.radar.clone(),
                 radar_from_session: state.radar_from_session,
                 releases: state.releases.clone(),
+                upcoming: state.upcoming.clone(),
                 known: state.known.clone(),
                 via_session: state.via_session,
             }
@@ -528,6 +551,7 @@ impl ReleasesService {
                 state.radar_from_session = cached.radar_from_session;
                 state.radar_checked = true;
                 state.releases = cached.releases;
+                state.upcoming = cached.upcoming;
                 state.known = cached.known;
                 state.via_session = cached.via_session;
             }
@@ -589,6 +613,38 @@ async fn listen(weak: Weak<ReleasesService>) {
 pub async fn crawl_session(session: &Session, artists: &[String]) -> Result<Vec<NewRelease>, String> {
     let today = jiff::Zoned::now().date();
     session_crawl(session, artists, HashMap::new(), &[], today).await.map(|crawl| crawl.releases)
+}
+
+/// Анонсы исполнителей со страниц исполнителей (GraphQL через сессию).
+async fn upcoming(http: &sf_api::Http, session: &Session, pool: &[String]) -> Vec<PreRelease> {
+    let found: Vec<PreRelease> = futures::stream::iter(pool.iter().cloned())
+        .map(|artist_id| {
+            let session = session.clone();
+            async move {
+                match tokio::time::timeout(READ_TIMEOUT, artist_overview::artist(http, &session, &artist_id)).await {
+                    Ok(Ok(overview)) => overview.pre_release,
+                    Ok(Err(error)) => {
+                        tracing::debug!("upcoming: artist {artist_id}: {error:#}");
+                        None
+                    }
+                    Err(_) => None,
+                }
+            }
+        })
+        .buffer_unordered(CONCURRENCY)
+        .filter_map(|pre| async move { pre })
+        .collect()
+        .await;
+    upcoming_list(found, jiff::Timestamp::now())
+}
+
+/// Ещё не вышедшие, ближайшие первыми, один анонс — один раз (у совместного он есть у каждого исполнителя).
+fn upcoming_list(mut found: Vec<PreRelease>, now: jiff::Timestamp) -> Vec<PreRelease> {
+    found.retain(|pre| pre.release_at.parse::<jiff::Timestamp>().is_ok_and(|at| at > now));
+    found.sort_by(|a, b| a.release_at.cmp(&b.release_at));
+    let mut seen = HashSet::new();
+    found.retain(|pre| seen.insert(pre.uri.clone()));
+    found
 }
 
 /// Обход через сессию: записи исполнителей → подробности новых релизов пачками → свежие.
@@ -655,6 +711,7 @@ async fn session_crawl(
         .filter_map(|(id, (rank, _))| Some((*rank, details.get(id)?.clone())));
     Ok(Crawl {
         releases: select(candidates.collect(), today, WINDOW_DAYS, MAX_RELEASES),
+        upcoming: Vec::new(),
         known,
         via_session: true,
     })
@@ -1032,6 +1089,21 @@ pub fn select(found: Vec<(usize, NewRelease)>, today: Date, window_days: i64, li
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn upcoming_keeps_the_unreleased_soonest_first_and_once() {
+        let pre = |uri: &str, at: &str| PreRelease { uri: uri.into(), release_at: at.into(), ..Default::default() };
+        let now: jiff::Timestamp = "2026-11-12T18:00:00Z".parse().unwrap();
+        let found = vec![
+            pre("spotify:prerelease:late", "2026-12-01T03:00:00Z"),
+            pre("spotify:prerelease:out", "2026-11-10T03:00:00Z"),
+            pre("spotify:prerelease:soon", "2026-11-17T03:00:00Z"),
+            pre("spotify:prerelease:soon", "2026-11-17T03:00:00Z"),
+            pre("spotify:prerelease:bad", "soon"),
+        ];
+        let uris: Vec<_> = upcoming_list(found, now).into_iter().map(|p| p.uri).collect();
+        assert_eq!(uris, ["spotify:prerelease:soon", "spotify:prerelease:late"]);
+    }
 
     fn date(text: &str) -> Date {
         text.parse().unwrap()
