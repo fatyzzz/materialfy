@@ -194,14 +194,10 @@ impl HistoryService {
         plays
     }
 
-    /// «Недавнее» по дням для страницы «Недавнее»: то же, что в телефоне, — история Spotify, раз она
-    /// прочитана; локальная только без неё (офлайн, сбой).
+    /// «Недавнее» по дням для страницы «Недавнее»: история Spotify (как в телефоне) вместе со сыгранным
+    /// здесь — без отправки прослушиваний в Spotify его там нет; одно и то же прослушивание — одной записью.
     pub fn recent_days(&self, limit: usize) -> Vec<crate::data::recents::RecentDay> {
-        let plays: Vec<PlayRecord> = {
-            let state = lock(&self.state);
-            let source = if state.remote.is_empty() { state.journal.plays() } else { &state.remote };
-            source.iter().take(limit).cloned().collect()
-        };
+        let plays = self.recent(limit);
         let zone = jiff::tz::TimeZone::system();
         let mut days = crate::data::recents::by_day(&plays, &zone);
         // что играло внутри контекста: Web API по трекам, если в него вошли, и сыгранное здесь
