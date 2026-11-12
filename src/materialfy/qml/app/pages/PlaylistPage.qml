@@ -158,7 +158,7 @@ TrackListPage {
             visible: (page.info.owner ?? "") !== ""
             spacing: 8
             height: 28
-            Avatar { size: 24; name: page.info.owner ?? "" }
+            Avatar { size: 24; name: page.info.owner ?? ""; source: page.own ? (Auth.account.avatar ?? "") : "" }
             Label {
                 text: (page.info.owner ?? "") + (page.own ? I18n.t(" (you)") : "")
                 type: "titleSmall"
