@@ -95,6 +95,7 @@ Item {
         { name: "home", icon: "home", text: I18n.t("Home") },
         { name: "search", icon: "search", text: I18n.t("Search") },
         { name: "releases", icon: "new_releases", text: I18n.t("New releases") },
+        { name: "recents", icon: "history", text: I18n.t("Recents") },
         { name: "library", icon: "library_music", text: I18n.t("Library") },
         { name: "liked", icon: "favorite", text: I18n.t("Liked Songs") }
     ]

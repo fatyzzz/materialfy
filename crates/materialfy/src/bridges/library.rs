@@ -12,7 +12,7 @@ use md3_model::{ListChange, PlayContext, PlaylistId, contexts};
 use sf_services::{AuthEvent, HistoryEvent, LibraryEvent, LibraryKind};
 use tokio::sync::{Semaphore, broadcast};
 
-use super::{Delivery, forward_events, json_str, model_ptr, string_list, track_from_map, with_model};
+use super::{Delivery, forward_events, json_str, model_ptr, string_list, to_qmap, track_from_map, with_model};
 use crate::context::ctx;
 use crate::models::{DictListModel, ModelKind, Row, apply_list_change, apply_row_change, to_row_change, to_rows};
 use crate::qt::{QVariantList, QVariantMap, qvariant_to_json};
@@ -100,6 +100,10 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "playlistInfo"]
         fn playlist_info(self: &Library, playlist_id: &QString) -> QMap_QString_QVariant;
+        /// «Недавнее» по дням: { days: [RecentDay] } (локальное + Spotify)
+        #[qinvokable]
+        #[cxx_name = "recentDays"]
+        fn recent_days(self: &Library) -> QMap_QString_QVariant;
         #[qinvokable]
         #[cxx_name = "canEdit"]
         fn can_edit(self: &Library, playlist_id: &QString) -> bool;
@@ -378,6 +382,10 @@ impl qobject::Library {
             this.playlist_refs.remove(&id);
             ctx().services.library.cancel_playlist(&id);
         }
+    }
+
+    fn recent_days(&self) -> QVariantMap {
+        to_qmap(&serde_json::json!({ "days": ctx().services.history.recent_days(500) }))
     }
 
     fn playlist_info(&self, playlist_id: &QString) -> QVariantMap {
