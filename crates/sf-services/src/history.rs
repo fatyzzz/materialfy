@@ -182,6 +182,11 @@ impl HistoryService {
         plays
     }
 
+    /// «Недавнее» по дням для страницы «Недавнее» (как в телефоне).
+    pub fn recent_days(&self, limit: usize) -> Vec<crate::data::recents::RecentDay> {
+        crate::data::recents::by_day(&self.recent(limit), &jiff::tz::TimeZone::system())
+    }
+
     /// Недавние уникальные контексты (для сидов радио и «Недавно прослушанное»).
     pub fn recent_contexts(&self, limit: usize) -> Vec<PlayContext> {
         let mut seen = HashSet::new();
