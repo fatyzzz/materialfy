@@ -1520,6 +1520,11 @@ Page {
             Switch { checked: Settings.djVoice; onToggled: c => Settings.djVoice = c }
         }
         SettingRow {
+            title: I18n.t("Report plays to Spotify")
+            description: I18n.t("Songs played on this computer count in Recently played, your stats and Wrapped, like in the official app. Sends Spotify one event per song")
+            Switch { checked: Settings.reportPlays; onToggled: c => Settings.reportPlays = c }
+        }
+        SettingRow {
             title: I18n.t("Output device")
             description: I18n.t("Where this computer’s audio goes")
             MenuField {
