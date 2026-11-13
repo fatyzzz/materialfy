@@ -79,7 +79,8 @@ Window {
     function syncMedia() {
         const cover = Player.coverFile !== "" ? Player.coverFile : (Player.coverLarge !== "" ? Player.coverLarge : Player.cover)
         MobileShell.updateMedia(Player.title, Player.artist, Player.album, cover, Player.durationMs, Player.positionMs,
-                                Player.playing, Player.hasTrack, Player.hasTrack, Player.hasTrack, Player.isLocal === true)
+                                Player.playing, Player.hasTrack, Player.hasTrack, Player.hasTrack, Player.isLocal === true,
+                                Player.playing && !Player.narrating && !Player.buffering)
     }
     // Сигналы плеера приходят пачкой (трек, состояние, позиция) — одно обновление на пачку. Qt.callLater, а не
     // Timer: таймеры QML идут от отрисовки и в фоне (окно не показано) не срабатывают — уведомление застывало
@@ -95,7 +96,7 @@ Window {
         property real _pos: 0
         function onPositionChanged() {
             const now = Date.now()
-            const expected = _pos + (Player.playing ? now - _at : 0)
+            const expected = _pos + (Player.playing && !Player.narrating && !Player.buffering ? now - _at : 0)
             if (Math.abs(Player.positionMs - expected) > 2000)
                 win._queueMediaSync()
             _at = now

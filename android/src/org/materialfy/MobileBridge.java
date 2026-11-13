@@ -77,7 +77,7 @@ public final class MobileBridge
     // Вызывается из потока Qt: сервис сам переносит работу в главный поток
     public static void updateMedia(Context context, String title, String artist, String album, String coverUrl,
                                    long durationMs, long positionMs, boolean playing, boolean hasTrack,
-                                   boolean canPrevious, boolean canNext, boolean local)
+                                   boolean canPrevious, boolean canNext, boolean local, boolean clockRunning)
     {
         PlaybackService.State state = new PlaybackService.State();
         state.title = title;
@@ -87,6 +87,7 @@ public final class MobileBridge
         state.durationMs = durationMs;
         state.positionMs = positionMs;
         state.playing = playing;
+        state.clockRunning = clockRunning;
         state.hasTrack = hasTrack;
         state.canPrevious = canPrevious;
         state.canNext = canNext;

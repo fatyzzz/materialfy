@@ -2193,6 +2193,7 @@ impl Core {
             && let Some(context) = request.context_uri.as_deref()
             && !shuffle
             && context.starts_with("spotify:playlist:")
+            && context != md3_model::context::DJ_URI
         {
             // плейлист по порядку — с начала, а не с места, где его оставил плеер
             request.offset_position = Some(0);
@@ -2376,8 +2377,13 @@ impl Core {
         let Some(uri) = context.context_uri.clone().filter(|uri| !uri.is_empty()) else {
             return;
         };
+        let dj = uri == md3_model::context::DJ_URI;
+        let shuffle = if dj { Some(false) } else { shuffle };
+        if dj {
+            self.set_repeat(RepeatMode::Off);
+        }
         let mut request = PlayRequest::context(uri);
-        request.offset_uri = offset_uri.filter(|offset| !offset.is_empty());
+        request.offset_uri = if dj { None } else { offset_uri.filter(|offset| !offset.is_empty()) };
         if shuffle == Some(false) && self.shuffle_wanted {
             self.shuffle_wanted = false;
             self.shuffle_set_at = Some(Instant::now());
@@ -3089,6 +3095,10 @@ impl Core {
         let uri = self.playing_context_uri().or_else(|| self.resume_only().then(|| self.resume_context.clone()).flatten());
         match uri {
             Some(uri) => {
+                // Persisted and remote contexts can still call DJ a playlist.
+                if uri == md3_model::context::DJ_URI {
+                    return PlayContext::with_uri(contexts::DJ, uri);
+                }
                 // Запуск по одному URI (плитка «Слушать», Player.playContext) приходит без подписи —
                 // такой context_info не перекрывает известную подпись и название играющего альбома
                 let started = self.context_info.context_uri.as_deref() == Some(uri.as_str());
@@ -3242,7 +3252,11 @@ pub fn local_load(request: &PlayRequest, shuffle: bool) -> LoadSpec {
         offset_index: request.offset_position,
         position_ms: request.position_ms,
         play: true,
-        shuffle: (shuffle && !(list && chosen)).then_some(true),
+        shuffle: if request.context_uri.as_deref() == Some(md3_model::context::DJ_URI) {
+            Some(false)
+        } else {
+            (shuffle && !(list && chosen)).then_some(true)
+        },
         repeat: None,
         autoplay: false,
     }

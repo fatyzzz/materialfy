@@ -211,13 +211,14 @@ MobileShell::updateMedia(const QString& title,
                          bool hasTrack,
                          bool canPrevious,
                          bool canNext,
-                         bool local)
+                         bool local,
+                         bool clockRunning)
 {
 #if defined(Q_OS_ANDROID)
   QJniObject::callStaticMethod<void>(
     BRIDGE,
     "updateMedia",
-    "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJZZZZZ)V",
+    "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;JJZZZZZZ)V",
     context_object().object(),
     jstr(title).object<jstring>(),
     jstr(artist).object<jstring>(),
@@ -229,7 +230,8 @@ MobileShell::updateMedia(const QString& title,
     static_cast<jboolean>(hasTrack),
     static_cast<jboolean>(canPrevious),
     static_cast<jboolean>(canNext),
-    static_cast<jboolean>(local));
+    static_cast<jboolean>(local),
+    static_cast<jboolean>(clockRunning));
   QJniEnvironment env;
   env.checkAndClearExceptions();
 #else
@@ -244,6 +246,7 @@ MobileShell::updateMedia(const QString& title,
   Q_UNUSED(canPrevious)
   Q_UNUSED(canNext)
   Q_UNUSED(local)
+  Q_UNUSED(clockRunning)
 #endif
 }
 

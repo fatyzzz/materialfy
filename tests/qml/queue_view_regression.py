@@ -33,6 +33,7 @@ module(core,'Materialfy.Core',{
 'Player':(True,'''pragma Singleton
 import QtQuick
 QtObject {
+ property string source:"playlist"
  property bool remote:false; property bool isLocal:true;property bool hasTrack:true;property bool deviceLost:false;property bool canClearQueue:true;property bool queueReorderable:true
  property int manualCount:0;property int contextRemaining:0;property string contextTitle:"Album";property string contextUri:"";property var device:({name:"Phone"});property var queueContext:({uri:"album"})
  property var queue: ListModel { signal rowsChanged()
@@ -71,6 +72,8 @@ Window {width:360;height:800;visible:true
  function startDrag(){v.beginDrag(0);v.updateDrag(v.rowHeight)}
  function finishDrag(){v.endDrag()}
  function dropIndex(y){return v._dropIndexAt(180,y)}
+ function djMode(on){Player.source=on?"dj":"playlist"}
+ function engineCount(){return Player.queue.count}
 }'''
 app=QGuiApplication([]);engine=QQmlEngine();engine.addImportPath(str(base));c=QQmlComponent(engine)
 c.setData(qml.encode(),QUrl.fromLocalFile(str(base/'test.qml')))
@@ -110,6 +113,14 @@ def run_checks():
     w.finishDrag();QTest.qWait(80)
     assert [title for y,title in headers()]==['Now playing','Next in queue','Next from “Album”']
     print('PASS: manual drag keeps heading stationary and preserves headings after reorder',flush=True)
+    count=w.engineCount();w.djMode(True);QTest.qWait(60)
+    assert w.engineCount()==count, 'Hiding DJ spoilers mutated the playback queue'
+    assert not headers(), 'DJ exposed queue section labels/counts'
+    assert not any(o.objectName().startswith('qa-row-') for o in visual_items()), 'DJ still instantiated hidden future rows'
+    assert w.dropIndex(400)==-1, 'DJ accepted a queue drop'
+    w.djMode(False);QTest.qWait(60)
+    assert len(headers())==3, 'Returning to an ordinary playlist did not restore the queue'
+    print('PASS: DJ hides future rows without clearing engine queue; ordinary queue returns',flush=True)
 
 try:
     run_checks()

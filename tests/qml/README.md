@@ -8,6 +8,7 @@ python tests/qml/player_motion_regression.py
 python tests/qml/cover_transition_regression.py
 python tests/qml/font_scale_regression.py
 python tests/qml/accessibility_activation_regression.py
+python tests/qml/dj_regression.py
 ```
 
 The queue test loads the real `QueueView.qml` in an offscreen Qt window. Player/catalog services and visual leaf components are stubs; no Spotify account, Rust build or Android device is required.

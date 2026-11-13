@@ -45,7 +45,8 @@ public:
                                bool hasTrack,
                                bool canPrevious,
                                bool canNext,
-                               bool local);
+                               bool local,
+                               bool clockRunning);
   // Сердце в карточке плеера системы (своя кнопка медиасессии): текущий трек в любимых
   Q_INVOKABLE void setMediaLiked(bool liked);
   // Вход ждёт ответа браузера: процесс не должен замёрзнуть в фоне (Android: SignInService)

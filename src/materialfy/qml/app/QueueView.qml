@@ -11,7 +11,9 @@ Item {
 
     property bool compact: false
 
-    readonly property var queue: Player.queue
+    readonly property bool djMode: Player.source === "dj"
+    // Keep the session queue in the engine for pagination, but never instantiate future DJ rows.
+    readonly property var queue: djMode ? null : Player.queue
     readonly property real rowHeight: Theme.trackRowHeight(compact)
     readonly property int contextPreview: 20     // столько строк контекста видно до «Ещё N треков»
 
@@ -25,7 +27,7 @@ Item {
     property bool contextExpanded: false
     readonly property int contextShown: contextExpanded ? contextRows : Math.min(contextRows, contextPreview)
     readonly property int contextMore: Math.max(0, Player.contextRemaining - contextShown)
-    readonly property bool dropZoneShown: Player.isLocal && Player.hasTrack && Player.manualCount === 0
+    readonly property bool dropZoneShown: !djMode && Player.isLocal && Player.hasTrack && Player.manualCount === 0
 
     function recount() {
         if (!queue) {
@@ -145,6 +147,8 @@ Item {
     }
     // позиция в «Далее в очереди» для точки списка; -1 — не цель
     function _dropIndexAt(x, y) {
+        if (djMode)
+            return -1
         if (!Player.isLocal)
             return manualRows
         const p = root.mapToItem(list.contentItem, x, y)
@@ -167,11 +171,12 @@ Item {
         anchors.centerIn: parent
         width: Math.min(parent.width - 32, 300)
         visible: root.count === 0
-        icon: "queue_music"
+        icon: root.djMode ? "mic" : "queue_music"
         shape: "cookie6"
         animated: !Theme.reducedMotion
-        title: I18n.t("Queue is empty")
-        text: Player.remote ? I18n.t("The queue on “{0}” is empty", Player.device.name ?? "")
+        title: root.djMode ? I18n.t("Your DJ chooses what comes next") : I18n.t("Queue is empty")
+        text: root.djMode ? I18n.t("Enjoy the surprise. Upcoming DJ tracks stay hidden; swipe in the player to skip a song.")
+                            : Player.remote ? I18n.t("The queue on “{0}” is empty", Player.device.name ?? "")
                             : I18n.t("Play a playlist or album. To play a track next, choose “Add to queue” in its menu or drag it here")
     }
 

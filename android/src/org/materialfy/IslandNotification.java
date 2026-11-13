@@ -37,6 +37,7 @@ final class IslandNotification
     private static final long MIN_INTERVAL_MS = 10_000L;
 
     private String lastKey = "";
+    private boolean lastClockRunning;
     private long lastAt;
 
     static boolean isVivo()
@@ -73,10 +74,11 @@ final class IslandNotification
         String key = s.title + "\u0000" + s.artist;
         long now = SystemClock.elapsedRealtime();
         // тот же трек — не чаще раза в 10 с (позицию между обновлениями ведёт таймер чипа)
-        if (key.equals(lastKey) && now - lastAt < MIN_INTERVAL_MS)
+        if (key.equals(lastKey) && s.clockRunning == lastClockRunning && now - lastAt < MIN_INTERVAL_MS)
             return;
         boolean newTrack = !key.equals(lastKey);
         lastKey = key;
+        lastClockRunning = s.clockRunning;
         lastAt = now;
 
         ensureChannel(context, nm);
@@ -93,8 +95,8 @@ final class IslandNotification
             .setContentIntent(open)
             // время в чипе острова идёт само: с начала трека
             .setWhen(System.currentTimeMillis() - Math.max(0, s.positionMs))
-            .setShowWhen(true)
-            .setUsesChronometer(true);
+            .setShowWhen(s.clockRunning)
+            .setUsesChronometer(s.clockRunning);
         if (cover != null)
             b.setLargeIcon(cover);
         if (playPause != null)

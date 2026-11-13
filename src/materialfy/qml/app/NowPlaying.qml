@@ -157,16 +157,22 @@ Item {
     // пальцем, после порога улетает за край, трек переключается, и новая обложка въезжает с другой стороны —
     // когда она загрузилась (bigCover.swapped) или через 1,5 с
     property real _coverDx: 0
+    property string _coverFromUri: ""
+    property real _coverFromPosition: 0
     property int _coverDir: 0                // -1 — следующий (уехала влево), 1 — предыдущий, 0 — нет
     function _coverSwipeAway(dir) {
         MobileShell.haptic()
+        _coverFromUri = Player.uri
+        _coverFromPosition = Player.positionMs
         _coverDir = dir
         coverSettle.stop()
         coverFlyOut.to = dir * (width * 0.5 + bigCover.width)
         coverFlyOut.restart()
     }
-    function _coverArrive() {
+    function _coverArrive(force) {
         if (_coverDir === 0 || coverFlyOut.running)
+            return
+        if (force !== true && Player.uri === _coverFromUri)
             return
         _coverDir = 0
         coverArrival.stop()
@@ -191,11 +197,17 @@ Item {
         duration: Theme.motion.spatialDefault
         easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.motion.emphasizedDecelerate
     }
-    Timer { id: coverArrival; interval: 1500; onTriggered: root._coverArrive() }
+    Timer { id: coverArrival; interval: 1500; onTriggered: root._coverArrive(true) }
     Connections {
         target: Player
         // обложка та же (трек из того же альбома) — подмены не будет, въезжаем сразу
         function onTrackChanged() { Qt.callLater(() => { if (!bigCover.pending) root._coverArrive() }) }
+        // Previous after three seconds restarts the same song: no cover swap is expected.
+        function onPositionChanged() {
+            if (root._coverDir > 0 && Player.uri === root._coverFromUri
+                    && root._coverFromPosition > 3000 && Player.positionMs < 1000)
+                root._coverArrive(true)
+        }
     }
     // большая обложка при collapse = 0: центр и сторона (в координатах плеера)
     property point _bc: Qt.point(width / 2, height / 3)
@@ -735,8 +747,8 @@ Item {
                         amplitude: 4
                         wavelength: 48
                         value: playerColumn.progress
-                        wavy: Player.playing
-                        interactive: true
+                        wavy: Player.playing && !Player.narrating && !Player.buffering
+                        interactive: !Player.narrating
                         onCommitted: v => Player.seek(v)
                     }
                     Label {
@@ -760,6 +772,7 @@ Item {
                     }
                     TransportButton {
                         icon: Player.isEpisode ? "replay_10" : "shuffle"
+                        visible: Player.source !== "dj"
                         checkable: !Player.isEpisode; autoToggle: false; checked: !Player.isEpisode && Player.shuffle
                         enabled: Player.isEpisode || Player.source !== "radio"
                         style: checked ? "tonal" : "standard"
@@ -783,6 +796,7 @@ Item {
                     TransportButton { icon: "skip_next"; Accessible.name: I18n.t("Next track"); iconColor: Theme.fgSurface; onClicked: Player.next() }
                     TransportButton {
                         icon: Player.isEpisode ? "forward_30" : Player.repeat === "one" ? "repeat_one" : "repeat"
+                        visible: Player.source !== "dj"
                         checkable: !Player.isEpisode; autoToggle: false; checked: !Player.isEpisode && Player.repeat !== "off"
                         style: checked ? "tonal" : "standard"
                         onClicked: Player.isEpisode ? Player.seekRelative(30000) : Player.cycleRepeat()

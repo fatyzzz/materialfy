@@ -47,6 +47,7 @@ public class PlaybackService extends Service
         long durationMs;
         long positionMs;
         boolean playing;
+        boolean clockRunning;
         boolean hasTrack;
         boolean canPrevious;
         boolean canNext;
@@ -57,7 +58,7 @@ public class PlaybackService extends Service
 
         long positionNow()
         {
-            long pos = positionMs + (playing ? SystemClock.elapsedRealtime() - at : 0);
+            long pos = positionMs + (clockRunning ? SystemClock.elapsedRealtime() - at : 0);
             return durationMs > 0 ? Math.min(pos, durationMs) : pos;
         }
     }
@@ -309,7 +310,7 @@ public class PlaybackService extends Service
         session.setPlaybackState(state
                                      .setActions(actions)
                                      .setState(s.playing ? PlaybackState.STATE_PLAYING : PlaybackState.STATE_PAUSED,
-                                               s.positionMs, s.playing ? 1f : 0f, SystemClock.elapsedRealtime())
+                                               s.positionMs, s.clockRunning ? 1f : 0f, SystemClock.elapsedRealtime())
                                      .build());
 
         if (s.playing && s.local) {
@@ -346,6 +347,7 @@ public class PlaybackService extends Service
         now.durationMs = s.durationMs;
         now.positionMs = s.positionNow();
         now.playing = s.playing;
+        now.clockRunning = s.clockRunning;
         now.hasTrack = s.hasTrack;
         PendingIntent open = session != null ? session.getController().getSessionActivity() : null;
         island.update(this, now, cover, open, action(android.R.drawable.ic_media_pause, R.string.pause, "pause"),

@@ -900,7 +900,7 @@ Page {
             modes: ["off"]
                 .concat(Qt.platform.os === "windows" || Qt.platform.os === "osx" || (Qt.platform.os === "linux" && (!Qt.platform.pluginName.startsWith("wayland") || WindowShell.kwinAvailable())) ? ["island"] : [])
                 .concat(Qt.platform.os === "windows" ? ["taskbar", "both"] : [])
-            visible: modes.length > 1
+            visible: !Theme.mobile && modes.length > 1
         }
 
         SettingRow {
@@ -1091,7 +1091,7 @@ Page {
 
         SettingRow {
             title: I18n.t("Animations")
-            description: Settings.animations === "reduced" ? I18n.t("No motion or morphing: only short fades")
+            description: Settings.animations === "reduced" || (Theme.mobile && Settings.lowPowerMode === "on") ? I18n.t("No motion or morphing: only short fades")
                          : Settings.animations === "full" ? I18n.t("All transitions, waves and morphs")
                          : Theme.mobile ? (Settings.systemReducedMotion === true ? I18n.t("Follows the system: animations are currently off")
                                                                                   : I18n.t("Follows the system animation setting"))
@@ -1102,12 +1102,17 @@ Page {
                 model: [Theme.mobile ? I18n.t("Auto") : I18n.t("System default"), I18n.t("Full"), I18n.t("Minimal")]
                 autoSelect: false
                 size: page.compact ? "xs" : "s"
-                currentIndex: ["system", "full", "reduced"].indexOf(Settings.animations)
-                onActivated: i => Settings.animations = ["system", "full", "reduced"][i]
+                currentIndex: Theme.mobile && Settings.lowPowerMode === "on" ? 2 : ["system", "full", "reduced"].indexOf(Settings.animations)
+                onActivated: i => {
+                    if (Theme.mobile)
+                        Settings.lowPowerMode = "auto"
+                    Settings.animations = ["system", "full", "reduced"][i]
+                }
             }
         }
 
         SettingRow {
+            visible: !Theme.mobile
             title: I18n.t("Weak computer mode")
             description: Settings.lowPowerMode === "on" ? I18n.t("No background motion, shimmer, theme wipe or cover fades, minimal transitions")
                          : Settings.lowPowerMode === "off" ? I18n.t("All effects, even when graphics are drawn by the processor")
@@ -1123,7 +1128,7 @@ Page {
         }
         // Видеокарта (Linux, гибридная графика): по умолчанию — как решит система; «Дискретная» включает PRIME offload
         SettingRow {
-            visible: Qt.platform.os === "linux"
+            visible: !Theme.mobile && Qt.platform.os === "linux"
             title: I18n.t("Graphics processor")
             description: (Settings.gpuPreference === "integrated"
                          ? I18n.t("Forces integrated graphics")
@@ -1563,6 +1568,7 @@ Page {
         }
 
         SettingRow {
+            visible: !Theme.mobile
             title: I18n.t("Output device")
             description: I18n.t("Where this computer’s audio goes")
             MenuField {
@@ -1907,7 +1913,7 @@ Page {
                 }
             }
             Button {
-                visible: Qt.platform.os !== "android"
+                visible: !Theme.mobile && Qt.platform.os !== "android"
                 text: I18n.t("Open folder")
                 icon: "folder_open"
                 style: "text"
