@@ -273,6 +273,7 @@ Item {
                 id: trackMenuTap
                 enabled: Player.hasTrack
                 acceptedButtons: Qt.RightButton
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad   // касание — не правый клик: у него нет кнопок, TapHandler принял бы любой тап
                 onTapped: (point) => {
                     const p = trackMenuTap.parent.mapToItem(null, point.position.x, point.position.y)
                     Catalog.requestTrackMenu(Player.track, p.x, p.y)

@@ -8,6 +8,8 @@ Row {
     id: root
 
     property bool brief: false
+    // ширина, которую дала раскладка (мини-плеер): без неё подпись до 220 px вылезала из ряда под кнопку устройства
+    property real maxWidth: -1
     // Имя держим и после пропажи устройства: снимок может уже не содержать его
     property string _name: ""
     readonly property string deviceName: (Player.device ?? {}).name ?? ""
@@ -56,7 +58,7 @@ Row {
     }
     Label {
         anchors.verticalCenter: parent.verticalCenter
-        width: Math.min(implicitWidth, root.brief ? 140 : 220)
+        width: Math.max(0, Math.min(implicitWidth, root.brief ? 140 : 220, root.maxWidth >= 0 ? root.maxWidth - 17 : Infinity))
         text: root.text
         type: "labelSmall"
         color: root.tint

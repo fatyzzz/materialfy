@@ -346,8 +346,15 @@ Item {
 
     // Волна по словам считается от позиции в каждом кадре: на общих 30 Гц она шла бы ступеньками
     // на мониторах 120–240 Гц. Программный рендер (lowPower) — по общим часам Ticker (~30 Гц).
+    // Телефон: экран 90–120 Гц — волна шла бы на каждом кадре дисплея; 60 Гц глазу так же плавно, а работы вдвое меньше
     FrameAnimation {
-        running: root.live && !root.previewMode && root.advancing && !Theme.lowPower
+        running: root.live && !root.previewMode && root.advancing && !Theme.lowPower && !Theme.mobile
+        onTriggered: root.tick()
+    }
+    Timer {
+        interval: 16
+        repeat: true
+        running: root.live && !root.previewMode && root.advancing && !Theme.lowPower && Theme.mobile
         onTriggered: root.tick()
     }
     TickAnimation {

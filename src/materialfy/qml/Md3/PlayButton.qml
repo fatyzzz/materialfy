@@ -17,6 +17,10 @@ Item {
 
     signal clicked()
 
+    Accessible.role: Accessible.Button
+    Accessible.name: loading ? I18n.t("Pause") : playing ? I18n.t("Pause") : I18n.t("Play")
+    Accessible.onPressAction: if (enabled) clicked()
+
     implicitWidth: size
     implicitHeight: size
 
@@ -65,7 +69,7 @@ Item {
     MouseArea {
         id: area
         anchors.fill: parent
-        hoverEnabled: true
+        hoverEnabled: !Theme.mobile
         cursorShape: root.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
         onClicked: root.clicked()
     }

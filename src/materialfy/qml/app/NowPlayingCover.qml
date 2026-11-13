@@ -2,9 +2,8 @@ import QtQuick
 import Materialfy.Core
 import Md3
 
-// Обложка полноэкранного плеера. Смена трека — морф через фигуру: старая обложка, вращаясь,
-// сжимается в маленькую «печеньку» и тает; новая вырастает из неё, морфясь из цветка в свою
-// фигуру (с лёгким перелётом). Две обложки — двойной буфер: новая показывается, когда загрузилась.
+// Обложка полноэкранного плеера. На телефоне — короткое перекрёстное затухание с небольшим масштабом;
+// на десктопе — морф через фигуру. Двойной буфер: новая показывается, когда загрузилась.
 // pulse — «дыхание» фигуры в такт, spinning — медленное вращение рамки (обложка внутри неподвижна).
 Item {
     id: root
@@ -14,6 +13,10 @@ Item {
     property real pulse: 0
     property bool spinning: false
     property int direction: 1              // +1 — вперёд по очереди, -1 — назад: куда вращаться
+    // обложку унёс свайп (NowPlaying): новая встаёт на место сразу, без морфа — въезд анимирует свайп
+    property bool instantSwap: false
+    readonly property bool pending: _pending
+    signal swapped()
 
     property int _front: 0
     property bool _pending: false
@@ -21,7 +24,22 @@ Item {
 
     onSourceChanged: {
         const front = _layers[_front], back = _layers[1 - _front]
+        // Сигнал Ready может прийти синхронно при присваивании нового source.
+        // Сначала отменяем старое ожидание, включая возврат к уже показанной обложке.
+        _pending = false
+        timeout.stop()
         if (front.source.toString() === "" || !visible) {   // первая обложка / плеер закрыт — без анимации
+            // Отложенная загрузка предыдущего трека не должна позднее вернуть старую обложку.
+            outAnim.complete()
+            inAnim.complete()
+            front.jumpTo(restShape)
+            front.shape = Qt.binding(() => root.restShape)
+            front.scale = 1
+            front.rotation = 0
+            front.opacity = 1
+            front.z = 1
+            back.opacity = 0
+            back.z = 0
             front.source = source
             return
         }
@@ -50,20 +68,35 @@ Item {
         outAnim.complete()
         inAnim.complete()
         const oldL = _layers[_front], newL = _layers[1 - _front]
-        newL.jumpTo("flower8")
-        newL.scale = 0.2
-        newL.rotation = 120 * direction
+        if (instantSwap || Theme.reducedMotion || Theme.lowPower || !visible) {
+            newL.jumpTo(restShape)
+            newL.shape = Qt.binding(() => root.restShape)
+            newL.scale = 1
+            newL.rotation = 0
+            newL.opacity = 1
+            newL.z = 1
+            oldL.z = 0
+            oldL.opacity = 0
+            _front = 1 - _front
+            swapped()
+            return
+        }
+        newL.jumpTo(Theme.mobile ? restShape : "flower8")
+        newL.scale = Theme.mobile ? 0.96 : 0.2
+        newL.rotation = Theme.mobile ? 0 : 120 * direction
         newL.opacity = 0
         newL.z = 1
         oldL.z = 0
-        oldL.shape = "cookie4"
+        if (!Theme.mobile)
+            oldL.shape = "cookie4"
         outAnim.target = oldL
-        outRot.to = -90 * direction
+        outRot.to = Theme.mobile ? 0 : -90 * direction
         inAnim.target = newL
         _front = 1 - _front
         newL.shape = Qt.binding(() => root.restShape)   // морф цветок → своя фигура
         outAnim.start()
         inAnim.start()
+        swapped()
     }
 
     component Layer: MorphImage {
@@ -87,18 +120,18 @@ Item {
     ParallelAnimation {
         id: outAnim
         property Item target
-        NumberAnimation { target: outAnim.target; property: "scale"; to: 0.15; duration: 380; easing.type: Easing.InCubic }
-        NumberAnimation { id: outRot; target: outAnim.target; property: "rotation"; duration: 380; easing.type: Easing.InCubic }
-        NumberAnimation { target: outAnim.target; property: "opacity"; to: 0; duration: 380; easing.type: Easing.InQuad }
+        NumberAnimation { target: outAnim.target; property: "scale"; to: Theme.mobile ? 0.97 : 0.15; duration: Theme.mobile ? Theme.motion.effectsDefault : 300; easing.type: Theme.mobile ? Easing.OutCubic : Easing.InCubic }
+        NumberAnimation { id: outRot; target: outAnim.target; property: "rotation"; duration: Theme.mobile ? Theme.motion.effectsDefault : 300; easing.type: Theme.mobile ? Easing.OutCubic : Easing.InCubic }
+        NumberAnimation { target: outAnim.target; property: "opacity"; to: 0; duration: Theme.mobile ? Theme.motion.effectsDefault : 300; easing.type: Theme.mobile ? Easing.OutCubic : Easing.InQuad }
     }
     SequentialAnimation {
         id: inAnim
         property Item target
-        PauseAnimation { duration: 140 }
+        PauseAnimation { duration: Theme.mobile ? 0 : 100 }
         ParallelAnimation {
-            NumberAnimation { target: inAnim.target; property: "scale"; to: 1; duration: 680; easing.type: Easing.OutBack; easing.overshoot: 1.25 }
-            NumberAnimation { target: inAnim.target; property: "rotation"; to: 0; duration: 680; easing.type: Easing.OutCubic }
-            NumberAnimation { target: inAnim.target; property: "opacity"; to: 1; duration: 220; easing.type: Easing.OutQuad }
+            NumberAnimation { target: inAnim.target; property: "scale"; to: 1; duration: Theme.mobile ? Theme.motion.spatialDefault : 540; easing.type: Theme.mobile ? Easing.OutCubic : Easing.OutBack; easing.overshoot: 1.25 }
+            NumberAnimation { target: inAnim.target; property: "rotation"; to: 0; duration: Theme.mobile ? Theme.motion.spatialDefault : 540; easing.type: Easing.OutCubic }
+            NumberAnimation { target: inAnim.target; property: "opacity"; to: 1; duration: Theme.motion.effectsDefault; easing.type: Easing.OutCubic }
         }
     }
 }

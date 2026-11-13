@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Materialfy</string>
+    <string name="playback_channel">Playback</string>
+    <string name="play">Play</string>
+    <string name="pause">Pause</string>
+    <string name="next">Next</string>
+    <string name="previous">Previous</string>
+    <string name="signin_channel">Sign-in</string>
+    <string name="signin_title">Waiting for Spotify sign-in</string>
+    <string name="signin_text">Confirm sign-in in your browser — Materialfy will come back on its own</string>
+    <string name="island_channel">Player in the system island</string>
+    <string name="like">Save to Liked Songs</string>
+    <string name="unlike">Remove from Liked Songs</string>
+</resources>

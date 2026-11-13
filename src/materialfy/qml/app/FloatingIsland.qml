@@ -600,6 +600,7 @@ Window {
             }
             TapHandler {
                 acceptedButtons: Qt.RightButton
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad   // касание — не правый клик: у него нет кнопок, TapHandler принял бы любой тап
                 onTapped: point => islandMenu.openAt(island.mapToItem(root.contentItem, point.position.x, point.position.y))
             }
 

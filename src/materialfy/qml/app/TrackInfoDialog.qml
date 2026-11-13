@@ -13,6 +13,8 @@ Item {
     property var details: ({})          // ответ trackDetailsReady (TrackDetails), пусто — ещё не пришёл
     property bool loading: false
     property bool opened: false
+    onVisibleChanged: visible ? BackStack.push(root) : BackStack.pop(root)
+    Component.onDestruction: BackStack.pop(root)
 
     function open(t) {
         track = t ?? ({})
@@ -100,7 +102,7 @@ Item {
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.AllButtons
-            onPressed: root.close()
+            onClicked: root.close()
             onWheel: wheel => {}
         }
     }
@@ -112,9 +114,9 @@ Item {
         height: Math.min(content.implicitHeight + 48, parent.height - 48)
         radius: Theme.shape.extraLarge
         color: Theme.surfaceContainerHigh
-        scale: root.opened ? 1 : 0.92
+        scale: Theme.reducedMotion || root.opened ? 1 : Theme.mobile ? 0.96 : 0.92
         opacity: root.opened ? 1 : 0
-        Behavior on scale { NumberAnimation { duration: Theme.motion.spatialFast; easing.type: Easing.OutBack } }
+        Behavior on scale { NumberAnimation { duration: Theme.motion.spatialFast; easing.type: Theme.mobile ? Easing.OutCubic : Easing.OutBack } }
         Behavior on opacity { NumberAnimation { duration: Theme.motion.effectsFast } }
         Keys.onEscapePressed: root.close()
 
@@ -197,13 +199,17 @@ Item {
                             id: infoRow
                             required property var modelData
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 36
+                            Layout.minimumHeight: 36
                             spacing: 12
                             Label {
-                                Layout.preferredWidth: Math.min(132, content.width * 0.36)
+                                // русские подписи («Прослушивания», «Ненормативная…») длиннее английских: на телефоне
+                                // колонка шире, иначе они обрывались многоточием
+                                Layout.preferredWidth: Theme.mobile ? Math.min(150, content.width * 0.45) : Math.min(132, content.width * 0.36)
                                 text: infoRow.modelData.label
                                 type: "bodyMedium"
                                 color: Theme.fgSurfaceVariant
+                                wrapMode: Text.Wrap
+                                elide: Text.ElideNone
                             }
                             Label {
                                 Layout.fillWidth: true
@@ -267,7 +273,8 @@ Item {
                     spacing: 8
                     Button { text: I18n.t("Close"); onClicked: root.close() }
                     Button {
-                        text: I18n.t("Open in Spotify")
+                        // телефон: коротко — с «Закрыть» в один ряд
+                        text: Theme.mobile ? "Spotify" : I18n.t("Open in Spotify")
                         icon: "open_in_new"
                         style: "text"
                         enabled: root._uri !== ""

@@ -25,10 +25,12 @@ LoadingIndicator 1.0 LoadingIndicator.qml
 SmoothScroll 1.0 SmoothScroll.qml
 ThemeWipe 1.0 ThemeWipe.qml
 Menu 1.0 Menu.qml
+SheetMenu 1.0 SheetMenu.qml
 Snackbar 1.0 Snackbar.qml
 TextField 1.0 TextField.qml
 MenuField 1.0 MenuField.qml
 singleton Ticker 1.0 Ticker.qml
 singleton ImageGate 1.0 ImageGate.qml
+singleton BackStack 1.0 BackStack.qml
 TickAnimation 1.0 TickAnimation.qml
 ShapeMorph 1.0 ShapeMorph.qml

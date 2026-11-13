@@ -10,12 +10,16 @@ Rectangle {
     readonly property bool shown: Player.narrating === true
 
     implicitWidth: row.implicitWidth + 20
-    implicitHeight: 32
+    implicitHeight: Math.max(32, Theme.type.labelLarge.line + 12)
     radius: height / 2
     color: Theme.tertiaryContainer
-    visible: scale > 0.01
-    scale: shown ? 1 : 0
-    Behavior on scale { NumberAnimation { duration: Theme.motion.spatialFast; easing.type: Easing.OutBack } }
+    scale: shown ? 1 : (Theme.reducedMotion ? 1 : 0.94)
+    opacity: shown ? 1 : 0
+    visible: opacity > 0.01
+    Accessible.role: Accessible.StaticText
+    Accessible.name: Player.playing ? I18n.t("DJ is speaking") : I18n.t("DJ paused")
+    Behavior on opacity { NumberAnimation { duration: Theme.motion.effectsDefault } }
+    Behavior on scale { NumberAnimation { duration: Theme.motion.spatialFast; easing.type: Easing.OutCubic } }
 
     Row {
         id: row
@@ -30,7 +34,7 @@ Rectangle {
         }
         Label {
             anchors.verticalCenter: parent.verticalCenter
-            text: I18n.t("DJ")
+            text: Player.playing ? I18n.t("DJ is speaking") : I18n.t("DJ paused")
             type: "labelLarge"
             weight: 600
             color: Theme.fgTertiaryContainer

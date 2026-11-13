@@ -185,7 +185,7 @@ Item {
         MouseArea {
             id: barArea
             anchors.fill: parent
-            hoverEnabled: true
+            hoverEnabled: !Theme.mobile
             preventStealing: true
             property real grabOffset: 0
             function yFor(mouseY) {

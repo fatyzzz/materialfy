@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_channel">Воспроизведение</string>
+    <string name="play">Слушать</string>
+    <string name="pause">Пауза</string>
+    <string name="next">Следующий трек</string>
+    <string name="previous">Предыдущий трек</string>
+    <string name="signin_channel">Вход</string>
+    <string name="signin_title">Ждём входа в Spotify</string>
+    <string name="signin_text">Подтвердите вход в браузере — Materialfy вернётся сам</string>
+    <string name="island_channel">Плеер в острове системы</string>
+    <string name="like">Сохранить в любимые</string>
+    <string name="unlike">Удалить из любимых</string>
+</resources>

@@ -1,11 +1,16 @@
 import QtQuick
 import QtQuick.Layouts
 import Md3
+import Materialfy.Core
 
 // Папка rootlist (только чтение): фигура cookie4 → cookie9 при наведении, мозаика до 4 обложек,
 // бейдж папки внизу слева.
 Item {
     id: root
+    // телефон: нажатие чуть поджимает плитку; быстрый тап — короткой вспышкой
+    scale: Theme.mobile && (area.pressed || tapFlash.running) ? 0.97 : 1
+    Behavior on scale { NumberAnimation { duration: Theme.motion.spatialFast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.motion.springFast } }
+    Timer { id: tapFlash; interval: 160 }
 
     property string title
     property string subtitle
@@ -96,9 +101,18 @@ Item {
     MouseArea {
         id: area
         anchors.fill: parent
-        hoverEnabled: true
+        hoverEnabled: !Theme.mobile
         cursorShape: Qt.PointingHandCursor
         acceptedButtons: Qt.LeftButton | Qt.RightButton
-        onClicked: mouse => mouse.button === Qt.RightButton ? root.menuRequested(root.mapToItem(null, mouse.x, mouse.y)) : root.clicked()
+        onClicked: mouse => {
+            if (mouse.button === Qt.RightButton) {
+                root.menuRequested(root.mapToItem(null, mouse.x, mouse.y))
+                return
+            }
+            tapFlash.restart()
+            root.clicked()
+        }
+        // телефон: меню — долгим нажатием (правой кнопки нет)
+        onPressAndHold: mouse => { if (Theme.mobile) { MobileShell.haptic(); root.menuRequested(root.mapToItem(null, mouse.x, mouse.y)) } else mouse.accepted = false }
     }
 }

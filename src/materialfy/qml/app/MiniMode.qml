@@ -89,6 +89,7 @@ Item {
         id: menuTap
         // без трека меню тоже нужно: в нём перемешивание, повтор, «поверх всех окон», «развернуть»
         acceptedButtons: Qt.RightButton
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad   // касание — не правый клик: у него нет кнопок, TapHandler принял бы любой тап
         onTapped: point => {
             const p = root.mapToItem(null, point.position.x, point.position.y)
             Catalog.requestTrackMenu(Player.track, p.x, p.y)

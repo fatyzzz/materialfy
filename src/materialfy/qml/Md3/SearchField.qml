@@ -1,4 +1,5 @@
 import QtQuick
+import Materialfy.Core
 
 // Поле поиска-пилюля: обводка primary в фокусе, кнопка очистки.
 Item {
@@ -13,7 +14,7 @@ Item {
     signal accepted(string text)
 
     implicitWidth: 360
-    implicitHeight: 48
+    implicitHeight: Math.max(48, Theme.type.bodyLarge.line + 16)
 
     Rectangle {
         anchors.fill: parent
@@ -44,11 +45,15 @@ Item {
 
     TextInput {
         id: input
+        Component.onCompleted: MobileShell.prepareAccessibility(input, root)
         anchors.left: lead.right
         anchors.leftMargin: 12
         anchors.right: clear.left
         anchors.rightMargin: 4
-        anchors.verticalCenter: parent.verticalCenter
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        verticalAlignment: TextInput.AlignVCenter
+        Accessible.name: root.placeholder
         color: Theme.fgSurface
         selectionColor: Theme.primaryContainer
         selectedTextColor: Theme.fgPrimaryContainer
@@ -77,6 +82,7 @@ Item {
         anchors.verticalCenter: parent.verticalCenter
         size: "s"
         icon: "close"
+        Accessible.name: I18n.t("Clear search")
         opacity: input.text ? 1 : 0
         visible: opacity > 0
         Behavior on opacity { NumberAnimation { duration: Theme.motion.effectsFast } }

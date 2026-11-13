@@ -25,7 +25,7 @@ ColumnLayout {
         const i = m && m.count > 0 ? m.find("isThisComputer", true) : -1
         if (i >= 0)
             return m.get(i)
-        return { id: Devices.thisDeviceId ?? "", name: Devices.thisDeviceName || I18n.t("This computer"), type: "computer",
+        return { id: Devices.thisDeviceId ?? "", name: Devices.thisDeviceName || I18n.t("This computer"), type: Theme.mobile ? "smartphone" : "computer",
                  isActive: false, isThisComputer: true, isRestricted: false, supportsVolume: true, volume: -1, source: "api" }
     }
     readonly property bool hereActive: hasActive && active.isThisComputer === true

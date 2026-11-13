@@ -76,7 +76,11 @@ Page {
 
     QtObject {
         id: tilesPerRow
-        readonly property int value: Math.max(1, Math.floor((page.width - 2 * page.sideMargin + 20) / (168 + 20)))
+        // телефон: две колонки во всю ширину
+        readonly property real gap: Theme.mobile ? 16 : 20
+        readonly property int value: Theme.mobile ? Math.max(2, Math.floor((page.width - 2 * page.sideMargin + gap) / (140 + gap)))
+                                                  : Math.max(1, Math.floor((page.width - 2 * page.sideMargin + 20) / (168 + 20)))
+        readonly property real tile: Theme.mobile ? Math.floor((page.width - 2 * page.sideMargin - (value - 1) * gap) / value) : 168
     }
 
     // ---- «Радар новинок» ----
@@ -174,14 +178,14 @@ Page {
                 Button {
                     text: page.radarPlaying && Player.playing ? I18n.t("Pause") : I18n.t("Play")
                     icon: page.radarPlaying && Player.playing ? "pause" : "play_arrow"
-                    size: "m"
+                    size: Theme.mobile ? "s" : "m"
                     onClicked: page.playRadar()
                 }
                 Button {
                     text: I18n.t("Shuffle")
                     icon: "shuffle"
                     style: "tonal"
-                    size: "m"
+                    size: Theme.mobile ? "s" : "m"
                     onClicked: page.radarTracks && page.radarTracks.count > 0 ? Player.shuffleFrom(page.radarTracks) : Player.shuffleContext(page.radarUri)
                 }
             }
@@ -191,6 +195,8 @@ Page {
     ColumnLayout {
         Layout.fillWidth: true
         Layout.topMargin: -8
+        Layout.leftMargin: Theme.mobile ? -8 : 0
+        Layout.rightMargin: Theme.mobile ? -8 : 0
         visible: page.radarId !== ""
         spacing: 0
         Repeater {
@@ -243,20 +249,38 @@ Page {
         actionText: Releases.loading ? "" : I18n.t("Refresh")
         onAction: Releases.refresh(true)
     }
+    // Чипы — ChipRow: на телефоне ряд прокручивается. Раньше здесь был RowLayout из чипов и подписи, его
+    // минимальная ширина (≈400 px) была больше экрана и растягивала всю колонку страницы — справа обрезались
+    // подзаголовок, кнопки и заголовки секций
     RowLayout {
         Layout.fillWidth: true
         Layout.topMargin: -12
         spacing: 8
         visible: page.releases.length > 0
-        Chip { text: I18n.t("All"); selected: page.filter === "all"; onClicked: page.filter = "all" }
-        Chip { text: I18n.t("Albums"); selected: page.filter === "album"; onClicked: page.filter = "album" }
-        Chip { text: I18n.t("Singles and EPs"); selected: page.filter === "single"; onClicked: page.filter = "single" }
-        Item { Layout.fillWidth: true }
+        ChipRow {
+            Layout.fillWidth: true
+            bleed: Theme.mobile ? page.sideMargin : 0
+            keyRole: "id"
+            model: [
+                { id: "all", text: I18n.t("All") }, { id: "album", text: I18n.t("Albums") },
+                { id: "single", text: I18n.t("Singles and EPs") }
+            ]
+            current: page.filter
+            onPicked: key => page.filter = key
+        }
         Label {
+            visible: !Theme.mobile
             text: I18n.t("past 6 weeks")
             type: "bodyMedium"
             color: Theme.fgSurfaceVariant
         }
+    }
+    Label {
+        visible: Theme.mobile && page.releases.length > 0
+        Layout.topMargin: -12
+        text: I18n.t("past 6 weeks")
+        type: "bodySmall"
+        color: Theme.fgSurfaceVariant
     }
 
     LoadingIndicator {
@@ -292,12 +316,13 @@ Page {
 
     Flow {
         Layout.fillWidth: true
-        spacing: 20
+        spacing: tilesPerRow.gap
         Repeater {
             model: page.shown
             MediaTile {
                 required property int index
                 required property var modelData
+                size: tilesPerRow.tile
                 visible: page.allReleases || index < tilesPerRow.value * 3
                 cover: modelData.cover ?? ""
                 title: modelData.title ?? ""

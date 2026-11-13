@@ -29,7 +29,7 @@ Item {
 
         RowLayout {
             Layout.fillWidth: true
-            Layout.preferredHeight: 32
+            Layout.preferredHeight: Math.max(32, Theme.type.titleSmall.line, Theme.type.labelSmall.line + 4)
             spacing: 8
 
             Label {
@@ -42,8 +42,8 @@ Item {
             Rectangle {
                 visible: root.count >= 0
                 implicitWidth: Math.max(20, countLabel.implicitWidth + 12)
-                implicitHeight: 20
-                radius: 10
+                implicitHeight: Math.max(20, Theme.type.labelSmall.line + 4)
+                radius: height / 2
                 color: Theme.secondaryContainer
                 Label {
                     id: countLabel

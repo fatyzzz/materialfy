@@ -10,7 +10,7 @@ Item {
     property string current
     signal picked(string key)
 
-    implicitHeight: 48
+    implicitHeight: Math.max(48, row.implicitHeight + 8)
     implicitWidth: row.implicitWidth
 
     Flickable {

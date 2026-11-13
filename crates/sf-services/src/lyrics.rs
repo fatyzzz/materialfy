@@ -16,6 +16,9 @@ use mf_lyrics::{ExtraLrc, LyricsResult};
 pub const DEBOUNCE_MS: u64 = 350;
 /// Ожидание текста Spotify через сессию.
 const SPOTIFY_TIMEOUT: Duration = Duration::from_secs(8);
+/// Весь поиск: источники идут по очереди, у каждого свой тайм-аут и повторы — без общего предела
+/// недоступная сеть (VPN, фильтр) держала индикатор загрузки больше минуты.
+const FETCH_DEADLINE: Duration = Duration::from_secs(25);
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum LyricsStatus {
@@ -84,7 +87,10 @@ impl LyricsService {
         });
         let weak = Arc::downgrade(&service);
         rt.spawn(async move {
-            let mut deadline: Option<tokio::time::Instant> = None;
+            // Первая загрузка — сразу по запуску: трек, восстановленный до подписки на события (последний
+            // игравший, пауза), TrackChanged не присылает, и текст для него не запрашивался никогда —
+            // QML ждал его вечно (Lyrics.trackId пуст, индикатор загрузки до смены трека).
+            let mut deadline = Some(tokio::time::Instant::now() + Duration::from_millis(DEBOUNCE_MS));
             loop {
                 let at = deadline;
                 let wait = async move {
@@ -148,7 +154,7 @@ impl LyricsService {
         let Some(me) = self.me.upgrade() else { return };
         let task = self.rt.spawn({
             let me = me.clone();
-            async move { me.fetch(&track).await }
+            async move { tokio::time::timeout(FETCH_DEADLINE, me.fetch(&track)).await }
         });
         self.rt.spawn(async move {
             let result = task.await;
@@ -156,7 +162,11 @@ impl LyricsService {
                 return;
             }
             match result {
-                Ok(result) => {
+                Ok(Err(_)) => {
+                    tracing::warn!("lyrics {track_id}: no answer in {}s", FETCH_DEADLINE.as_secs());
+                    me.set(track_id, LyricsStatus::Error, None);
+                }
+                Ok(Ok(result)) => {
                     let status = LyricsStatus::of(&result);
                     tracing::info!("lyrics {track_id}: {} {}", if result.source.is_empty() { "—" } else { &result.source }, result.kind);
                     me.set(track_id, status, (status == LyricsStatus::Ok).then_some(result));

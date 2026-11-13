@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="playback_channel">Reprodução</string>
+    <string name="play">Tocar</string>
+    <string name="pause">Pausar</string>
+    <string name="next">Próxima</string>
+    <string name="previous">Anterior</string>
+    <string name="signin_channel">Login</string>
+    <string name="signin_title">Aguardando o login no Spotify</string>
+    <string name="signin_text">Confirme o login no navegador — o Materialfy volta sozinho</string>
+    <string name="island_channel">Player na ilha do sistema</string>
+    <string name="like">Salvar nas Músicas Curtidas</string>
+    <string name="unlike">Remover das Músicas Curtidas</string>
+</resources>

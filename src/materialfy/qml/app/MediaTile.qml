@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import Md3
+import Materialfy.Core
 
 // Плитка альбома / исполнителя / плейлиста: обложка в фигуре MD3E, название, подпись.
 // При наведении фигура морфится, у исполнителей — круг. showPlay — кнопка «Слушать» на обложке по наведению;
@@ -26,6 +27,13 @@ Item {
     property string badge
     property bool pinned: false
     readonly property bool hovered: area.containsMouse || (playLoader.item !== null && playLoader.item.hovering)
+    // Телефон: наведения нет — отклик на касание. Обложка морфится в «печеньку» и чуть поджимается; с задержкой
+    // 70 мс: касание, с которого начинается прокрутка полки, не успевает её дёрнуть
+    property bool _touched: false
+    Timer { id: touchDelay; interval: 70; onTriggered: root._touched = area.pressed }
+    // быстрый тап (короче задержки) тоже виден: короткая вспышка, пока открывается страница
+    Timer { id: tapFlash; interval: 180; onTriggered: root._touched = false }
+    readonly property bool _morphed: hovered || _touched
 
     signal clicked()
     signal playClicked()
@@ -42,6 +50,8 @@ Item {
         Item {
             Layout.preferredWidth: root.size
             Layout.preferredHeight: root.size
+            scale: root._touched ? 0.95 : 1
+            Behavior on scale { NumberAnimation { duration: Theme.motion.spatialFast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.motion.springFast } }
 
             MorphImage {
                 anchors.fill: parent
@@ -50,7 +60,7 @@ Item {
                 fallbackKind: root.coverKind
                 fallbackArtist: root.coverArtist
                 fallbackTitle: root.coverTitle
-                shape: root.hovered ? root.hoverShape : root.shape
+                shape: root._morphed ? root.hoverShape : root.shape
                 duration: Theme.motion.spatialDefault
             }
             // Заглушка, плашка, булавка и «Слушать» создаются, только когда нужны: плиток на полках сотни,
@@ -59,7 +69,7 @@ Item {
                 anchors.fill: parent
                 active: root.cover === ""
                 sourceComponent: MorphShape {
-                    shape: root.hovered ? root.hoverShape : root.shape
+                    shape: root._morphed ? root.hoverShape : root.shape
                     color: Theme.surfaceContainerHigh
                     Icon { anchors.centerIn: parent; name: root.placeholderIcon; size: root.size * 0.3; color: Theme.fgSurfaceVariant }
                 }
@@ -122,7 +132,7 @@ Item {
                         playingShape: "cookie9"
                         onClicked: root.playClicked()
                     }
-                    MouseArea { id: playArea; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
+                    MouseArea { id: playArea; anchors.fill: parent; hoverEnabled: !Theme.mobile; acceptedButtons: Qt.NoButton }
                 }
             }
         }
@@ -167,14 +177,29 @@ Item {
         id: area
         z: -1
         anchors.fill: parent
-        hoverEnabled: true
+        hoverEnabled: !Theme.mobile
         cursorShape: Qt.PointingHandCursor
         acceptedButtons: Qt.LeftButton | Qt.RightButton
+        onPressedChanged: {
+            if (pressed && Theme.mobile) {
+                touchDelay.restart()
+            } else {
+                touchDelay.stop()
+                root._touched = false
+            }
+        }
+        // телефон: меню — долгим нажатием (правой кнопки нет)
+        onPressAndHold: mouse => { if (Theme.mobile) { MobileShell.haptic(); root.menuRequested(root.mapToItem(null, mouse.x, mouse.y)) } else mouse.accepted = false }
         onClicked: mouse => {
-            if (mouse.button === Qt.RightButton)
+            if (mouse.button === Qt.RightButton) {
                 root.menuRequested(root.mapToItem(null, mouse.x, mouse.y))
-            else
+            } else {
+                if (Theme.mobile) {
+                    root._touched = true
+                    tapFlash.restart()
+                }
                 root.clicked()
+            }
         }
     }
 }

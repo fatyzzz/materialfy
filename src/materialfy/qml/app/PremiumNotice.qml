@@ -116,7 +116,8 @@ Rectangle {
         // чипы и кнопки — в колонке текста, правее значка
         Flow {
             Layout.fillWidth: true
-            Layout.leftMargin: 64
+            // узкая плашка (телефон 320–380): без отступа под иконку, иначе кнопка шире плашки
+            Layout.leftMargin: root.width < 380 ? 0 : 64
             spacing: 6
             Repeater {
                 model: [
@@ -153,7 +154,8 @@ Rectangle {
 
         Flow {
             Layout.fillWidth: true
-            Layout.leftMargin: 64
+            // узкая плашка (телефон 320–380): без отступа под иконку, иначе кнопка шире плашки
+            Layout.leftMargin: root.width < 380 ? 0 : 64
             spacing: 8
             TextAction { filled: true; icon: "open_in_new"; text: I18n.t("Get Premium"); onClicked: root._premium() }
             TextAction { icon: "refresh"; text: I18n.t("Check again"); onClicked: Auth.refreshProfile() }

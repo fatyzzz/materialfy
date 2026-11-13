@@ -67,15 +67,23 @@ fn percent_encode(text: &str) -> String {
 fn issue_url() -> String {
     let version = env!("CARGO_PKG_VERSION");
     let title = format!("Crash report ({version}, {})", std::env::consts::OS);
+    // на телефоне файл в форму не перетащить: хвост crash.log — прямо в текст (ссылка не длиннее ~8 КБ)
+    let log = if cfg!(target_os = "android") {
+        let text = std::fs::read_to_string(log_path()).unwrap_or_default();
+        let tail = text.char_indices().rev().nth(2500).map_or(text.as_str(), |(at, _)| &text[at..]);
+        format!("**crash.log** (end):\n```\n{}\n```", tail.trim())
+    } else {
+        "**crash.log**: drag the file from the folder Materialfy opened into this box.".to_owned()
+    };
     let body = format!(
-        "**What were you doing when it happened?**\n\n\n\
-         **crash.log**: drag the file from the folder Materialfy opened into this box.\n\n\
-         Materialfy {version}, {} {}",
+        "**What were you doing when it happened?**\n\n\n{log}\n\nMaterialfy {version}, {} {}",
         std::env::consts::OS,
         std::env::consts::ARCH
     );
+    // отчёт — туда же, откуда приходят обновления этой сборки (на Android — форк с APK)
     format!(
-        "https://github.com/fatyzzz/materialfy/issues/new?title={}&body={}",
+        "https://github.com/{}/issues/new?title={}&body={}",
+        sf_services::update::REPO,
         percent_encode(&title),
         percent_encode(&body)
     )
@@ -111,7 +119,7 @@ mod tests {
     fn the_issue_link_is_encoded() {
         assert_eq!(percent_encode("a b/ё"), "a%20b%2F%D1%91");
         let url = issue_url();
-        assert!(url.starts_with("https://github.com/fatyzzz/materialfy/issues/new?title=Crash%20report%20%28"));
+        assert!(url.starts_with(&format!("https://github.com/{}/issues/new?title=Crash%20report%20%28", sf_services::update::REPO)));
         assert!(!url.contains(' ') && !url.contains('\n'));
     }
 }

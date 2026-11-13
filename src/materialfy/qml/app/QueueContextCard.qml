@@ -12,20 +12,20 @@ Item {
     readonly property string kind: context.type ?? ""
     readonly property var kindNames: ({
         playlist: I18n.t("Playlist"), album: I18n.t("Album"), artist: I18n.t("Artist"), show: I18n.t("Podcast"), episode: I18n.t("Podcast"),
-        liked: I18n.t("Liked Songs"), radio: I18n.t("Radio"), search: I18n.t("Search"), tracks: I18n.t("Tracks")
+        liked: I18n.t("Liked Songs"), dj: I18n.t("Spotify DJ"), radio: I18n.t("Radio"), search: I18n.t("Search"), tracks: I18n.t("Tracks")
     })
     // подпись над названием, как в макете: «Играет из плейлиста»
     readonly property var fromNames: ({
         playlist: I18n.t("Playing from playlist"), album: I18n.t("Playing from album"), artist: I18n.t("Playing artist"),
         show: I18n.t("Playing from podcast"), episode: I18n.t("Playing from podcast"), liked: I18n.t("Playing from library"),
-        radio: I18n.t("Playing radio"), search: I18n.t("Playing from search"), tracks: I18n.t("Playing from recents")
+        dj: I18n.t("Your personal DJ"), radio: I18n.t("Playing radio"), search: I18n.t("Playing from search"), tracks: I18n.t("Playing from recents")
     })
     readonly property var kindIcons: ({
         playlist: "queue_music", album: "album", artist: "person", show: "podcasts", episode: "podcasts",
-        liked: "favorite", radio: "radio", search: "search", tracks: "history"
+        liked: "favorite", dj: "mic", radio: "radio", search: "search", tracks: "history"
     })
 
-    implicitHeight: 64
+    implicitHeight: Math.max(64, Theme.type.labelMedium.line + Theme.type.titleSmall.line + 16)
     implicitWidth: 280
 
     Rectangle {
@@ -34,6 +34,7 @@ Item {
         color: Theme.surfaceContainerHigh
     }
     StateLayer {
+        enabled: root.kind !== "dj"
         anchors.fill: parent
         radius: Theme.shape.largeIncreased
         onClicked: root.clicked()
@@ -85,6 +86,7 @@ Item {
             }
         }
         Icon {
+            visible: root.kind !== "dj"
             name: "chevron_right"
             size: 22
         }

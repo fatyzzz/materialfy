@@ -9,6 +9,8 @@ Item {
 
     property var track: null
     property bool opened: false
+    onVisibleChanged: visible ? BackStack.push(root) : BackStack.pop(root)
+    Component.onDestruction: BackStack.pop(root)
 
     function open(t) {
         track = t ?? null
@@ -40,7 +42,7 @@ Item {
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.AllButtons
-            onPressed: root.close()
+            onClicked: root.close()
             onWheel: wheel => {}
         }
     }
@@ -48,14 +50,16 @@ Item {
     Rectangle {
         id: card
         anchors.centerIn: parent
+        // телефон: открытая клавиатура закрывает низ экрана — карточка поднимается над ней
+        anchors.verticalCenterOffset: Theme.mobile && Qt.inputMethod.visible ? -Qt.inputMethod.keyboardRectangle.height / 2 : 0
         width: Math.min(400, parent.width - 48)
         implicitHeight: content.implicitHeight + 48
         height: implicitHeight
         radius: Theme.shape.extraLarge
         color: Theme.surfaceContainerHigh
-        scale: root.opened ? 1 : 0.92
+        scale: Theme.reducedMotion || root.opened ? 1 : Theme.mobile ? 0.96 : 0.92
         opacity: root.opened ? 1 : 0
-        Behavior on scale { NumberAnimation { duration: Theme.motion.spatialFast; easing.type: Easing.OutBack } }
+        Behavior on scale { NumberAnimation { duration: Theme.motion.spatialFast; easing.type: Theme.mobile ? Easing.OutCubic : Easing.OutBack } }
         Behavior on opacity { NumberAnimation { duration: Theme.motion.effectsFast } }
         Keys.onEscapePressed: root.close()
 

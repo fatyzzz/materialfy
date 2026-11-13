@@ -3,6 +3,8 @@
 // Имена типов — контракт с QML.
 #include "register.h"
 
+#include "mobile.h"
+
 #include <QtQml/QQmlEngine>
 #include <QtQml/qqml.h>
 
@@ -65,6 +67,7 @@ register_qml_types()
   singleton<Lyrics>("Lyrics");
   singleton<Updater>("Updater");
   singleton<WindowShell>("WindowShell");
+  singleton<MobileShell>("MobileShell");
 
   qmlRegisterType<TrackFilter>(URI, 1, 0, "TrackFilter");
   qmlRegisterUncreatableType<DictListModel>(URI, 1, 0, "DictListModel", QStringLiteral("the model is created in Rust"));

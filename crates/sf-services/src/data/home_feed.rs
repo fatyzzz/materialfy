@@ -449,7 +449,7 @@ pub async fn homeview(session: &Session) -> anyhow::Result<Vec<FeedSection>> {
 }
 
 /// Spotify's DJ: a playlist-like context made for each listener, offered in some markets only.
-pub const DJ_URI: &str = "spotify:playlist:37i9dQZF1EYkqdzj48dyYq";
+pub use md3_model::context::DJ_URI;
 
 /// The DJ's cover when this account has the DJ, else `None`. Spotify's own
 /// home feed for the web player leaves the DJ out, so this asks for a DJ
@@ -473,7 +473,7 @@ pub async fn dj_cover(session: &Session) -> Option<String> {
     Some(cover.unwrap_or_else(|| DJ_COVER.to_owned()))
 }
 
-const DJ_COVER: &str = "https://lexicon-assets.spotifycdn.com/Your-DJ-Cover-Art-640.png";
+use md3_model::context::DJ_COVER;
 
 /// Страница «Для тебя»: личные плейлисты Spotify по разделам.
 pub async fn made_for_you(http: &Http, session: &Session) -> anyhow::Result<Vec<FeedSection>> {

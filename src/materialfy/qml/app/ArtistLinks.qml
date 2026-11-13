@@ -55,6 +55,10 @@ Item {
         color: root.color
         elide: Text.ElideRight
         horizontalAlignment: root.centered ? Text.AlignHCenter : Text.AlignLeft
+        TapHandler {
+            enabled: Theme.mobile && root._refs.length > 0
+            onTapped: Catalog.openArtists(root._refs)
+        }
     }
 
     Row {

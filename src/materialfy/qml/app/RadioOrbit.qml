@@ -15,6 +15,7 @@ Item {
     property var groups: []                // Radio.seeds: [{key, title, items: [{uri, label, cover, kind}]}]
     property string selected               // URI выбранного сида
     property bool locked: false            // нет воспроизведения на этом ПК — сиды неактивны
+    property bool connecting: false        // воспроизведение разрешено, движок ещё поднимается (вместе с loading)
     property bool loading: false
     property bool playing: false           // играет станция выбранного сида
     property bool signedIn: true
@@ -36,6 +37,8 @@ Item {
     // Карточка слева от групп, если рядом с ней влезает хотя бы 6 ячеек; иначе — над ними
     readonly property real heroWidth: Math.max(300, Math.min(400, width * 0.32))
     readonly property bool sideBySide: signedIn && width - heroWidth - 24 >= 6 * 88
+    // фигура над подписью (а не слева от неё): рядом с группами или на телефоне, где подписи не хватает ширины
+    readonly property bool heroStacked: sideBySide || Theme.mobile
     // Ячейка сида тянется под ширину: самая длинная группа (7 с «+») — одной строкой, подписи длиннее
     readonly property real groupsWidth: sideBySide ? width - heroWidth - 24 : width
     readonly property real slotWidth: Math.floor(Math.max(compact ? 76 : 84, Math.min(112, groupsWidth / 7 - 4)))
@@ -105,7 +108,7 @@ Item {
         Label {
             visible: root.signedIn
             text: I18n.t("Radio")
-            type: "headlineSmall"
+            type: Theme.mobile ? "titleLarge" : "headlineSmall"
             weight: 600
         }
 
@@ -125,7 +128,7 @@ Item {
                 implicitHeight: heroGrid.implicitHeight + 2 * pad
                 radius: Theme.shape.extraLarge
                 color: Theme.surfaceContainerHigh
-                readonly property real pad: root.sideBySide ? 24 : 20
+                readonly property real pad: root.sideBySide ? 24 : Theme.mobile ? 16 : 20
                 readonly property bool closed: root.locked || !root.signedIn
 
                 GridLayout {
@@ -134,7 +137,7 @@ Item {
                     anchors.right: parent.right
                     anchors.verticalCenter: parent.verticalCenter
                     anchors.margins: card.pad
-                    columns: root.sideBySide ? 1 : 2
+                    columns: root.heroStacked ? 1 : 2
                     columnSpacing: 24
                     rowSpacing: 16
 
@@ -142,7 +145,7 @@ Item {
                     Item {
                         id: hero
                         readonly property real size: root.sideBySide ? Math.min(220, card.width - 2 * card.pad)
-                                                                     : (root.compact ? 136 : 160)
+                                                                     : Theme.mobile ? 120 : (root.compact ? 136 : 160)
                         Layout.preferredWidth: size
                         Layout.preferredHeight: size
                         Layout.alignment: Qt.AlignHCenter | Qt.AlignVCenter
@@ -197,8 +200,8 @@ Item {
                         Layout.maximumWidth: room
                         Layout.alignment: Qt.AlignVCenter
                         spacing: 4
-                        readonly property int align: root.sideBySide ? Text.AlignHCenter : Text.AlignLeft
-                        readonly property real room: Math.max(0, heroGrid.width - (root.sideBySide ? 0 : hero.size + heroGrid.columnSpacing))
+                        readonly property int align: root.heroStacked ? Text.AlignHCenter : Text.AlignLeft
+                        readonly property real room: Math.max(0, heroGrid.width - (root.heroStacked ? 0 : hero.size + heroGrid.columnSpacing))
 
                         readonly property string kindText: {
                             const c = root.current
@@ -226,6 +229,7 @@ Item {
                             horizontalAlignment: caption.align
                             text: !root.signedIn ? I18n.t("Sign in to Spotify")
                                 : root.locked ? (root.premium ? I18n.t("Connect playback on this computer") : I18n.t("Spotify radio requires Premium"))
+                                : root.connecting ? I18n.t("Connecting to Spotify…")
                                 : root.loading ? I18n.t("Building your station…")
                                 : root.current ? root.current.item.label ?? "" : I18n.t("Pick a track, artist or playlist")
                             type: root.locked || !root.signedIn || root.loading || !root.current ? "titleLarge" : "headlineSmall"
@@ -241,6 +245,7 @@ Item {
                                     ? I18n.t("Spotify stations only come through a playback session (the Web API doesn't provide them). Separate browser sign-in, Spotify Premium required.")
                                     : I18n.t("Stations come through a playback session, which is only available with Premium."))
                                 : root.errorText !== "" ? root.errorText
+                                : root.connecting ? I18n.t("50 tracks · a fresh mix every time")
                                 : root.loading ? I18n.t("50 tracks in one batch")
                                 : I18n.t("50 tracks · a fresh mix every time")
                             type: "bodySmall"
@@ -251,7 +256,7 @@ Item {
                         Grid {
                             id: actions
                             Layout.topMargin: 8
-                            Layout.alignment: root.sideBySide ? Qt.AlignHCenter : Qt.AlignLeft
+                            Layout.alignment: root.heroStacked ? Qt.AlignHCenter : Qt.AlignLeft
                             visible: !root.loading
                             spacing: 8
                             // не влезают в строку карточки — столбиком по центру
@@ -435,7 +440,7 @@ Item {
                                     MouseArea {
                                         id: area
                                         anchors.fill: parent
-                                        hoverEnabled: true
+                                        hoverEnabled: !Theme.mobile
                                         cursorShape: Qt.PointingHandCursor
                                         onClicked: seed.add ? root.addRequested(disc) : root.picked(seed.uri)
                                     }

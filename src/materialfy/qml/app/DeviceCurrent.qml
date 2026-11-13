@@ -57,7 +57,7 @@ Rectangle {
                 color: Theme.primary
                 Icon {
                     anchors.centerIn: parent
-                    name: root._d.isThisComputer ? "computer" : info.icon
+                    name: root._d.isThisComputer ? (Theme.mobile ? "smartphone" : "computer") : info.icon
                     size: 22
                     fill: 1
                     weight: 500

@@ -16,8 +16,23 @@ pub enum Outcome {
 /// Inno Setup flags of a silent update; /RELAUNCH starts the app again (materialfy.iss, [Run]).
 pub const SETUP_ARGS: [&str; 6] = ["/SILENT", "/SP-", "/NOCANCEL", "/NORESTART", "/CLOSEAPPLICATIONS", "/RELAUNCH"];
 
+type ApkInstaller = Box<dyn Fn(&Path) -> Result<(), String> + Send + Sync>;
+static APK_INSTALLER: std::sync::OnceLock<ApkInstaller> = std::sync::OnceLock::new();
+
+/// Android: hands the verified APK to the system package installer (set once by the app shell).
+pub fn set_apk_installer(installer: impl Fn(&Path) -> Result<(), String> + Send + Sync + 'static) {
+    let _ = APK_INSTALLER.set(Box::new(installer));
+}
+
+fn install_apk(file: &Path) -> Result<Outcome, String> {
+    let installer = APK_INSTALLER.get().ok_or_else(|| mf_i18n::t("This copy of Materialfy can't update itself"))?;
+    installer(file)?;
+    Ok(Outcome::HandedOff)
+}
+
 pub fn install(kind: InstallKind, file: &Path, work_dir: &Path) -> Result<Outcome, String> {
     match kind {
+        InstallKind::AndroidApk => install_apk(file),
         InstallKind::WindowsInstaller => run_setup(file),
         InstallKind::WindowsPortable => replace_portable(file, work_dir),
         InstallKind::AppImage => replace_appimage(file),

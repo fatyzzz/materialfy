@@ -17,8 +17,11 @@ RowLayout {
     Label {
         Layout.fillWidth: true
         text: root.text
-        type: "headlineSmall"
+        type: Theme.mobile ? "titleLarge" : "headlineSmall"
         weight: 600
+        // узкий экран: в две строки, а не с многоточием
+        wrapMode: Theme.mobile ? Text.WordWrap : Text.NoWrap
+        maximumLineCount: 3
     }
     Button {
         visible: root.actionText !== ""

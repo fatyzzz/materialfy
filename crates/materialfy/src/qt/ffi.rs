@@ -59,6 +59,14 @@ pub mod ffi {
         include!("winframe.h");
         unsafe fn winframe_install(window: *mut QObject, grip: i32) -> bool;
 
+        include!("mobile.h");
+        fn is_android() -> bool;
+        fn android_prepare_assets(version: &QString) -> QString;
+        fn android_java_vm() -> usize;
+        fn android_context() -> usize;
+        fn open_url_external(url: &QString);
+        fn android_install_apk(path: &QString) -> QString;
+
         include!("register.h");
         fn register_qml_types();
     }

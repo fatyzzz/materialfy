@@ -38,7 +38,7 @@ use tokio::sync::broadcast;
 use mf_platform::{SettingKey, SettingsStore};
 
 pub use auth::{AuthEvent, AuthService, AuthSnapshot, AuthState, PlaybackAuthState, ProxyInput};
-pub use sf_auth::{Grant, ManualProxy, ProxyConfig, ProxyMode};
+pub use sf_auth::{Grant, ManualProxy, ProxyConfig, ProxyMode, set_browser_opener};
 pub use catalog::{AlbumPage, ArtistPage, CatalogService, EpisodePage, SearchKind, SearchResults, ShowPage};
 pub use devices::{DevicesEvent, DevicesService, DevicesSnapshot};
 pub use history::{HistoryEvent, HistoryService, PlayRecord};

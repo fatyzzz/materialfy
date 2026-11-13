@@ -18,6 +18,7 @@ Item {
     property string albumId
     property string album
     property string cover
+    property bool showCover: true
     property string coverLarge
     property string uri
     property bool isEpisode: false
@@ -69,7 +70,15 @@ Item {
     signal dragMoved(real dy, real sceneY)
     signal dragFinished()
 
-    implicitHeight: 64
+    implicitHeight: Theme.trackRowHeight(false)
+
+    component ExplicitMark: Rectangle {
+        implicitWidth: Math.max(16, Theme.type.labelSmall.size + 5)
+        implicitHeight: Math.max(16, Theme.type.labelSmall.line)
+        radius: 4
+        color: Theme.surfaceContainerHighest
+        Label { anchors.centerIn: parent; text: "E"; type: "labelSmall"; color: Theme.fgSurfaceVariant }
+    }
 
     function trackData() {
         if (track)
@@ -119,9 +128,47 @@ Item {
     readonly property bool _compactAdded: width < 600
     readonly property real _editT: editable ? 1 : 0
 
+    // ---- Телефон: свайп вправо — «в очередь» (как в Spotify). Строка едет за пальцем, под ней значок;
+    // после порога отпустить — трек встаёт в очередь (играет следующим после уже добавленных) ----
+    property real _swipeX: 0
+    readonly property real _queueAt: 88
+    readonly property bool _queueArmed: _swipeX >= _queueAt
+    on_QueueArmedChanged: if (queueSwipe.active) MobileShell.haptic()
+    NumberAnimation {
+        id: swipeBack
+        target: root; property: "_swipeX"; to: 0
+        duration: Theme.motion.spatialDefault
+        easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.motion.emphasizedDecelerate
+    }
+    Item {
+        id: queueReveal
+        visible: root._swipeX > 0
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        width: Math.max(0, root._swipeX)
+        clip: true
+        Rectangle {
+            anchors.fill: parent
+            radius: Theme.shape.large
+            color: root._queueArmed ? Theme.primary : Theme.surfaceContainerHighest
+            Behavior on color { ColorAnimation { duration: Theme.motion.effectsFast } }
+        }
+        Icon {
+            anchors.verticalCenter: parent.verticalCenter
+            x: Math.min(24, Math.max(8, (parent.width - size) / 2))
+            name: "add_to_queue"
+            size: 24
+            color: root._queueArmed ? Theme.fgPrimary : Theme.fgSurfaceVariant
+            scale: root._queueArmed ? 1.15 : 1
+            Behavior on scale { NumberAnimation { duration: Theme.motion.spatialFast; easing.type: Easing.OutBack } }
+        }
+    }
+
     Rectangle {
         id: bg
         anchors.fill: parent
+        transform: Translate { x: root._swipeX }
         radius: Theme.shape.large
         color: root.dragging ? Theme.surfaceContainerHighest
              : root.current && !root.editable ? Qt.alpha(Theme.primary, 0.12) : "transparent"
@@ -155,9 +202,10 @@ Item {
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: 12 - 8 * root._editT
-        anchors.rightMargin: 16
-        spacing: 16
+        transform: Translate { x: root._swipeX }
+        anchors.leftMargin: (Theme.mobile ? 8 : 12) - 8 * root._editT
+        anchors.rightMargin: Theme.mobile ? 0 : 16
+        spacing: Theme.mobile ? 12 : 16
         // недоступный в регионе трек приглушён, как в очереди (QueueRow)
         opacity: root.available ? 1 : Theme.stateLayer.disabledContent
 
@@ -197,8 +245,9 @@ Item {
             }
         }
 
+        // телефон: номер рядом с обложкой лишний — его 40 px нужнее названию (как в Spotify)
         Label {
-            visible: root.number > 0
+            visible: root.number > 0 && !(Theme.mobile && root.showCover && root.cover !== "")
             Layout.preferredWidth: 28
             text: root.number
             type: "bodyMedium"
@@ -208,6 +257,7 @@ Item {
 
         // выбранный трек ещё грузится — индикатор MD3 поверх обложки; строка уже переключилась на него
         Item {
+            visible: root.showCover
             Layout.preferredWidth: 48
             Layout.preferredHeight: 48
             MorphImage {
@@ -250,22 +300,21 @@ Item {
                     type: "bodyLarge"
                     color: Theme.fgSurfaceVariant
                 }
-                Rectangle {
-                    visible: root.explicit
-                    implicitWidth: 16
-                    implicitHeight: 16
-                    radius: 4
-                    color: Theme.surfaceContainerHighest
-                    Label { anchors.centerIn: parent; text: "E"; type: "labelSmall"; color: Theme.fgSurfaceVariant }
-                }
+                ExplicitMark { visible: root.explicit && !Theme.mobile }
                 Item { Layout.fillWidth: true }
             }
-            ArtistLinks {
+            // телефон: «E» — перед исполнителями, как в Spotify: строке названия нужна вся ширина
+            RowLayout {
                 Layout.fillWidth: true
-                refs: root.artistRefs ?? []
-                text: root.artists
-                type: "bodyMedium"
-                color: Theme.fgSurfaceVariant
+                spacing: 6
+                ExplicitMark { visible: root.explicit && Theme.mobile }
+                ArtistLinks {
+                    Layout.fillWidth: true
+                    refs: root.artistRefs ?? []
+                    text: root.artists
+                    type: "bodyMedium"
+                    color: Theme.fgSurfaceVariant
+                }
             }
         }
 
@@ -315,19 +364,24 @@ Item {
 
         // Сердце и ⋯ — в просмотре; «убрать» — в правке (перекрёстное растворение)
         Item {
-            implicitWidth: root.editable ? 32 : 32 + 16 + 32
-            implicitHeight: 32
+            // телефон: «⋯» видна всегда (наведения нет), сердце — только у лайкнутых, кнопка «⋯» крупнее
+            readonly property bool heartShown: !Theme.mobile || root.liked
+            implicitWidth: root.editable ? 32 : Theme.mobile ? (heartShown ? 32 + 4 : 0) + 40 : 32 + 16 + 32
+            implicitHeight: Theme.mobile ? 40 : 32
 
             Row {
                 visible: opacity > 0
                 opacity: 1 - root._editT
                 Behavior on opacity { NumberAnimation { duration: Theme.motion.effectsDefault } }
-                spacing: 16
+                spacing: Theme.mobile ? 4 : 16
+                anchors.verticalCenter: parent.verticalCenter
 
                 // Сердце: залитое у лайкнутых, контур — при наведении на строку
                 Item {
+                    visible: parent.parent.heartShown
                     width: 32
                     height: 32
+                    anchors.verticalCenter: parent.verticalCenter
                     Icon {
                         anchors.centerIn: parent
                         visible: root.available
@@ -349,17 +403,17 @@ Item {
                 }
                 // «⋯» — с первого наведения на строку
                 Loader {
-                    width: 32
-                    height: 32
-                    active: rowHover.hovered || item !== null
+                    width: Theme.mobile ? 40 : 32
+                    height: Theme.mobile ? 40 : 32
+                    active: Theme.mobile || rowHover.hovered || item !== null
                     sourceComponent: IconButton {
                         id: moreButton
-                        icon: "more_horiz"
-                        size: "xs"
-                        iconSize: 26
-                        iconWeight: 700
+                        icon: Theme.mobile ? "more_vert" : "more_horiz"
+                        size: Theme.mobile ? "s" : "xs"
+                        iconSize: Theme.mobile ? 24 : 26
+                        iconWeight: Theme.mobile ? 500 : 700
                         enabled: !root.editable
-                        opacity: rowHover.hovered || pressed ? 1 : 0
+                        opacity: Theme.mobile || rowHover.hovered || pressed ? 1 : 0
                         onClicked: root.openMenuAt(moreButton)
                     }
                 }
@@ -383,6 +437,8 @@ Item {
         }
 
         Label {
+            // телефон: длительность — в меню «О треке»; место нужнее названию
+            visible: !Theme.mobile
             Layout.preferredWidth: 44
             text: root._time(root.durationMs)
             type: "bodyMedium"
@@ -392,6 +448,39 @@ Item {
     }
 
     HoverHandler { id: rowHover }
+
+    // Слой поверх строки: нажатие видит первым и держит пассивно (тап и кнопки работают), жест забирает,
+    // когда палец поехал вправо; вертикальный — остаётся списку
+    Item {
+        anchors.fill: parent
+        z: 10
+        DragHandler {
+            id: queueSwipe
+            target: null
+            enabled: Theme.mobile && !BackStack.hasOverlay && !root.editable && root.available && root.uri !== ""
+            yAxis.enabled: false
+            // translation обнуляется раньше, чем приходит active=false: решение — по _swipeX
+            onTranslationChanged: {
+                if (!active)
+                    return
+                const x = Math.max(0, translation.x)
+                // за порогом — с сопротивлением
+                root._swipeX = x <= root._queueAt ? x : root._queueAt + (x - root._queueAt) * 0.3
+            }
+            onActiveChanged: {
+                if (active)
+                    swipeBack.stop()
+            }
+            onGrabChanged: transition => {
+                const released = transition === PointerDevice.UngrabExclusive
+                if (!released && transition !== PointerDevice.CancelGrabExclusive)
+                    return
+                if (released && root._queueArmed)
+                    Player.addToQueue(root.trackData())
+                swipeBack.restart()
+            }
+        }
+    }
 
     // Перетаскивание в очередь (вне правки)
     QueueDragSource {
@@ -405,6 +494,7 @@ Item {
 
     TapHandler {
         acceptedButtons: Qt.RightButton
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad   // касание — не правый клик: у него нет кнопок, TapHandler принял бы любой тап
         onTapped: (point) => root.openMenu(root, point.position.x, point.position.y)
     }
 
@@ -415,5 +505,14 @@ Item {
         radius: Theme.shape.large
         dragged: root.dragging
         onClicked: if (!root.editable) root.activated()
+        // телефон: долгое нажатие — меню трека (на десктопе — правая кнопка)
+        onPressAndHold: mouse => {
+            if (Theme.mobile && !root.editable) {
+                MobileShell.haptic()
+                root.openMenu(root, mouse.x, mouse.y)
+            } else {
+                mouse.accepted = false
+            }
+        }
     }
 }

@@ -59,6 +59,8 @@ pub enum InstallKind {
     Manual,
     /// cargo build (target/release, target/debug): never replaced automatically
     Dev,
+    /// Android APK: the new APK is handed to the system package installer (the user confirms)
+    AndroidApk,
 }
 
 impl InstallKind {
@@ -70,6 +72,7 @@ impl InstallKind {
             InstallKind::MacApp => "mac",
             InstallKind::Manual => "manual",
             InstallKind::Dev => "dev",
+            InstallKind::AndroidApk => "apk",
         }
     }
 
@@ -81,6 +84,7 @@ impl InstallKind {
             InstallKind::MacApp,
             InstallKind::Manual,
             InstallKind::Dev,
+            InstallKind::AndroidApk,
         ]
         .into_iter()
         .find(|kind| kind.code() == code.trim())
@@ -90,7 +94,11 @@ impl InstallKind {
     pub fn automatic(self) -> bool {
         matches!(
             self,
-            InstallKind::WindowsInstaller | InstallKind::WindowsPortable | InstallKind::AppImage | InstallKind::MacApp
+            InstallKind::WindowsInstaller
+                | InstallKind::WindowsPortable
+                | InstallKind::AppImage
+                | InstallKind::MacApp
+                | InstallKind::AndroidApk
         )
     }
 }
@@ -127,6 +135,8 @@ fn starts_with_ci(path: &Path, root: &Path) -> bool {
 
 pub fn detect_install_kind(probe: &Probe) -> InstallKind {
     match probe.os {
+        // APK: the exe path is the app's library in /data/app — never a dev build
+        "android" => InstallKind::AndroidApk,
         "linux" if probe.appimage.is_some_and(|p| !p.trim().is_empty()) => InstallKind::AppImage,
         _ if is_dev_build(probe.exe) => InstallKind::Dev,
         "windows" => {
@@ -154,6 +164,11 @@ pub fn select_asset<'a>(assets: &'a [GhAsset], kind: InstallKind, arch: &str) ->
         InstallKind::MacApp => match arch {
             "aarch64" => "-macos-arm64.dmg".to_owned(),
             "x86_64" => "-macos-x86_64.dmg".to_owned(),
+            _ => return None,
+        },
+        InstallKind::AndroidApk => match arch {
+            "aarch64" => "-arm64-v8a.apk".to_owned(),
+            "x86_64" => "-x86_64.apk".to_owned(),
             _ => return None,
         },
         InstallKind::Manual | InstallKind::Dev => return None,
@@ -233,6 +248,7 @@ mod tests {
     fn release_assets() -> Vec<GhAsset> {
         [
             "Materialfy-0.2.0-aarch64.AppImage",
+            "Materialfy-0.2.0-arm64-v8a.apk",
             "materialfy-0.2.0-linux-aarch64.tar.gz",
             "materialfy-0.2.0-linux-x86_64.tar.gz",
             "Materialfy-0.2.0-macos-arm64.dmg",
@@ -259,6 +275,8 @@ mod tests {
         assert_eq!(pick(InstallKind::AppImage, "riscv64"), None);
         assert_eq!(pick(InstallKind::MacApp, "aarch64"), Some("Materialfy-0.2.0-macos-arm64.dmg"));
         assert_eq!(pick(InstallKind::MacApp, "x86_64"), Some("Materialfy-0.2.0-macos-x86_64.dmg"));
+        assert_eq!(pick(InstallKind::AndroidApk, "aarch64"), Some("Materialfy-0.2.0-arm64-v8a.apk"));
+        assert_eq!(pick(InstallKind::AndroidApk, "riscv64"), None);
         assert_eq!(pick(InstallKind::Manual, "x86_64"), None);
         assert_eq!(pick(InstallKind::Dev, "x86_64"), None);
         // a release without the file
@@ -289,6 +307,7 @@ mod tests {
         assert_eq!(probe("macos", "/Applications/Materialfy.app/Contents/MacOS/materialfy", None, false), InstallKind::MacApp);
         assert_eq!(probe("macos", "/Users/me/src/materialfy/target/release/materialfy", None, false), InstallKind::Dev);
         assert_eq!(probe("freebsd", "/usr/local/bin/materialfy", None, false), InstallKind::Manual);
+        assert_eq!(probe("android", "/data/app/org.materialfy/lib/arm64/libmaterialfy.so", None, false), InstallKind::AndroidApk);
         for kind in ["installer", "portable", "appimage", "mac", "manual", "dev"] {
             assert_eq!(InstallKind::from_code(kind).map(InstallKind::code), Some(kind));
         }

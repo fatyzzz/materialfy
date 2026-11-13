@@ -90,7 +90,7 @@ Page {
 
     underlay: HeroShapes {
         width: page.width
-        active: page.visible
+        active: page.visible && !Theme.mobile
         headerHeight: hero.height + 24
         scroll: page.flickable.contentY
         contentX: page.sideMargin - 16
@@ -106,17 +106,20 @@ Page {
         Layout.fillWidth: true
         Layout.preferredHeight: heroRow.implicitHeight + 32
 
-        RowLayout {
+        // телефон: обложка над подписями, по центру
+        GridLayout {
             id: heroRow
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            spacing: page.compact ? 20 : 32
+            columns: Theme.mobile ? 1 : 2
+            rowSpacing: 16
+            columnSpacing: page.compact ? 20 : 32
 
             MorphImage {
-                Layout.preferredWidth: page.compact ? 150 : 200
+                Layout.preferredWidth: Theme.mobile ? 200 : page.compact ? 150 : 200
                 Layout.preferredHeight: Layout.preferredWidth
-                Layout.alignment: Qt.AlignTop
+                Layout.alignment: Theme.mobile ? Qt.AlignHCenter : Qt.AlignTop
                 Behavior on Layout.preferredWidth { NumberAnimation { duration: Theme.motion.spatialDefault; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.motion.emphasized } }
                 source: page.info.coverLarge || page.info.cover || ""
                 shape: page.playingEpisode && Player.playing ? "cookie9" : "softSquare"
@@ -158,7 +161,7 @@ Page {
                     spacing: 12
                     visible: (page.info.name ?? "") !== ""
                     Button {
-                        size: "m"
+                        size: Theme.mobile ? "s" : "m"
                         enabled: page.allEpisodes.length > 0
                         icon: page.playingEpisode && Player.playing ? "pause" : "play_arrow"
                         text: page.playingEpisode ? (Player.playing ? I18n.t("Pause") : I18n.t("Continue"))

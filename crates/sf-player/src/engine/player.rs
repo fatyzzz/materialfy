@@ -432,6 +432,9 @@ impl Engine {
     ) -> Result<Self> {
         let device_id = config.device_id();
         let session_config = SessionConfig {
+            // client ID — тот, которым выдан OAuth-токен входа (sf_auth). По умолчанию librespot берёт ID по ОС:
+            // на Android — ID клиента Android, и AP отвергает токен чужого клиента (INVALID_CREDENTIALS)
+            client_id: sf_auth::PLAYBACK_CLIENT_ID.to_owned(),
             device_id: device_id.clone(),
             autoplay: Some(config.autoplay),
             proxy,
@@ -494,7 +497,8 @@ impl Engine {
 
         let connect_config = ConnectConfig {
             name: config.device_name.clone(),
-            device_type: DeviceType::Computer,
+            // Android: в списке устройств Spotify — телефон, а не компьютер
+            device_type: if cfg!(target_os = "android") { DeviceType::Smartphone } else { DeviceType::Computer },
             initial_volume: config.initial_volume,
             disable_volume: false,
             volume_steps: 64,

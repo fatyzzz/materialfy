@@ -49,7 +49,10 @@ pub const OPEN_FAILED: &str = "Couldn't open the audio output device";
 type Opener = fn(Option<&str>, u32, &AudioControl) -> Result<Output, OpenError>;
 
 /// Maximum queued rodio chunks before `write` blocks, about 200 ms of audio.
-const QUEUE_LIMIT: usize = 12;
+/// Android's decoder thread shares small cores with the UI and the network,
+/// and a packet late by more than the queue is heard as a gap: there the
+/// queue holds about four times as much.
+const QUEUE_LIMIT: usize = if cfg!(target_os = "android") { 48 } else { 12 };
 
 /// How much of a full queue rodio plays before `write` is woken to top it
 /// up. librespot's packets hold 4 to 13 ms of sound, so polling every 10 ms
@@ -1176,6 +1179,7 @@ impl Sink for RodioSink {
 /// audio from running out under load (#88).
 ///
 /// Linux requires rtkit; CoreAudio owns its real-time callback on macOS.
+/// Android gives an app's own threads audio priority without a permission.
 #[cfg(windows)]
 fn take_precedence() {
     use windows_sys::Win32::System::Threading::{
@@ -1188,7 +1192,20 @@ fn take_precedence() {
     }
 }
 
-#[cfg(not(windows))]
+/// Android: `THREAD_PRIORITY_AUDIO` (-16), what Android's own players give
+/// their decoder thread. At the default priority the thread waited behind
+/// the UI and dropped out of the queue about once a second.
+#[cfg(target_os = "android")]
+fn take_precedence() {
+    const THREAD_PRIORITY_AUDIO: libc::c_int = -16;
+    // SAFETY: changes the calling thread's own nice value; no pointers.
+    let result = unsafe { libc::setpriority(libc::PRIO_PROCESS, libc::gettid() as libc::id_t, THREAD_PRIORITY_AUDIO) };
+    if result != 0 {
+        log::warn!("audio thread priority not raised: {}", std::io::Error::last_os_error());
+    }
+}
+
+#[cfg(not(any(windows, target_os = "android")))]
 fn take_precedence() {}
 
 #[derive(Debug, thiserror::Error)]
@@ -1211,8 +1228,9 @@ impl From<fastframe_audio::OpenError> for OpenError {
 /// What the output asks of the device: Spotify's stereo 44.1 kHz first, so
 /// nothing is converted, then whatever the device takes. A named device
 /// that has gone falls back to the default. The fixed buffer addresses
-/// Windows shared-mode underruns (#88); CoreAudio, ALSA, PulseAudio and
-/// PipeWire keep their proven driver-selected periods.
+/// Windows shared-mode underruns (#88) and AAudio's, whose default buffer
+/// is a few milliseconds; CoreAudio, ALSA, PulseAudio and PipeWire keep
+/// their proven driver-selected periods.
 fn output_options(preferred: Option<&str>, buffer_ms: u32) -> OutputOptions {
     let device = match preferred.map(str::trim).filter(|name| !name.is_empty()) {
         Some(name) => fastframe_audio::Device::Named(name.to_string()),
@@ -1223,9 +1241,10 @@ fn output_options(preferred: Option<&str>, buffer_ms: u32) -> OutputOptions {
         device,
         channels: NUM_CHANNELS as u16,
         sample_rate: Some(SAMPLE_RATE),
-        buffer: Buffer::FixedOnWindows(BufferSize::Duration(Duration::from_millis(u64::from(
-            buffer_ms,
-        )))),
+        buffer: {
+            let size = BufferSize::Duration(Duration::from_millis(u64::from(buffer_ms)));
+            if cfg!(target_os = "android") { Buffer::Fixed(size) } else { Buffer::FixedOnWindows(size) }
+        },
         follow_default: true,
         ..OutputOptions::default()
     }

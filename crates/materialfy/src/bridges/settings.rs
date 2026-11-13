@@ -824,6 +824,9 @@ impl qobject::Settings {
     }
 
     fn relaunch(&self) {
+        if cfg!(target_os = "android") {
+            return;
+        }
         let exe = std::env::var_os("APPIMAGE")
             .map(std::path::PathBuf::from)
             .or_else(|| std::env::current_exe().ok());

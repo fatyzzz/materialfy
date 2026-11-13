@@ -18,6 +18,11 @@ Item {
     implicitWidth: 358
     implicitHeight: 216
 
+    // телефон: нажатие чуть поджимает карточку; быстрый тап — короткой вспышкой (страница ещё открывается)
+    scale: Theme.mobile && (area.pressed || tapFlash.running) ? 0.97 : 1
+    Behavior on scale { NumberAnimation { duration: Theme.motion.spatialFast; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.motion.springFast } }
+    Timer { id: tapFlash; interval: 160 }
+
     // «Исполнитель Трек · …» по первым строкам Любимых
     readonly property string sample: {
         const m = Library.liked
@@ -80,7 +85,14 @@ Item {
                 maximumLineCount: 2
                 elide: Text.ElideRight
             }
-            Label { text: I18n.t("Liked Songs"); type: "headlineMedium"; weight: 500; color: Theme.fgPrimaryContainer }
+            // узкая плитка (телефон, русский): заголовок ужимается, а не заезжает под кнопку
+            Label {
+                Layout.fillWidth: true
+                text: I18n.t("Liked Songs"); type: "headlineMedium"; weight: 500; color: Theme.fgPrimaryContainer
+                fontSizeMode: Text.HorizontalFit
+                minimumPixelSize: 18
+                elide: Text.ElideRight
+            }
             Label {
                 text: Library.liked && Library.liked.loading && root.trackCount === 0 ? I18n.t("Loading…")
                     : I18n.n(root.trackCount, "{0} track", "{0} tracks")
@@ -94,10 +106,19 @@ Item {
     MouseArea {
         id: area
         anchors.fill: parent
-        hoverEnabled: true
+        hoverEnabled: !Theme.mobile
         cursorShape: Qt.PointingHandCursor
         acceptedButtons: Qt.LeftButton | Qt.RightButton
-        onClicked: mouse => mouse.button === Qt.RightButton ? root.menuRequested(root.mapToItem(null, mouse.x, mouse.y)) : root.clicked()
+        onClicked: mouse => {
+            if (mouse.button === Qt.RightButton) {
+                root.menuRequested(root.mapToItem(null, mouse.x, mouse.y))
+                return
+            }
+            tapFlash.restart()
+            root.clicked()
+        }
+        // телефон: меню — долгим нажатием (правой кнопки нет)
+        onPressAndHold: mouse => { if (Theme.mobile) { MobileShell.haptic(); root.menuRequested(root.mapToItem(null, mouse.x, mouse.y)) } else mouse.accepted = false }
     }
 
     PlayButton {
@@ -110,6 +131,6 @@ Item {
         playingShape: "cookie9"
         playing: Player.playing && Player.source === "liked"
         onClicked: root.playClicked()
-        MouseArea { id: playArea; anchors.fill: parent; hoverEnabled: true; acceptedButtons: Qt.NoButton }
+        MouseArea { id: playArea; anchors.fill: parent; hoverEnabled: !Theme.mobile; acceptedButtons: Qt.NoButton }
     }
 }

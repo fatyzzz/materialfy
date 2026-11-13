@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Пока Qt не нарисовал первый кадр: фон под тему системы, без мигания белым -->
+    <style name="Theme.Materialfy" parent="@android:style/Theme.DeviceDefault.DayNight">
+        <item name="android:windowBackground">@color/window_background</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:windowActionBar">false</item>
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
+    </style>
+</resources>
