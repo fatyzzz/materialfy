@@ -80,6 +80,10 @@ pub mod qobject {
         #[qsignal]
         #[cxx_name = "trackDetailsReady"]
         fn track_details_ready(self: Pin<&mut Catalog>, track_id: QString, details: QMap_QString_QVariant);
+        /// ответ на requestCanvas: id трека и ссылка на видео ("" — Canvas нет)
+        #[qsignal]
+        #[cxx_name = "canvasReady"]
+        fn canvas_ready(self: Pin<&mut Catalog>, track_id: QString, url: QString);
 
         #[qinvokable]
         #[cxx_name = "openArtist"]
@@ -158,6 +162,10 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "requestTrackDetails"]
         fn request_track_details(self: Pin<&mut Catalog>, track: &QMap_QString_QVariant);
+        /// Canvas трека (зацикленное видео вместо обложки) → canvasReady.
+        #[qinvokable]
+        #[cxx_name = "requestCanvas"]
+        fn request_canvas(self: Pin<&mut Catalog>, track_id: &QString);
     }
 
     impl cxx_qt::Threading for Catalog {}
@@ -760,6 +768,19 @@ impl qobject::Catalog {
                 };
                 catalog.track_details_ready(QString::from(track_id.as_str()), details);
             });
+        });
+    }
+
+    fn request_canvas(self: Pin<&mut Self>, track_id: &QString) {
+        let track_id = track_id.to_string();
+        if track_id.is_empty() || !signed_in() {
+            return;
+        }
+        let thread = self.qt_thread();
+        let catalog = ctx().services.catalog.clone();
+        ctx().rt.spawn(async move {
+            let url = catalog.canvas(&track_id).await.unwrap_or_default();
+            let _ = thread.queue(move |catalog| catalog.canvas_ready(QString::from(track_id.as_str()), QString::from(url.as_str())));
         });
     }
 
