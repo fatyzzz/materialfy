@@ -941,6 +941,13 @@ Page {
         }
 
         SettingRow {
+            visible: floatingPicker.visible && (Settings.floatingPlayer === "island" || Settings.floatingPlayer === "both") && Settings.canvas
+            title: I18n.t("Canvas in the island")
+            description: I18n.t("Play the track's looping video behind the island")
+            Switch { checked: Settings.floatingCanvas; onToggled: c => Settings.floatingCanvas = c }
+        }
+
+        SettingRow {
             visible: floatingPicker.visible && (Settings.floatingPlayer === "island" || Settings.floatingPlayer === "both") && Qt.platform.os !== "osx"
             title: I18n.t("Island edge")
             description: Settings.floatingEdge === "free" ? I18n.t("Drag the island anywhere on the screen")

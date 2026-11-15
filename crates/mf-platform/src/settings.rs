@@ -39,6 +39,8 @@ pub enum SettingKey {
     Canvas,
     /// непрозрачность видео Canvas, 0..1
     CanvasOpacity,
+    /// Canvas и в островке
+    FloatingCanvas,
     CoverSpin,
     CoverPulse,
     CalmWhenInactive,
@@ -199,7 +201,7 @@ pub enum SettingType {
 }
 
 impl SettingKey {
-    pub const ALL: [SettingKey; 92] = [
+    pub const ALL: [SettingKey; 93] = [
         SettingKey::ThemeMode,
         SettingKey::SchemeVariant,
         SettingKey::AccentFromCover,
@@ -212,6 +214,7 @@ impl SettingKey {
         SettingKey::AmbientBackground,
         SettingKey::Canvas,
         SettingKey::CanvasOpacity,
+        SettingKey::FloatingCanvas,
         SettingKey::CoverSpin,
         SettingKey::CoverPulse,
         SettingKey::CalmWhenInactive,
@@ -310,6 +313,7 @@ impl SettingKey {
             AmbientBackground => "ambientBackground",
             Canvas => "canvas",
             CanvasOpacity => "canvasOpacity",
+            FloatingCanvas => "floatingCanvas",
             CoverSpin => "coverSpin",
             CoverPulse => "coverPulse",
             CalmWhenInactive => "calmWhenInactive",
@@ -422,6 +426,7 @@ impl SettingKey {
             AmbientBackground => Bool(true),
             Canvas => Bool(true),
             CanvasOpacity => Float(0.5),
+            FloatingCanvas => Bool(false),
             CoverSpin => Bool(true),
             CoverPulse => Bool(true),
             CalmWhenInactive => Bool(true),
@@ -1252,7 +1257,7 @@ mod tests {
 
     #[test]
     fn schema() {
-        assert_eq!(SettingKey::ALL.len(), 92);
+        assert_eq!(SettingKey::ALL.len(), 93);
         for key in SettingKey::ALL {
             assert_eq!(SettingKey::from_name(key.name()), Some(key));
             assert_eq!(key.default_value().value_type(), key.value_type());
@@ -1593,7 +1598,7 @@ mod tests {
         let names: Vec<&str> = SettingKey::ALL.iter().map(|k| k.name()).collect();
         for name in [
             "themeMode", "schemeVariant", "accentFromCover", "customSeed", "windowButtons", "trackTransition",
-            "backdropMode", "nowPlayingBlur", "nowPlayingDrift", "ambientBackground", "canvas", "canvasOpacity", "coverSpin", "coverPulse",
+            "backdropMode", "nowPlayingBlur", "nowPlayingDrift", "ambientBackground", "canvas", "canvasOpacity", "floatingCanvas", "coverSpin", "coverPulse",
             "calmWhenInactive", "lyricsMode", "lyricsFontScale", "lyricsScrim",
             "lyricsTextAlign", "lyricsFillMode", "lyricsVisibleLines", "lyricsHighlight",
             "lyricsActiveScale", "lyricsIdleScale", "lyricsWordBounce", "lyricsDimOpacity",

@@ -82,5 +82,7 @@
   "Canvas": "Canvas",
   "The track's looping video behind the player, when it has one": "Зацикленное видео трека за плеером, если оно есть",
   "Canvas opacity": "Непрозрачность Canvas",
+  "Canvas in the island": "Canvas в островке",
+  "Play the track's looping video behind the island": "Зацикленное видео трека за островком",
   "Lower it to read lyrics and the queue over the video": "Уменьшите, чтобы читать текст и очередь поверх видео"
 }
