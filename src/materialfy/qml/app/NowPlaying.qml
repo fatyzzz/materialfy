@@ -60,10 +60,14 @@ Item {
     property string canvasUrl: ""
     function _askCanvas() {
         canvasUrl = ""
-        if (open && Player.trackId !== "" && !Player.isEpisode)
+        if (open && Settings.canvas && Player.trackId !== "" && !Player.isEpisode)
             Catalog.requestCanvas(Player.trackId)
     }
     onOpenChanged: _askCanvas()
+    Connections {
+        target: Settings
+        function onCanvasChanged() { root._askCanvas() }
+    }
     Connections {
         target: Player
         function onTrackChanged() { root._askCanvas() }
@@ -181,11 +185,12 @@ Item {
         Loader {
             id: canvas
             anchors.fill: parent
-            active: root.open && root.canvasUrl !== ""
+            active: root.open && root.canvasUrl !== "" && Settings.canvas
             source: "CanvasVideo.qml"
             onLoaded: item.source = Qt.binding(() => root.canvasUrl)
         }
         Binding { target: canvas.item; property: "running"; value: Player.playing; when: canvas.status === Loader.Ready }
+        Binding { target: canvas.item; property: "strength"; value: Settings.canvasOpacity; when: canvas.status === Loader.Ready }
         Rectangle {
             anchors.fill: parent
             color: Theme.surface

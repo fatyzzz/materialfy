@@ -78,5 +78,9 @@
   "Or drag the island along the edge. 0 is the center of the edge": "Ou arraste a ilha ao longo da borda. 0 é o centro da borda",
   "Island position": "Posição da ilha",
   "Hide over maximized windows": "Esconder com janelas maximizadas",
-  "The island steps aside while a maximized window fills its monitor": "A ilha sai do caminho enquanto uma janela maximizada ocupa o monitor dela"
+  "The island steps aside while a maximized window fills its monitor": "A ilha sai do caminho enquanto uma janela maximizada ocupa o monitor dela",
+  "Canvas": "Canvas",
+  "The track's looping video behind the player, when it has one": "O vídeo em loop da faixa atrás do player, quando ela tiver",
+  "Canvas opacity": "Opacidade do Canvas",
+  "Lower it to read lyrics and the queue over the video": "Diminua para ler a letra e a fila por cima do vídeo"
 }

@@ -9,9 +9,11 @@ Item {
 
     property url source
     property bool running: true
+    // сколько видео видно (Settings.canvasOpacity): под ним размытая обложка
+    property real strength: 1
     readonly property bool ready: player.hasVideo && player.playbackState === MediaPlayer.PlayingState
 
-    opacity: ready ? 1 : 0
+    opacity: ready ? strength : 0
     Behavior on opacity { NumberAnimation { duration: Theme.motion.effectsDefault } }
 
     MediaPlayer {

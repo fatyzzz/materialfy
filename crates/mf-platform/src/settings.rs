@@ -35,6 +35,10 @@ pub enum SettingKey {
     NowPlayingBlur,
     NowPlayingDrift,
     AmbientBackground,
+    /// Canvas трека за плеером
+    Canvas,
+    /// непрозрачность видео Canvas, 0..1
+    CanvasOpacity,
     CoverSpin,
     CoverPulse,
     CalmWhenInactive,
@@ -195,7 +199,7 @@ pub enum SettingType {
 }
 
 impl SettingKey {
-    pub const ALL: [SettingKey; 90] = [
+    pub const ALL: [SettingKey; 92] = [
         SettingKey::ThemeMode,
         SettingKey::SchemeVariant,
         SettingKey::AccentFromCover,
@@ -206,6 +210,8 @@ impl SettingKey {
         SettingKey::NowPlayingBlur,
         SettingKey::NowPlayingDrift,
         SettingKey::AmbientBackground,
+        SettingKey::Canvas,
+        SettingKey::CanvasOpacity,
         SettingKey::CoverSpin,
         SettingKey::CoverPulse,
         SettingKey::CalmWhenInactive,
@@ -302,6 +308,8 @@ impl SettingKey {
             NowPlayingBlur => "nowPlayingBlur",
             NowPlayingDrift => "nowPlayingDrift",
             AmbientBackground => "ambientBackground",
+            Canvas => "canvas",
+            CanvasOpacity => "canvasOpacity",
             CoverSpin => "coverSpin",
             CoverPulse => "coverPulse",
             CalmWhenInactive => "calmWhenInactive",
@@ -412,6 +420,8 @@ impl SettingKey {
             NowPlayingBlur => Float(1.0),
             NowPlayingDrift => Float(0.5),
             AmbientBackground => Bool(true),
+            Canvas => Bool(true),
+            CanvasOpacity => Float(0.5),
             CoverSpin => Bool(true),
             CoverPulse => Bool(true),
             CalmWhenInactive => Bool(true),
@@ -1242,7 +1252,7 @@ mod tests {
 
     #[test]
     fn schema() {
-        assert_eq!(SettingKey::ALL.len(), 90);
+        assert_eq!(SettingKey::ALL.len(), 92);
         for key in SettingKey::ALL {
             assert_eq!(SettingKey::from_name(key.name()), Some(key));
             assert_eq!(key.default_value().value_type(), key.value_type());
@@ -1583,7 +1593,7 @@ mod tests {
         let names: Vec<&str> = SettingKey::ALL.iter().map(|k| k.name()).collect();
         for name in [
             "themeMode", "schemeVariant", "accentFromCover", "customSeed", "windowButtons", "trackTransition",
-            "backdropMode", "nowPlayingBlur", "nowPlayingDrift", "ambientBackground", "coverSpin", "coverPulse",
+            "backdropMode", "nowPlayingBlur", "nowPlayingDrift", "ambientBackground", "canvas", "canvasOpacity", "coverSpin", "coverPulse",
             "calmWhenInactive", "lyricsMode", "lyricsFontScale", "lyricsScrim",
             "lyricsTextAlign", "lyricsFillMode", "lyricsVisibleLines", "lyricsHighlight",
             "lyricsActiveScale", "lyricsIdleScale", "lyricsWordBounce", "lyricsDimOpacity",

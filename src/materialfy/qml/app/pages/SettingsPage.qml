@@ -820,6 +820,29 @@ Page {
         }
 
         SettingRow {
+            title: I18n.t("Canvas")
+            description: I18n.t("The track's looping video behind the player, when it has one")
+            Switch { checked: Settings.canvas; onToggled: c => Settings.canvas = c }
+        }
+
+        SettingRow {
+            title: I18n.t("Canvas opacity")
+            enabled: Settings.canvas
+            opacity: enabled ? 1 : 0.5
+            description: I18n.t("Lower it to read lyrics and the queue over the video")
+            Slider {
+                wheelEnabled: false     // колесо прокручивает страницу, а не меняет настройку
+                width: 220
+                from: 0.1
+                to: 1
+                stepSize: 0.05
+                value: Settings.canvasOpacity
+                valueText: v => Math.round(v * 100) + " %"
+                onMoved: v => Settings.canvasOpacity = Math.round(v * 20) / 20
+            }
+        }
+
+        SettingRow {
             title: I18n.t("Blur drift")
             description: Settings.nowPlayingDrift > 0
                 ? I18n.t("Background colors slowly shift while music plays")

@@ -78,5 +78,9 @@
   "Or drag the island along the edge. 0 is the center of the edge": "Или перетащите островок вдоль края. 0 — центр края",
   "Island position": "Положение островка",
   "Hide over maximized windows": "Прятать над развёрнутыми окнами",
-  "The island steps aside while a maximized window fills its monitor": "Островок убирается, пока развёрнутое окно занимает его монитор"
+  "The island steps aside while a maximized window fills its monitor": "Островок убирается, пока развёрнутое окно занимает его монитор",
+  "Canvas": "Canvas",
+  "The track's looping video behind the player, when it has one": "Зацикленное видео трека за плеером, если оно есть",
+  "Canvas opacity": "Непрозрачность Canvas",
+  "Lower it to read lyrics and the queue over the video": "Уменьшите, чтобы читать текст и очередь поверх видео"
 }
