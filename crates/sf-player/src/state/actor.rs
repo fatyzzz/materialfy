@@ -36,7 +36,7 @@ pub(crate) enum LocalMsg {
 #[derive(Debug)]
 pub(crate) enum Command {
     PlayItems { items: Vec<TrackItem>, row: usize, context: PlayContext },
-    ShuffleFrom { items: Vec<TrackItem>, context: PlayContext },
+    ShuffleFrom { items: Vec<TrackItem>, context: PlayContext, smart: bool },
     PlayContext { context: PlayContext, offset: Option<String>, shuffle: Option<bool> },
     PlayUris { uris: Vec<String>, index: usize, context: PlayContext },
     /// Строка для оптимистичной сверки: списки присылают только URI.
@@ -274,7 +274,7 @@ impl Actor {
         let core = &mut self.core;
         match command {
             Command::PlayItems { items, row, context } => core.play_items(items, row, context),
-            Command::ShuffleFrom { items, context } => core.shuffle_from(items, context),
+            Command::ShuffleFrom { items, context, smart } => core.shuffle_from(items, context, smart),
             Command::PlayContext { context, offset, shuffle } => core.play_context(context, offset, shuffle),
             Command::PlayUris { uris, index, context } => core.play_uris(uris, index, context),
             Command::Remember(item) => core.remember(&item),

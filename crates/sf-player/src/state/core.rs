@@ -2365,13 +2365,14 @@ impl Core {
         }
     }
 
-    /// «Перемешать»: shuffle on и старт со случайного доступного трека.
-    pub fn shuffle_from(&mut self, items: Vec<TrackItem>, context: PlayContext) {
+    /// «Перемешать»: shuffle on и старт со случайного доступного трека; `smart` — сразу Smart Shuffle (у плейлиста).
+    pub fn shuffle_from(&mut self, items: Vec<TrackItem>, context: PlayContext, smart: bool) {
         let available: Vec<usize> = (0..items.len()).filter(|&i| playable(&items[i])).collect();
         if available.is_empty() {
             self.notice(mf_i18n::t("Nothing to shuffle"));
             return;
         }
+        self.smart_wanted = smart;
         let row = available[fastrand::usize(..available.len())];
         for item in &items {
             self.remember(item);

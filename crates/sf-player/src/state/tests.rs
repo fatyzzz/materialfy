@@ -1936,7 +1936,7 @@ fn a_shuffled_play_does_not_start_at_track_one() {
     items[5].available = false;
     let mut starts = std::collections::HashSet::new();
     for _ in 0..40 {
-        core.shuffle_from(items.clone(), PlayContext::with_uri("playlist", "spotify:playlist:p"));
+        core.shuffle_from(items.clone(), PlayContext::with_uri("playlist", "spotify:playlist:p"), false);
         for command in engine_commands(&mut core) {
             if let PlayerCommand::Load(load) = command {
                 let start = load.offset_uri.expect("the start is named");

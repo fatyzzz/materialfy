@@ -133,6 +133,10 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "shuffleFrom"]
         unsafe fn shuffle_from(self: Pin<&mut Player>, model: *mut QObject);
+        /// То же, но сразу Smart Shuffle (плейлист на этом ПК).
+        #[qinvokable]
+        #[cxx_name = "smartShuffleFrom"]
+        unsafe fn smart_shuffle_from(self: Pin<&mut Player>, model: *mut QObject);
         #[qinvokable]
         #[cxx_name = "playIndex"]
         fn play_index(self: &Player, index: i32);
@@ -516,18 +520,29 @@ impl qobject::Player {
         }
     }
 
-    unsafe fn shuffle_from(mut self: Pin<&mut Self>, model: *mut cxx_qt::QObject) {
+    unsafe fn shuffle_from(self: Pin<&mut Self>, model: *mut cxx_qt::QObject) {
+        unsafe { self.start_shuffled(model, false) }
+    }
+
+    unsafe fn smart_shuffle_from(self: Pin<&mut Self>, model: *mut cxx_qt::QObject) {
+        unsafe { self.start_shuffled(model, true) }
+    }
+
+    unsafe fn start_shuffled(mut self: Pin<&mut Self>, model: *mut cxx_qt::QObject, smart: bool) {
         let Some((items, context)) = (unsafe { crate::models::tracks_from_model(model) }) else { return };
         if items.is_empty() {
             return;
         }
-        if !self.shuffle {
+        // линза есть только у плейлиста на этом ПК: иначе ядро сыграет обычное перемешивание
+        let smart_shown = smart && !self.remote && context.context_uri.as_deref().is_some_and(|uri| uri.starts_with("spotify:playlist:"));
+        if !self.shuffle || self.smart_shuffle != smart_shown {
             let mut this = self.as_mut().rust_mut();
             this.shuffle = true;
+            this.smart_shuffle = smart_shown;
             this.mode_set_at = Some(Instant::now());
             self.as_mut().mode_changed();
         }
-        ctx().services.player.shuffle_from(items, context);
+        ctx().services.player.shuffle_from(items, context, smart);
     }
 
     fn play_index(&self, index: i32) {

@@ -161,8 +161,8 @@ impl PlayerHandle {
     }
 
     /// «Перемешать»: shuffle on и старт со случайного доступного трека.
-    pub fn shuffle_from(&self, items: Vec<TrackItem>, context: PlayContext) {
-        self.send(Command::ShuffleFrom { items, context });
+    pub fn shuffle_from(&self, items: Vec<TrackItem>, context: PlayContext, smart: bool) {
+        self.send(Command::ShuffleFrom { items, context, smart });
     }
 
     /// Контекст по URI (плейлист/альбом/артист/шоу/станция), с трека offset_uri или с начала.

@@ -9,6 +9,7 @@ import ".."
 // из Snackbar («Вернуть» / «Отменить»).
 TrackListPage {
     id: page
+    smartShuffleButton: true
 
     property string playlistId
     property string playlistTitle
