@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Layouts
 import Md3
 import Materialfy.Core
 
@@ -9,7 +10,7 @@ Rectangle {
 
     readonly property bool shown: Player.narrating === true
 
-    implicitWidth: row.implicitWidth + 20
+    implicitWidth: Math.min(260, parent ? parent.width : 260, row.implicitWidth + 20)
     implicitHeight: Math.max(32, Theme.type.labelLarge.line + 12)
     radius: height / 2
     color: Theme.tertiaryContainer
@@ -21,19 +22,22 @@ Rectangle {
     Behavior on opacity { NumberAnimation { duration: Theme.motion.effectsDefault } }
     Behavior on scale { NumberAnimation { duration: Theme.motion.spatialFast; easing.type: Easing.OutCubic } }
 
-    Row {
+    RowLayout {
         id: row
-        anchors.centerIn: parent
+        anchors.fill: parent
+        anchors.leftMargin: 10
+        anchors.rightMargin: 10
         spacing: 6
         Icon {
-            anchors.verticalCenter: parent.verticalCenter
+            Layout.alignment: Qt.AlignVCenter
             tight: true
             name: "mic"
             size: 18
             color: Theme.fgTertiaryContainer
         }
         Label {
-            anchors.verticalCenter: parent.verticalCenter
+            Layout.fillWidth: true
+            Layout.alignment: Qt.AlignVCenter
             text: Player.playing ? I18n.t("DJ is speaking") : I18n.t("DJ paused")
             type: "labelLarge"
             weight: 600

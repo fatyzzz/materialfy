@@ -22,12 +22,12 @@ with TemporaryDirectory(prefix="materialfy-font-test-") as directory:
     md.mkdir()
     core.mkdir(parents=True)
     files = ("Theme.qml", "Typography.js", "ColorMix.js", "Label.qml", "Button.qml",
-             "Chip.qml", "SearchField.qml", "TextField.qml", "ButtonGroup.qml")
+             "Chip.qml", "SearchField.qml", "TextField.qml", "ButtonGroup.qml", "IconButton.qml")
     for name in files:
         shutil.copy(QML / "Md3" / name, md / name)
     shutil.copy(QML / "app/MobileNavBar.qml", base / "MobileNavBar.qml")
     shutil.copy(QML / "app/SettingsNav.qml", base / "SettingsNav.qml")
-    for name in ("QueueContextCard", "QueueSectionHeader"):
+    for name in ("QueueContextCard", "QueueSectionHeader", "DjBadge"):
         shutil.copy(QML / "app" / (name + ".qml"), base / (name + ".qml"))
     roles = re.findall(r': "(\w+)"', (md / "Theme.qml").read_text(encoding="utf-8-sig"))
     colors = ",".join(name + ':Qt.rgba(.2,.2,.2,1)' for name in dict.fromkeys(roles))
@@ -40,11 +40,11 @@ QtObject { property real fontScale:1
  // Deliberately nonlinear: headings and body text have different scaling ratios.
  function textSize(sp) {return sp<=18?sp*fontScale:sp+(fontScale-1)*9}
 }''')
-    (core / "qmldir").write_text("module Materialfy.Core\n" + "".join("singleton " + name + " 1.0 " + name + ".qml\n" for name in ("ThemeEngine", "Settings", "MobileShell")))
+    (core / "Player.qml").write_text('pragma Singleton\nimport QtQuick\nQtObject {property bool narrating:true;property bool playing:true}')
+    (core / "qmldir").write_text("module Materialfy.Core\n" + "".join("singleton " + name + " 1.0 " + name + ".qml\n" for name in ("ThemeEngine", "Settings", "MobileShell", "Player")))
     stubs = {
         "I18n": 'pragma Singleton\nimport QtQuick\nQtObject {function t(value){return value}}',
         "Icon": 'import QtQuick\nItem {property string name;property real size:24;property color color;property real fill:0;property real weight:400;property bool tight:false;implicitWidth:size;implicitHeight:size}',
-        "IconButton": 'import QtQuick\nItem {property string size;property string icon;signal clicked();width:40;height:40}',
         "StateLayer": 'import QtQuick\nItem {property real radius;property real topLeftRadius;property real topRightRadius;property real bottomLeftRadius;property real bottomRightRadius;property color color;property bool ripple;property int cursorShape;property bool pressed:false;property bool containsMouse:false;signal clicked()}',
         "Elevation": 'import QtQuick\nQtObject {property Item target;property int level}',
         "MorphImage": 'import QtQuick\nItem {property string source;property string shape}',
@@ -55,7 +55,12 @@ QtObject { property real fontScale:1
         (md / (name + ".qml")).write_text(source)
     names = [n.removesuffix(".qml") for n in files if n.endswith(".qml")]
     (md / "qmldir").write_text("module Md3\n" + "".join(("singleton " if n in ("Theme", "I18n") else "") + n + " 1.0 " + n + ".qml\n" for n in names + list(stubs)))
+    home = (QML / "app/pages/HomePage.qml").read_text(encoding="utf-8-sig")
+    start = home.index('    Rectangle {\n        visible: page.djEntry')
+    end = home.index('    // ---- Сцена', start)
+    card = home[start:end].replace('Rectangle {', 'Rectangle {id:djCard', 1)
     scene = '''import QtQuick
+import QtQuick.Layouts
 import Md3
 import Materialfy.Core
 Window {width:360;height:640;visible:true
@@ -69,6 +74,11 @@ Window {width:360;height:640;visible:true
  ButtonGroup {id:icons;y:320;model:[{icon:"shuffle"},{icon:"repeat"}]}
  QueueContextCard {id:contextCard;context:({type:"album",title:"Album"});width:320}
  QueueSectionHeader {id:sectionHeader;title:"Next";count:7;width:320}
+ Item {id:page;width:parent.width;height:300;property var djEntry:({uri:"DJ"})
+  function isPlaying(entry){return false} function playEntry(entry){}
+  ColumnLayout {anchors.fill:parent;CARD_CODE}
+ }
+ DjBadge {id:djBadge}
  MobileNavBar {id:nav;y:400;width:parent.width;items:[
    {name:"home",text:"Главная",icon:"home"},{name:"search",text:"Поиск",icon:"search"},
    {name:"library",text:"Библиотека",icon:"library_music"},{name:"settings",text:"Настройки",icon:"settings"}]}
@@ -84,8 +94,9 @@ Window {width:360;height:640;visible:true
    searchHeight:search.implicitHeight,fieldHeight:field.implicitHeight,
    navHeight:nav.implicitHeight,navLabels:labels,rowHeight:Theme.trackRowHeight(false),
    groupHeight:group.implicitHeight,settingsNavHeight:settingsNav.implicitHeight,
-   iconGroupHeight:icons.implicitHeight,contextHeight:contextCard.implicitHeight,sectionHeight:sectionHeader.implicitHeight})}
-}'''
+   iconGroupHeight:icons.implicitHeight,contextHeight:contextCard.implicitHeight,sectionHeight:sectionHeader.implicitHeight,
+   djHeight:djCard.implicitHeight,djContent:djContent.implicitHeight,djBadgeHeight:djBadge.implicitHeight,djBadgeWidth:djBadge.implicitWidth})}
+}'''.replace("CARD_CODE", card)
     engine = QQmlEngine()
     warnings = []
     engine.warnings.connect(lambda errors: warnings.extend(error.toString() for error in errors))
@@ -113,6 +124,8 @@ Window {width:360;height:640;visible:true
         assert large["rowHeight"] >= 108
         assert large["groupHeight"] >= 92 and large["settingsNavHeight"] >= 60, large
         assert large["iconGroupHeight"] == 40 and large["contextHeight"] >= 88 and large["sectionHeight"] >= 56, large
+        assert large["djHeight"] >= large["djContent"] + 32 and large["djBadgeHeight"] >= 52, large
+        assert large["djBadgeWidth"] < 320, large
         assert not warnings, warnings
         window.desktop()
         assert json.loads(window.state())["body"]["size"] == 16
