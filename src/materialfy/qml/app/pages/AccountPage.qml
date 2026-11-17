@@ -191,7 +191,8 @@ Page {
                                  ? I18n.t("Library, search, remote and music on this computer are ready.")
                                  : I18n.t("Library, search and a remote for your devices are ready. Listening on this computer needs Spotify Premium.")
                     })[page.shown] ?? (page.compact ? I18n.t("One sign-in with Spotify Premium — your library and music here. You enter your password only on the Spotify website.") : I18n.t("One sign-in with Spotify Premium opens your library and music on this computer. You sign in in the browser: the password is entered only on the Spotify website, Materialfy never sees it.") + " "
-                                       + (Qt.platform.os === "windows" ? I18n.t("Keys are stored in Windows Credential Manager.")
+                                       + (Qt.platform.os === "android" ? I18n.t("Keys are stored in the app's private storage.")
+                                          : Qt.platform.os === "windows" ? I18n.t("Keys are stored in Windows Credential Manager.")
                                           : Qt.platform.os === "osx" ? I18n.t("Keys are stored in the macOS Keychain.")
                                           : I18n.t("Keys are stored in the system keychain.")))
                     type: "bodyMedium"
@@ -259,14 +260,17 @@ Page {
                     Layout.topMargin: 4
                 }
 
-                // Действия
-                RowLayout {
+                // Действия (на телефоне — столбиком: в строку три кнопки шире экрана)
+                GridLayout {
                     visible: page.shown !== "checking" && page.shown !== "connecting"
                     Layout.alignment: Qt.AlignHCenter
                     Layout.topMargin: 8
-                    spacing: 12
+                    columns: Theme.mobile ? 1 : 12
+                    columnSpacing: 12
+                    rowSpacing: 4
 
                     Button {
+                        Layout.alignment: Qt.AlignHCenter
                         visible: page.shown === "signedOut"
                         text: I18n.t("Sign in with Spotify")
                         icon: "open_in_new"
@@ -274,12 +278,14 @@ Page {
                         onClicked: Auth.startLogin()
                     }
                     Button {
+                        Layout.alignment: Qt.AlignHCenter
                         visible: page.shown === "signedOut"
                         text: I18n.t("Without Premium")
                         style: "text"
                         onClicked: Auth.startWebLogin()
                     }
                     Button {
+                        Layout.alignment: Qt.AlignHCenter
                         visible: page.shown === "error" && page.freeRefused
                         text: I18n.t("Sign in without Premium")
                         icon: "open_in_new"
@@ -287,6 +293,7 @@ Page {
                         onClicked: Auth.startWebLogin()
                     }
                     Button {
+                        Layout.alignment: Qt.AlignHCenter
                         visible: page.shown === "error" && !page.freeRefused
                         text: I18n.t("Retry")
                         icon: "refresh"
@@ -294,6 +301,7 @@ Page {
                         onClicked: Auth.retry()
                     }
                     Button {
+                        Layout.alignment: Qt.AlignHCenter
                         visible: page.shown === "signedOut" || page.shown === "error"
                         text: I18n.t("Proxy settings")
                         icon: "lan"
@@ -302,6 +310,7 @@ Page {
                     }
                     // в рейле — кнопки вместо карточки «Браузер не открылся?»
                     Button {
+                        Layout.alignment: Qt.AlignHCenter
                         visible: page.shown === "browser" && page.compact
                         text: I18n.t("Open again")
                         icon: "open_in_new"
@@ -309,6 +318,7 @@ Page {
                         onClicked: Auth.reopenBrowser()
                     }
                     Button {
+                        Layout.alignment: Qt.AlignHCenter
                         visible: page.shown === "browser" && page.compact
                         text: I18n.t("Link")
                         icon: "content_copy"
@@ -317,6 +327,7 @@ Page {
                     }
                     // адрес ответа — чип рядом с «Отмена»
                     Item {
+                        Layout.alignment: Qt.AlignHCenter
                         visible: page.shown === "browser" && !page.compact
                         implicitWidth: addrRow.implicitWidth + 20
                         implicitHeight: 40
@@ -341,12 +352,14 @@ Page {
                         }
                     }
                     Button {
+                        Layout.alignment: Qt.AlignHCenter
                         visible: page.shown === "browser"
                         text: I18n.t("Cancel")
                         style: "text"
                         onClicked: Auth.cancelLogin()
                     }
                     Button {
+                        Layout.alignment: Qt.AlignHCenter
                         visible: page.shown === "welcome" && page.playbackHere
                         text: I18n.t("Get started")
                         icon: "arrow_forward"
@@ -355,6 +368,7 @@ Page {
                     }
                     // вошли без Premium (Web API): звук здесь — отдельным входом через сессию, если Premium есть
                     Button {
+                        Layout.alignment: Qt.AlignHCenter
                         visible: page.shown === "welcome" && !page.playbackHere && page.premium
                         text: I18n.t("Next: listen here")
                         icon: "speaker"
@@ -362,6 +376,7 @@ Page {
                         onClicked: page._go("playback")
                     }
                     Button {
+                        Layout.alignment: Qt.AlignHCenter
                         visible: page.shown === "welcome" && !page.playbackHere
                         text: page.premium ? I18n.t("Later, remote only") : I18n.t("Next")
                         style: "text"
@@ -488,7 +503,7 @@ Page {
                         columnSpacing: 12
                         rowSpacing: 12
                         InfoCard {
-                            icon: Auth.playbackState === "ready" ? "computer" : "cast"
+                            icon: Auth.playbackState === "ready" ? (Theme.mobile ? "smartphone" : "computer") : "cast"
                             title: Auth.playbackState === "ready" ? I18n.t("Playing on this computer")
                                  : Auth.playbackState === "premiumRequired" ? I18n.t("Remote only")
                                  : I18n.t("Playback here isn't set up")
@@ -500,7 +515,8 @@ Page {
                         InfoCard {
                             icon: "lock"
                             title: Auth.tokenStorage === "keyring"
-                                   ? (Qt.platform.os === "windows" ? I18n.t("Keys in Credential Manager") : I18n.t("Keys in the keychain"))
+                                   ? (Qt.platform.os === "android" ? I18n.t("Keys in app storage")
+                                      : Qt.platform.os === "windows" ? I18n.t("Keys in Credential Manager") : I18n.t("Keys in the keychain"))
                                    : I18n.t("Sign-in")
                             text: I18n.t("Signing out removes this computer's keys from storage. You can revoke the app's permissions on spotify.com under “Apps”.")
                             action: I18n.t("Open spotify.com")

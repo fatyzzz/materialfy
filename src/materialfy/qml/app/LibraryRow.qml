@@ -1,6 +1,7 @@
 import QtQuick
 import QtQuick.Layouts
 import Md3
+import Materialfy.Core
 
 // Строка библиотеки (вид «список»): обложка 48 (исполнитель — круг, папка — иконка, Любимые — градиент),
 // название + булавка / «только чтение», подпись, колонки «Автор», «Добавлено», «Слушали» (последняя
@@ -114,6 +115,8 @@ Item {
         }
 
         Label {
+            // телефон: владелец — уже в подписи под названием, отдельной колонке нет места
+            visible: !Theme.mobile
             Layout.fillWidth: true
             Layout.preferredWidth: 1.4
             text: root.kind === "liked" ? I18n.t("You") : (root.entry.owner ?? "")
@@ -139,13 +142,13 @@ Item {
         }
         IconButton {
             id: more
-            Layout.preferredWidth: 32
-            Layout.preferredHeight: 32
-            icon: "more_horiz"
-            size: "xs"
-            iconSize: 26
-            iconWeight: 700
-            opacity: hover.hovered || pressed ? 1 : 0
+            Layout.preferredWidth: Theme.mobile ? 40 : 32
+            Layout.preferredHeight: Theme.mobile ? 40 : 32
+            size: Theme.mobile ? "s" : "xs"
+            iconSize: Theme.mobile ? 24 : 26
+            iconWeight: Theme.mobile ? 500 : 700
+            icon: Theme.mobile ? "more_vert" : "more_horiz"
+            opacity: Theme.mobile || hover.hovered || pressed ? 1 : 0
             onClicked: root.menuRequested(more.mapToItem(null, 0, more.height))
         }
     }
@@ -153,6 +156,7 @@ Item {
     HoverHandler { id: hover }
     TapHandler {
         acceptedButtons: Qt.RightButton
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad   // касание — не правый клик: у него нет кнопок, TapHandler принял бы любой тап
         onTapped: point => root.menuRequested(root.mapToItem(null, point.position.x, point.position.y))
     }
     StateLayer {
@@ -160,5 +164,13 @@ Item {
         anchors.fill: parent
         radius: Theme.shape.large
         onClicked: root.clicked()
+        onPressAndHold: mouse => {
+            if (Theme.mobile) {
+                MobileShell.haptic()
+                root.menuRequested(mapToItem(null, mouse.x, mouse.y))
+            }
+            else
+                mouse.accepted = false
+        }
     }
 }

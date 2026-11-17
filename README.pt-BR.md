@@ -7,13 +7,15 @@
   <img src="docs/brand/wordmark.svg" width="420" alt="Materialfy">
 </picture>
 
-[![Release build](https://github.com/fatyzzz/materialfy/actions/workflows/release.yml/badge.svg)](https://github.com/fatyzzz/materialfy/actions/workflows/release.yml)
-[![Release](https://img.shields.io/github/v/release/fatyzzz/materialfy?label=release)](https://github.com/fatyzzz/materialfy/releases/latest)
+[![Release build](https://github.com/makdren/materialfy/actions/workflows/release.yml/badge.svg)](https://github.com/makdren/materialfy/actions/workflows/release.yml)
+[![Release](https://img.shields.io/github/v/release/makdren/materialfy?label=release)](https://github.com/makdren/materialfy/releases/latest)
+[![Build](https://github.com/makdren/materialfy/actions/workflows/build.yml/badge.svg)](https://github.com/makdren/materialfy/actions/workflows/build.yml)
 
-Cliente desktop do Spotify feito com Rust e Qt Quick, com interface Material 3 Expressive.<br>
-Windows e Linux; o macOS é experimental.
+Cliente do Spotify para Android feito com Rust e Qt Quick, com interface Material 3 Expressive.<br>
+Um port do Materialfy desktop para o celular.
 
 [Download](#download) ·
+[Android](#android) ·
 [Capturas de tela](#capturas-de-tela) ·
 [Recursos](#recursos) ·
 [Limitações](#o-que-falta-e-por-quê) ·
@@ -37,23 +39,50 @@ O projeto é montado a partir de dois projetos com licença MIT: a parte do Spot
 [yamusic-md3](https://github.com/yaskorinov/yamusic-md3) (yaskorinov). Veja
 [Origem e licença](#origem-e-licença) para os detalhes.
 
+> [!NOTE]
+> Este é um fork do [fatyzzz/materialfy](https://github.com/fatyzzz/materialfy) com uma versão para Android: o
+> mesmo app com layout de celular, reprodução em segundo plano, o player na "ilha" do sistema e atualização do
+> APK pelo próprio app. Aqui só o APK é publicado; os builds para Windows, Linux e macOS estão nas
+> [releases do original](https://github.com/fatyzzz/materialfy/releases).
+
 ## Download
 
-Os builds prontos de todas as versões estão na [página de Releases](https://github.com/fatyzzz/materialfy/releases).
-Pegue o arquivo para o seu sistema na [última release](https://github.com/fatyzzz/materialfy/releases/latest):
+O APK está na [última release](https://github.com/makdren/materialfy/releases/latest) (todas as versões estão na [página de Releases](https://github.com/makdren/materialfy/releases)):
 
 | Sistema | Arquivo |
 | --- | --- |
-| Windows 10/11, x64 | `Materialfy-<version>-Setup.exe` (instalador, não precisa de direitos de administrador) ou `Materialfy-<version>-windows-x64-portable.zip` |
-| Linux x86_64 | `Materialfy-<version>-x86_64.AppImage` ou `materialfy-<version>-linux-x86_64.tar.gz` |
-| Linux aarch64 | `Materialfy-<version>-aarch64.AppImage` ou `materialfy-<version>-linux-aarch64.tar.gz` |
-| macOS 13+, Apple silicon | `Materialfy-<version>-macos-arm64.dmg` (experimental) |
-| macOS 13+, Intel | `Materialfy-<version>-macos-x86_64.dmg` (experimental) |
+| Android 9+, arm64 | `Materialfy-<version>-arm64-v8a.apk` |
 
-O `SHA256SUMS.txt` da mesma release lista os checksums. A partir da 0.2.1, o app verifica sozinho se há novas
-versões em Releases (Configurações → Atualizações). O instalador, a pasta portable e o AppImage baixam e
-aplicam a atualização no próprio local; no macOS o novo `.dmg` é aberto; uma cópia vinda do `tar.gz` apenas
-leva à página da release.
+O `SHA256SUMS.txt` da mesma release lista o checksum. O app verifica sozinho se há novas versões nas releases
+(Configurações → Atualizações): o novo APK é baixado, conferido com o checksum e entregue ao instalador do sistema.
+Os builds desktop e suas atualizações estão em [fatyzzz/materialfy](https://github.com/fatyzzz/materialfy/releases).
+
+## Android
+
+<p align="center"><img src="docs/screenshots/android/phone-en.png" width="100%" alt="Materialfy no celular: início, álbum, tocando agora, menu da faixa"></p>
+<p align="center"><sub>Início, álbum, Tocando agora e o menu da faixa. Capturado com dados de teste em uma janela de 412×915.</sub></p>
+
+O celular tem os mesmos recursos do desktop, em um layout para uma mão: navegação inferior, mini player acima
+dela, player em tela cheia (deslize para baixo para fechar), menus em bottom sheets, toque longo no lugar do
+clique direito e o botão Voltar do sistema.
+
+- A música continua tocando em segundo plano: notificação de mídia com capa e busca, tela de bloqueio, botões
+  do fone e do Bluetooth, pausa em ligações e ao desconectar o fone.
+- O player na "ilha" do sistema: no Android 16 como Live Update (chip na barra de status, Samsung Now Bar,
+  HyperOS Super Island, ColorOS Fluid Cloud), na vivo na Atomic Island do OriginOS. Dá para desligar em
+  Configurações → Reprodução.
+- O celular aparece no Spotify Connect como smartphone, então a música passa entre ele e o computador.
+- O status "Ouvindo Spotify" no Discord vem da conexão Spotify ↔ Discord e funciona igual no celular.
+- Atualizações: Configurações → Atualizações baixa o APK da release mais recente e instala por cima.
+
+**Instalação.** Baixe `Materialfy-<version>-arm64-v8a.apk` da [última release](https://github.com/makdren/materialfy/releases/latest)
+e abra o arquivo. O Android pede uma vez para permitir instalações pelo navegador ou gerenciador de arquivos. Se
+houver um build de teste assinado com outra chave (`-debugsigned.apk`), desinstale-o antes: o APK da release não
+é instalado por cima dele. O login funciona como no desktop: o navegador abre e, depois de entrar, você volta ao app.
+
+É preciso um celular arm64 com Android 9 ou posterior, e Spotify Premium para o áudio. A versão Android ainda é
+experimental: relate problemas em [Issues](https://github.com/makdren/materialfy/issues), de preferência com o
+modelo do celular e a versão do Android.
 
 ## Capturas de tela
 
@@ -141,7 +170,6 @@ Feitas com uma conta Premium e música tocando; as cores seguem a capa da faixa 
   segundo.
 - Não é possível baixar faixas para ouvir offline; o app não contorna DRM. O cache de áudio só acelera a
   reprodução repetida.
-- O app não se atualiza sozinho; uma nova versão precisa ser instalada manualmente.
 - O Client ID compartilhado da Web API é um só para todos os usuários do app, e o Spotify costuma aplicar rate
   limit nele. Por isso o app usa primeiro a sua sessão do Spotify e mantém a Web API como alternativa. Os
   detalhes e como configurar o seu próprio Client ID estão em [Sessão do Spotify e Web API](#sessão-do-spotify-e-web-api).
@@ -155,7 +183,7 @@ Feitas com uma conta Premium e música tocando; as cores seguem a capa da faixa 
 
 - Uma conta Spotify. Premium é necessário para áudio neste computador e para o rádio.
 - Windows 10 1809 ou posterior (x64); Linux x86_64 ou aarch64; macOS 13 ou posterior (o build é experimental;
-  as teclas de mídia no macOS não foram testadas).
+  as teclas de mídia no macOS não foram testadas); Android 9 ou posterior (arm64).
 - Portas locais 8989 e 8898 livres: o Spotify redireciona o navegador de volta para elas depois do login. Se o
   firewall perguntar, permita conexões em `127.0.0.1`.
 
@@ -169,7 +197,7 @@ Você precisa de Rust, Qt 6.12 e Build Tools for Visual Studio (detalhes em [Com
 gera o app e o instalador:
 
 ```powershell
-git clone https://github.com/fatyzzz/materialfy
+git clone https://github.com/makdren/materialfy
 cd materialfy
 .\build_windows.ps1 -QtDir C:\Qt\6.12.0\msvc2022_64
 ```
@@ -180,7 +208,7 @@ não precisa de direitos de administrador e instala em `%LocalAppData%\Programs\
 ### Linux
 
 ```bash
-git clone https://github.com/fatyzzz/materialfy
+git clone https://github.com/makdren/materialfy
 cd materialfy
 ./install.sh
 ```
@@ -198,6 +226,11 @@ Rodar o script de novo atualiza o app.
 ### macOS
 
 Não há instalador; compile o `.app` como descrito em [Compilação](#macos-experimental).
+
+### Android
+
+O APK da release está descrito em [Android](#android); a compilação do APK a partir do código-fonte
+está em [Compilação](#android-experimental).
 
 ## Primeira execução
 
@@ -394,6 +427,28 @@ cargo build --locked --release -p materialfy
 bash .github/scripts/package_macos.sh 0.1.0   # target/dist/Materialfy.app e .dmg
 ```
 
+### Android (experimental)
+
+Precisa de Rust com o target `aarch64-linux-android`, JDK 17+, Android SDK (platform 36, build-tools 36) com NDK
+r28 e duas instalações do Qt 6.12: para Android e para o host (as ferramentas dele montam o pacote).
+
+```bash
+rustup target add aarch64-linux-android
+python3 .github/scripts/install_qt.py --host android --out ~/Qt/6.12.0/android_arm64_v8a
+python3 .github/scripts/install_qt.py --out ~/Qt/6.12.0/gcc_64
+export QT_ANDROID=~/Qt/6.12.0/android_arm64_v8a QT_HOST=~/Qt/6.12.0/gcc_64
+export ANDROID_SDK_ROOT=~/Android/Sdk ANDROID_NDK_ROOT=~/Android/Sdk/ndk/28.2.13676358
+android/build_apk.sh --release   # target/android/Materialfy-<version>-arm64-v8a-debugsigned.apk
+```
+
+Sem chave, o APK é assinado com a chave de debug do SDK. Para assinar com a sua, defina `ANDROID_KEYSTORE`,
+`ANDROID_KEY_ALIAS` e `ANDROID_KEYSTORE_PASS`. No CI (`build.yml`, job `android`) a chave vem dos secrets
+`ANDROID_KEYSTORE_BASE64` e `ANDROID_KEYSTORE_PASS`, e uma tag `v*` publica uma release com o APK (sem a
+chave, a release não é criada). O Android só instala uma atualização sobre um APK assinado com a mesma chave. A parte do Android fica em
+[`android/`](android) e [`crates/materialfy/cpp/mobile.cpp`](crates/materialfy/cpp/mobile.cpp); o layout de
+celular em [`MobileMain.qml`](src/materialfy/qml/MobileMain.qml). No desktop, a flag `--mobile` abre o mesmo layout
+em uma janela, por exemplo `--mobile --size 412x915`.
+
 ### Flags de linha de comando e variáveis
 
 | Flag | O que faz |
@@ -406,6 +461,7 @@ bash .github/scripts/package_macos.sh 0.1.0   # target/dist/Materialfy.app e .dm
 | `--config-dir DIR` | diretório de configurações separado |
 | `--set key=value` | propriedade inicial da janela, por exemplo `--set startPage=settings` |
 | `--gallery` | galeria de componentes do Material 3 |
+| `--mobile` | layout de celular (como no Android) |
 
 Variáveis de ambiente: `MATERIALFY_QML_DIR` define um diretório QML personalizado, `MATERIALFY_SESSION_FILE`
 define o arquivo de sessão do player, `RUST_LOG` controla o logging (por exemplo
@@ -417,9 +473,9 @@ define o arquivo de sessão do player, `RUST_LOG` controla o logging (por exempl
 cargo test --locked --workspace
 ```
 
-O [`build.yml`](.github/workflows/build.yml) roda em pull requests para `main` e manualmente. O build do Windows
-(testes, instalador, arquivo portable, uma captura de tela de verificação da janela) é obrigatório. Linux e
-macOS são compilados em regime de melhor esforço; a falha deles não reprova a execução inteira.
+O [`build.yml`](.github/workflows/build.yml) roda em pushes e pull requests para `main` e manualmente. Neste fork
+ele compila só o APK; os jobs de Windows, Linux e macOS são pulados, a menos que a variável do repositório
+`DESKTOP_BUILDS` seja `true`.
 
 ## Como funciona
 
@@ -441,6 +497,9 @@ em Rust é conectado ao QML por meio do [cxx-qt](https://github.com/KDAB/cxx-qt)
 | `materialfy` | o executável: pontes QML, flags de linha de comando, cache de imagens, moldura de janela no Windows |
 
 ## Origem e licença
+
+Este repositório é um fork do [fatyzzz/materialfy](https://github.com/fatyzzz/materialfy) que adiciona a versão
+para Android (`android/`, `MobileMain.qml`, `crates/materialfy/cpp/mobile.cpp`). A licença é a mesma.
 
 O Materialfy é baseado em dois projetos com licença MIT:
 

@@ -74,9 +74,11 @@ Item {
     MouseArea {
         id: area
         anchors.fill: parent
-        hoverEnabled: true
+        hoverEnabled: !Theme.mobile
         cursorShape: Qt.PointingHandCursor
         acceptedButtons: Qt.LeftButton | Qt.RightButton
         onClicked: mouse => mouse.button === Qt.RightButton ? root.menuRequested(root.mapToItem(null, mouse.x, mouse.y)) : root.clicked()
+        // телефон: меню — долгим нажатием (правой кнопки нет)
+        onPressAndHold: mouse => { if (Theme.mobile) { MobileShell.haptic(); root.menuRequested(root.mapToItem(null, mouse.x, mouse.y)) } else mouse.accepted = false }
     }
 }

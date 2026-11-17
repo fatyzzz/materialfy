@@ -10,15 +10,19 @@ QtObject {
     id: root
 
     property bool active: true             // полосу видно и её не тянут
+    // false — без досчёта между обновлениями позиции (~5 раз в секунду): тонкой полоске мини-плеера плавность
+    // не нужна, а каждый тик Ticker перерисовывает всё окно
+    property bool smooth: true
     property real value: Player.position
 
     readonly property Connections _sync: Connections {
         target: Player
         function onPositionChanged() { root.value = Player.position }
+        function onStateChanged() { root.value = Player.position }
     }
 
     readonly property TickAnimation _tick: TickAnimation {
-        running: root.active && Player.playing && Player.durationMs > 0 && !Theme.quiet
+        running: root.smooth && root.active && Player.playing && !Player.narrating && !Player.buffering && Player.durationMs > 0 && !Theme.quiet
         onTriggered: root.value = Math.min(1, root.value + root._tick.frameTime * 1000 / Player.durationMs)
     }
 }

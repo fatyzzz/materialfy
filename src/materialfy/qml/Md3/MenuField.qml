@@ -19,7 +19,11 @@ Item {
     readonly property int currentIndex: _items.findIndex(m => m.id === currentValue)
     readonly property string currentText: currentIndex >= 0 ? _items[currentIndex].text : ""
 
-    implicitWidth: 240
+    // телефон: под подписью строки настроек — шире, чтобы значение («Системный по умолчанию») не обрезалось
+    implicitWidth: Theme.mobile ? 280 : 240
+    // в строке настроек на узком телефоне — не шире строки
+    property real maxWidth: parent && parent.objectName === "settingSlot" ? parent.availableWidth : Infinity
+    width: Math.min(implicitWidth, maxWidth)
     implicitHeight: column.implicitHeight
     opacity: enabled ? 1 : Theme.stateLayer.disabledContent
 

@@ -11,16 +11,19 @@ Item {
     property var track: ({})              // строка Player.queue (QUEUE_KEYS)
     property bool current: false
     property bool draggable: false
+    // место под ручку: только когда очередь вообще можно переставлять — иначе пустые 32 px слева у каждой строки
+    property bool reserveHandle: true
     property bool dragging: false
     property bool compact: false
-    readonly property bool hovered: rowHover.hovered
+    // на телефоне ручка и «⋯» видны всегда: наведения нет
+    readonly property bool hovered: rowHover.hovered || Theme.mobile
 
     signal activated()
     signal dragStarted()
     signal dragMoved(real dy)
     signal dragFinished()
 
-    implicitHeight: compact ? 56 : 64
+    implicitHeight: Theme.trackRowHeight(compact)
     implicitWidth: 300
 
     function openMenu(item, x, y) {
@@ -54,17 +57,26 @@ Item {
         radius: Theme.shape.large
         dragged: root.dragging
         onClicked: root.activated()
+        onPressAndHold: mouse => {
+            if (Theme.mobile) {
+                MobileShell.haptic()
+                root.openMenu(root, mouse.x, mouse.y)
+            }
+            else
+                mouse.accepted = false
+        }
     }
 
     RowLayout {
         anchors.fill: parent
-        anchors.leftMargin: 2
+        anchors.leftMargin: root.reserveHandle ? 2 : 10
         anchors.rightMargin: 10
         spacing: 10
         opacity: (root.track.available ?? true) ? 1 : Theme.stateLayer.disabledContent
 
         Item {
             id: handle
+            visible: root.reserveHandle
             Layout.preferredWidth: 22
             Layout.fillHeight: true
             Icon {
@@ -116,8 +128,8 @@ Item {
                 }
                 Rectangle {
                     visible: root.track.explicit === true
-                    implicitWidth: 16
-                    implicitHeight: 16
+                    implicitWidth: Math.max(16, Theme.type.labelSmall.size + 5)
+                    implicitHeight: Math.max(16, Theme.type.labelSmall.line)
                     radius: 4
                     color: Theme.surfaceContainerHighest
                     Label { anchors.centerIn: parent; text: "E"; type: "labelSmall"; color: Theme.fgSurfaceVariant }
@@ -187,6 +199,7 @@ Item {
     HoverHandler { id: rowHover }
     TapHandler {
         acceptedButtons: Qt.RightButton
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad   // касание — не правый клик: у него нет кнопок, TapHandler принял бы любой тап
         onTapped: point => root.openMenu(root, point.position.x, point.position.y)
     }
 }

@@ -35,7 +35,7 @@ fn main() {
 
     // winframe.cpp, taskbar.cpp и floating.cpp собираются везде (вне Windows — заглушка), чтобы привязки
     // в qt/ffi.rs и winframe.rs не зависели от ОС
-    let mut cpp = vec!["cpp/mf_shell.cpp", "cpp/register.cpp", "cpp/taskbar.cpp", "cpp/winframe.cpp", "cpp/floating.cpp"];
+    let mut cpp = vec!["cpp/mf_shell.cpp", "cpp/register.cpp", "cpp/taskbar.cpp", "cpp/winframe.cpp", "cpp/floating.cpp", "cpp/mobile.cpp"];
     // островок над строкой меню и вырез экрана — AppKit
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("macos") {
         cpp.push("cpp/floating_mac.mm");
@@ -51,7 +51,9 @@ fn main() {
         .qt_module("Widgets")
         .include_dir("cpp")
         .files(bridges)
-        .cpp_files(cpp);
+        .cpp_files(cpp)
+        // QObject MobileShell — через moc
+        .cpp_file("cpp/mobile.h");
     let builder = unsafe {
         builder.cc_builder(|cc| {
             cc.include("cpp");
@@ -113,6 +115,13 @@ END
         }
         // dlsym (display.rs: QWindowSystemInterface::handlePrimaryScreenChanged)
         Ok("linux") => println!("cargo::rustc-link-lib=dl"),
+        // Android: библиотека, которую грузит QtActivity (main ищется через dlsym), — общий объект, а не исполняемый
+        Ok("android") => {
+            println!("cargo::rustc-link-lib=dl");
+            println!("cargo::rustc-link-lib=log");
+            println!("cargo::rustc-link-arg-bins=-shared");
+            println!("cargo::rustc-link-arg-bins=-Wl,-soname,libmaterialfy_arm64-v8a.so");
+        }
         Ok("macos") => println!("cargo::rustc-link-lib=framework=AppKit"),
         _ => {}
     }

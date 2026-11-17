@@ -1,0 +1,23 @@
+{
+  "Keys are stored in the app's private storage.": "As chaves ficam no armazenamento privado do app.",
+  "Keys in app storage": "Chaves no armazenamento do app",
+  "Permissions are stored in the app's private storage. “Sign out” removes all three; the cache stays.": "As permissões ficam no armazenamento privado do app. “Sair” remove todas as três; o cache fica.",
+  "The proxy password is stored in the app's private storage. Local network device discovery bypasses the proxy.": "A senha do proxy fica no armazenamento privado do app. A descoberta de dispositivos na rede local passa por fora do proxy.",
+  "No password needed: you confirm on the Spotify website, and the key is stored in the app's private storage": "Não precisa de senha: você confirma no site do Spotify e a chave fica no armazenamento privado do app",
+  "Details": "Detalhes",
+  "Confirm the update in the system window, then open Materialfy again": "Confirme a atualização na janela do sistema e abra o Materialfy de novo",
+  "Allow Materialfy to install apps in the settings that opened, then press Install again": "Permita que o Materialfy instale apps nas configurações que se abriram e toque em Instalar de novo",
+  "Player in the system island": "Player na ilha do sistema",
+  "Track and progress in the status bar chip, Now Bar, Super Island, Origin Island and similar": "Faixa e progresso no chip da barra de status, Now Bar, Super Island, Ilha Atômica e similares",
+  "Follows the system: animations are currently off": "Segue o sistema: as animações estão desligadas agora",
+  "Follows the system animation setting": "Segue a configuração de animações do sistema",
+  "phone:How this computer appears on phones and speakers": "Como este celular aparece em outros dispositivos e caixas de som",
+  "phone:How this computer appears in Spotify on your phone and other devices": "Como este celular aparece no Spotify nos seus outros dispositivos",
+  "phone:Materialfy becomes a Spotify Connect device: music plays here, and your phone sees this computer in its device list. Confirm in your browser; after that your library also goes through this sign-in, with no Web API limits.": "O Materialfy vira um dispositivo Spotify Connect: a música toca aqui, e o computador e as caixas de som veem este celular na lista de dispositivos. Confirme no navegador; depois disso a biblioteca também passa por este login, sem os limites da Web API.",
+  "phone:Remote: move music between your phone and computer": "Controle remoto: leve a música entre este celular, um computador e caixas de som",
+  "phone:Without Premium you can sign in another way — through the Web API: you get your library, search and a remote for phones and speakers, but no music on this computer. Spotify sometimes limits these requests.": "Sem Premium dá para entrar de outro jeito — pela Web API: você tem biblioteca, busca e controle remoto de outros dispositivos e caixas de som, mas não a música neste celular. O Spotify às vezes limita essas requisições.",
+  "phone:Open Spotify on a phone or speaker and it will show up here. Or start playing music on this computer.": "Abra o Spotify em um computador ou caixa de som e ele vai aparecer aqui. Ou comece a tocar música neste celular.",
+  "phone:The playing track’s cover, blurred behind the whole window as a soft colored glow": "A capa da faixa tocando, desfocada atrás da tela inteira como um brilho colorido suave",
+  "App log": "Registro do app",
+  "For a bug report: what the app did at sign-in, playback and lyrics. No passwords or keys.": "Para relatar um erro: o que o app fez no login, na reprodução e nas letras. Sem senhas nem chaves."
+}

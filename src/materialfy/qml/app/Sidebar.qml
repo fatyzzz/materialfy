@@ -419,8 +419,8 @@ Item {
             Layout.topMargin: 4
             clip: true
             spacing: 2
-            boundsBehavior: Flickable.StopAtBounds
-            acceptedButtons: Qt.NoButton
+            boundsBehavior: Theme.mobile ? Flickable.OvershootBounds : Flickable.StopAtBounds
+            acceptedButtons: Theme.mobile ? Qt.LeftButton : Qt.NoButton
             model: root.libraryMode ? root.recentItems : root.playlists
             delegate: NavItem {
                 id: row

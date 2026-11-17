@@ -12,8 +12,9 @@ Flickable {
 
     function scrollTo(y, animated) { scroll.scrollTo(y, animated) }
 
-    boundsBehavior: Flickable.StopAtBounds
-    acceptedButtons: Qt.NoButton
+    // Касание: Flickable тянут синтезированные из касаний события мыши — на телефоне левую кнопку нужно принимать
+    boundsBehavior: Theme.mobile ? Flickable.OvershootBounds : Flickable.StopAtBounds
+    acceptedButtons: Theme.mobile ? Qt.LeftButton : Qt.NoButton
     flickableDirection: Flickable.VerticalFlick
     clip: true
 

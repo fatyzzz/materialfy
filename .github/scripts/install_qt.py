@@ -38,6 +38,8 @@ HOSTS = {
     "linux_arm64": ("linux_arm64", "linux_gcc_arm64", "linux_gcc_arm64"),
     # clang_64 is a universal (x86_64 + arm64) build
     "mac": ("mac_x64", "clang_64", "clang_64"),
+    # Android target builds; they also need a desktop Qt of the same version as QT_HOST_PATH
+    "android": ("all_os", "arm64_v8a", "android_arm64_v8a"),
 }
 
 
@@ -87,6 +89,8 @@ def fetch(url: str, dest: Path | None = None, attempts: int = 5) -> bytes:
 
 def repo_candidates(os_dir: str, ver: str, arch: str) -> list[str]:
     tag = f"qt6_{ver.replace('.', '')}"
+    if os_dir == "all_os":
+        return [f"{BASE}/all_os/android/{tag}/{tag}_{arch}"]
     # 6.8+: qt6_6120/qt6_6120_<arch> (Windows) or qt6_6120/qt6_6120 (Linux, macOS); older ones are flat
     return [
         f"{BASE}/{os_dir}/desktop/{tag}/{tag}_{arch}",
@@ -136,7 +140,8 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--host", choices=HOSTS, default=host_default)
     ap.add_argument("--version", default="6.12.0")
-    ap.add_argument("--arch", help="repository arch directory (msvc2022_64, linux_gcc_64, linux_gcc_arm64, clang_64)")
+    ap.add_argument("--arch", help="repository arch directory (msvc2022_64, linux_gcc_64, linux_gcc_arm64, clang_64; "
+                    "arm64_v8a or x86_64 with --host android)")
     ap.add_argument("--addons", nargs="*", default=["qtshadertools", "qtimageformats"])
     ap.add_argument("--out", required=True, type=Path, help="Qt prefix (will contain bin/, lib/, qml/ ...)")
     ap.add_argument("--skip", nargs="*", default=["qtdoc"], help="archive name prefixes to skip")
@@ -146,7 +151,10 @@ def main() -> int:
 
     os_dir, arch_default, _ = HOSTS[args.host]
     arch = args.arch or arch_default
-    suffix = HOSTS[args.host][2] if arch == arch_default else (f"win64_{arch}" if args.host == "windows" else arch)
+    if args.host == "android":
+        suffix = f"android_{arch}"
+    else:
+        suffix = HOSTS[args.host][2] if arch == arch_default else (f"win64_{arch}" if args.host == "windows" else arch)
     vtag = args.version.replace(".", "")
     names = [f"qt.qt6.{vtag}.{suffix}"] + [f"qt.qt6.{vtag}.addons.{a}.{suffix}" for a in args.addons]
 

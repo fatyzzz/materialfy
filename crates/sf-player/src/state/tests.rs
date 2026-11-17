@@ -34,6 +34,36 @@ fn headless() -> Core {
     core
 }
 
+#[test]
+fn dj_start_ignores_track_offsets_shuffle_and_repeat() {
+    let mut core = headless();
+    core.local.connected = true;
+    core.shuffle_wanted = true;
+    core.local.repeat = RepeatMode::Track;
+    core.play_context(PlayContext::with_uri("playlist", md3_model::context::DJ_URI), Some("spotify:track:spoiler".into()), Some(true));
+    let commands = engine_commands(&mut core);
+    let load = commands.iter().find_map(|cmd| match cmd { PlayerCommand::Load(load) => Some(load), _ => None }).expect("DJ load");
+    assert_eq!(load.context_uri.as_deref(), Some(md3_model::context::DJ_URI));
+    assert!(load.offset_uri.is_none());
+    assert!(load.offset_index.is_none());
+    assert_eq!(load.shuffle, Some(false));
+    assert_eq!(load.repeat, Some(RepeatMode::Off));
+    assert!(!core.shuffle_wanted);
+    assert_eq!(core.shown_context().kind, "dj");
+}
+
+#[test]
+fn restored_dj_context_overrides_a_stale_playlist_label() {
+    let mut core = headless();
+    playing(&mut core, "spotify:track:current");
+    let stale = PlayContext { kind: "playlist".into(), context_uri: Some(md3_model::context::DJ_URI.into()), title: "Old playlist".into(), cover: String::new() };
+    core.local.connected = true;
+    core.play_context(stale, None, None);
+    let shown = core.shown_context();
+    assert_eq!(shown.kind, "dj");
+    assert_eq!(shown.title, "DJ");
+}
+
 fn playing(core: &mut Core, uri: &str) {
     core.local.track = local_track(uri);
     core.local.playback = Playback::Playing;
@@ -1991,6 +2021,57 @@ fn a_transfer_is_confirmed_by_a_poll_of_the_new_device() {
     core.handle_api(ApiReply::Playback { seq, result: Ok(Some(state)) });
     assert!(!core.transferring());
     assert_eq!(core.target(), Target::Remote(Some("speaker".into())));
+}
+
+#[test]
+fn a_remote_track_without_data_takes_the_known_one() {
+    let mut core = headless();
+    core.remember(&TrackItem {
+        cover: "https://i.scdn.co/image/c".into(),
+        artists: "Daft Punk".into(),
+        ..named("spotify:track:a", "One More Time")
+    });
+    core.poll_remote();
+    let mut state = remote_snapshot("pc", "spotify:track:a", true).state;
+    state.item.as_mut().unwrap().duration_ms = 320_000;
+    core.handle_api(ApiReply::Playback { seq: core.remote_poll_seq, result: Ok(Some(state)) });
+    let now = core.now_playing().expect("the remote track is shown");
+    assert_eq!((now.track.title.as_str(), now.track.artists.as_str()), ("One More Time", "Daft Punk"));
+    assert_eq!(now.track.cover, "https://i.scdn.co/image/c");
+    assert_eq!(now.track.duration_ms, 320_000);
+}
+
+#[test]
+fn a_cluster_rows_metadata_names_the_track_when_the_session_cannot() {
+    use librespot_protocol::player::ProvidedTrack;
+
+    use super::connect::provided_item;
+
+    let mut track = ProvidedTrack { uri: "spotify:track:t1".into(), ..Default::default() };
+    // librespot-хозяин без метаданных — названия нет, остаётся запрос к сессии/Web API
+    assert_eq!(provided_item(&track, 200_000), None);
+    for (key, value) in [
+        ("title", "Harder, Better"),
+        ("artist_name", "Daft Punk"),
+        ("artist_uri", "spotify:artist:4tZwfgrHOc3mvqYlEYSvVi"),
+        ("album_title", "Discovery"),
+        ("album_uri", "spotify:album:2noRn2Aes5aoNVsU6iWThc"),
+        ("image_url", "spotify:image:ab67616d00001e02"),
+        ("image_large_url", "https://i.scdn.co/image/ab67616d0000b273"),
+    ] {
+        track.metadata.insert(key.into(), value.into());
+    }
+    let item = provided_item(&track, 200_000).expect("the row names the track");
+    assert_eq!((item.title.as_str(), item.artists.as_str(), item.album.as_str()), ("Harder, Better", "Daft Punk", "Discovery"));
+    assert_eq!((item.track_id.as_str(), item.uri.as_str()), ("t1", "spotify:track:t1"));
+    assert_eq!(item.album_id, "2noRn2Aes5aoNVsU6iWThc");
+    assert_eq!(item.artist_refs[0].id, "4tZwfgrHOc3mvqYlEYSvVi");
+    assert_eq!(item.cover, "https://i.scdn.co/image/ab67616d00001e02");
+    assert_eq!(item.cover_large, "https://i.scdn.co/image/ab67616d0000b273");
+    assert_eq!(item.duration_ms, 200_000);
+    // пустое название не считается
+    track.metadata.insert("title".into(), "  ".into());
+    assert_eq!(provided_item(&track, 0), None);
 }
 
 #[test]

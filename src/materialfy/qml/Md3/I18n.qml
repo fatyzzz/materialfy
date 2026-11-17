@@ -47,11 +47,50 @@ QtObject {
     }
 
     // Translation of an English source string; extra arguments substitute {0}, {1}…
+    // Фразы, где автозамена «компьютер → телефон» даёт «телефон виден на телефоне»: на телефоне — свой текст
+    // (английский здесь, переводы — ключи "phone:<английский>" в словарях)
+    readonly property var _phoneEn: ({
+        "How this computer appears on phones and speakers": "How this phone appears on other devices and speakers",
+        "How this computer appears in Spotify on your phone and other devices": "How this phone appears in Spotify on your other devices",
+        "Materialfy becomes a Spotify Connect device: music plays here, and your phone sees this computer in its device list. Confirm in your browser; after that your library also goes through this sign-in, with no Web API limits.":
+            "Materialfy becomes a Spotify Connect device: music plays here, and your computer and speakers see this phone in their device lists. Confirm in your browser; after that your library also goes through this sign-in, with no Web API limits.",
+        "Remote: move music between your phone and computer": "Remote: move music between this phone, a computer and speakers",
+        "Without Premium you can sign in another way — through the Web API: you get your library, search and a remote for phones and speakers, but no music on this computer. Spotify sometimes limits these requests.":
+            "Without Premium you can sign in another way — through the Web API: you get your library, search and a remote for other devices and speakers, but no music on this phone. Spotify sometimes limits these requests.",
+        "Open Spotify on a phone or speaker and it will show up here. Or start playing music on this computer.":
+            "Open Spotify on a computer or speaker and it will show up here. Or start playing music on this phone.",
+        "The playing track’s cover, blurred behind the whole window as a soft colored glow":
+            "The playing track’s cover, blurred behind the whole screen as a soft colored glow"
+    })
+
     function t(en) {
         const d = _dictOf(Translations.language)
+        if (Theme.mobile && _phoneEn[en] !== undefined) {
+            const ps = d ? d["phone:" + en] : undefined
+            const pp = typeof ps === "string" ? ps : _phoneEn[en]
+            return arguments.length > 1 ? format(pp, Array.prototype.slice.call(arguments, 1)) : pp
+        }
         const s = d ? d[en] : undefined
-        const pattern = typeof s === "string" ? s : en
+        const pattern = phone(typeof s === "string" ? s : en)
         return arguments.length > 1 ? format(pattern, Array.prototype.slice.call(arguments, 1)) : pattern
+    }
+
+    // Phone layout (Theme.mobile): the interface speaks of "this phone", not "this computer". The nouns decline
+    // alike (компьютер-а/-е/-ом → телефон-а/-е/-ом; computador(es) → celular(es)), so one replacement per stem
+    // covers every dictionary entry. mf_i18n::set_phone does the same for strings coming from Rust.
+    function phone(text) {
+        if (!Theme.mobile || typeof text !== "string" || text.length === 0)
+            return text
+        switch (Translations.language) {
+        case "ru":
+            return text.replace(/компьютер/g, "телефон").replace(/Компьютер/g, "Телефон")
+        case "pt":
+            return text.replace(/computadores/g, "celulares").replace(/computador/g, "celular")
+                       .replace(/Computadores/g, "Celulares").replace(/Computador/g, "Celular")
+        default:
+            return text.replace(/\bcomputers\b/g, "phones").replace(/\bcomputer\b/g, "phone")
+                       .replace(/\bComputer\b/g, "Phone")
+        }
     }
 
     // Any language → English for plain (non-plural) entries, built once from every dictionary.

@@ -37,9 +37,19 @@ pub use release::{Channel, InstallKind};
 pub use state::{Event, Offer, Stage, UpdateSnapshot, UpdateState};
 use version::Version;
 
-pub const REPO: &str = "fatyzzz/materialfy";
-const API: &str = "https://api.github.com/repos/fatyzzz/materialfy";
-pub const RELEASES_PAGE: &str = "https://github.com/fatyzzz/materialfy/releases";
+/// Repository with the releases. Android builds come from the makdren/materialfy fork (the upstream does not
+/// publish APKs); MATERIALFY_UPDATE_REPO at build time overrides both.
+pub const REPO: &str = match option_env!("MATERIALFY_UPDATE_REPO") {
+    Some(repo) => repo,
+    None if cfg!(target_os = "android") => "makdren/materialfy",
+    None => "fatyzzz/materialfy",
+};
+fn api() -> String {
+    format!("https://api.github.com/repos/{REPO}")
+}
+pub fn releases_page() -> String {
+    format!("https://github.com/{REPO}/releases")
+}
 pub const CHECK_INTERVAL: Duration = Duration::from_secs(6 * 3600);
 pub const START_DELAY: Duration = Duration::from_secs(10);
 const CHECK_TIMEOUT: Duration = Duration::from_secs(20);
@@ -311,8 +321,8 @@ impl UpdateService {
         let channel = Channel::from_setting(&self.settings.get_str(SettingKey::UpdateChannel));
         let current = Version::parse(&current_version()).unwrap_or(Version::parse("0.0.0").expect("version"));
         let (url, list) = match channel {
-            Channel::Stable => (format!("{API}/releases/latest"), false),
-            Channel::Beta => (format!("{API}/releases?per_page=20"), true),
+            Channel::Stable => (format!("{}/releases/latest", api()), false),
+            Channel::Beta => (format!("{}/releases?per_page=20", api()), true),
         };
         let Some(body) = self.get_json(&client, &url).await? else {
             return Ok((None, false));
@@ -343,7 +353,7 @@ impl UpdateService {
             version: version.clone(),
             notes: found.body.clone().unwrap_or_default().trim().to_owned(),
             published_at: found.published_at.clone().unwrap_or_default(),
-            release_url: if found.html_url.is_empty() { RELEASES_PAGE.to_owned() } else { found.html_url.clone() },
+            release_url: if found.html_url.is_empty() { releases_page() } else { found.html_url.clone() },
             prerelease: found.prerelease,
             asset_name: asset.map(|a| a.name.clone()).unwrap_or_default(),
             asset_url: asset.map(|a| a.browser_download_url.clone()).unwrap_or_default(),
@@ -589,9 +599,12 @@ impl UpdateService {
                     let _ = this.app_requests.send(AppRequest::Quit);
                 }
                 Ok(install::Outcome::HandedOff) => {
-                    this.apply(Event::InstallHandedOff {
-                        note: mf_i18n::t("Drag Materialfy to Applications in the window that opened, then restart the app"),
-                    });
+                    let note = if kind == InstallKind::AndroidApk {
+                        mf_i18n::t("Confirm the update in the system window, then open Materialfy again")
+                    } else {
+                        mf_i18n::t("Drag Materialfy to Applications in the window that opened, then restart the app")
+                    };
+                    this.apply(Event::InstallHandedOff { note });
                 }
                 Err(text) => {
                     this.apply(Event::Failed {
@@ -612,7 +625,7 @@ impl UpdateService {
     }
 
     pub fn release_url(&self) -> String {
-        self.snapshot.borrow().offer.as_ref().map_or_else(|| RELEASES_PAGE.to_owned(), |o| o.release_url.clone())
+        self.snapshot.borrow().offer.as_ref().map_or_else(|| releases_page(), |o| o.release_url.clone())
     }
 
     pub fn open_release_page(&self) {

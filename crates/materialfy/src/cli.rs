@@ -6,6 +6,8 @@ use std::path::PathBuf;
 pub struct Cli {
     /// --gallery: галерея компонентов MD3 (qml/gallery/Gallery.qml)
     pub gallery: bool,
+    /// --mobile: раскладка телефона (MobileMain.qml) на десктопе; на Android — всегда
+    pub mobile: bool,
     /// --qml FILE: загрузить произвольный QML
     pub qml: Option<PathBuf>,
     /// --screenshot PNG: сохранить снимок окна и выйти
@@ -78,6 +80,7 @@ enum Opt {
     NewInstance,
     DebugWheel,
     DebugFps,
+    Mobile,
     Size,
     ConfigDir,
     Set,
@@ -95,6 +98,7 @@ const OPTIONS: &[(&str, Opt, bool)] = &[
     ("--new-instance", Opt::NewInstance, false),
     ("--debug-wheel", Opt::DebugWheel, false),
     ("--debug-fps", Opt::DebugFps, false),
+    ("--mobile", Opt::Mobile, false),
     ("--size", Opt::Size, true),
     ("--config-dir", Opt::ConfigDir, true),
     ("--set", Opt::Set, true),
@@ -102,7 +106,7 @@ const OPTIONS: &[(&str, Opt, bool)] = &[
 ];
 
 const USAGE: &str = "usage: materialfy [-h] [--gallery] [--qml FILE] [--screenshot PNG] [--delay DELAY] [--seed-image PATH]
-               [--light] [--offline] [--new-instance] [--debug-wheel] [--debug-fps] [--size SIZE]
+               [--light] [--offline] [--new-instance] [--debug-wheel] [--debug-fps] [--mobile] [--size SIZE]
                [--config-dir DIR] [--set KEY=VALUE]";
 
 const HELP: &str = "
@@ -118,6 +122,7 @@ options:
   --new-instance     запустить второй экземпляр, даже если плеер уже работает
   --debug-wheel      печатать сырые события колеса мыши
   --debug-fps        счётчик кадров в углу окна
+  --mobile           раскладка телефона (как в сборке для Android)
   --size SIZE        размер окна, ШxВ (по умолчанию — из настроек)
   --config-dir DIR   каталог настроек (для --screenshot по умолчанию временный, чтобы не трогать настоящие)
   --set KEY=VALUE    начальное свойство корневого окна (число или строка)";
@@ -208,6 +213,7 @@ impl Cli {
                 Opt::NewInstance => cli.new_instance = true,
                 Opt::DebugWheel => cli.debug_wheel = true,
                 Opt::DebugFps => cli.debug_fps = true,
+                Opt::Mobile => cli.mobile = true,
                 Opt::Size => match parse_size(&value) {
                     Some(size) => cli.size = Some(size),
                     None => fail(&format!("argument --size: expected WxH, got '{value}'")),

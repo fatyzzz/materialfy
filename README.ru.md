@@ -7,13 +7,15 @@
   <img src="docs/brand/wordmark.svg" width="420" alt="Materialfy">
 </picture>
 
-[![Release build](https://github.com/fatyzzz/materialfy/actions/workflows/release.yml/badge.svg)](https://github.com/fatyzzz/materialfy/actions/workflows/release.yml)
-[![Release](https://img.shields.io/github/v/release/fatyzzz/materialfy?label=release)](https://github.com/fatyzzz/materialfy/releases/latest)
+[![Release build](https://github.com/makdren/materialfy/actions/workflows/release.yml/badge.svg)](https://github.com/makdren/materialfy/actions/workflows/release.yml)
+[![Release](https://img.shields.io/github/v/release/makdren/materialfy?label=release)](https://github.com/makdren/materialfy/releases/latest)
+[![Build](https://github.com/makdren/materialfy/actions/workflows/build.yml/badge.svg)](https://github.com/makdren/materialfy/actions/workflows/build.yml)
 
-Настольный клиент Spotify на Rust и Qt Quick, интерфейс в стиле Material 3 Expressive.<br>
-Windows и Linux, macOS в экспериментальном режиме.
+Клиент Spotify для Android на Rust и Qt Quick, интерфейс в стиле Material 3 Expressive.<br>
+Порт настольного Materialfy под телефон.
 
 [Скачать](#скачать) ·
+[Android](#android) ·
 [Скриншоты](#скриншоты) ·
 [Возможности](#возможности) ·
 [Ограничения](#чего-нет-и-почему) ·
@@ -36,22 +38,50 @@ Materialfy ставят вместо официального настольно
 (crmne), интерфейс из [yamusic-md3](https://github.com/yaskorinov/yamusic-md3) (yaskorinov). Подробнее в разделе
 [Происхождение и лицензия](#происхождение-и-лицензия).
 
+> [!NOTE]
+> Это форк [fatyzzz/materialfy](https://github.com/fatyzzz/materialfy) с версией для Android: та же программа
+> с раскладкой для телефона, фоновым воспроизведением, плеером в «острове» системы и обновлением APK прямо из
+> приложения. Здесь выпускается только APK; версии для Windows, Linux и macOS — в
+> [релизах оригинала](https://github.com/fatyzzz/materialfy/releases).
+
 ## Скачать
 
-Готовые сборки всех версий лежат на [странице Releases](https://github.com/fatyzzz/materialfy/releases).
-Файл для своей системы возьмите из [последнего релиза](https://github.com/fatyzzz/materialfy/releases/latest):
+APK лежит в [последнем релизе](https://github.com/makdren/materialfy/releases/latest) (все версии — на [странице Releases](https://github.com/makdren/materialfy/releases)):
 
 | Система | Файл |
 | --- | --- |
-| Windows 10/11, x64 | `Materialfy-<версия>-Setup.exe` (инсталлер, права администратора не нужны) или `Materialfy-<версия>-windows-x64-portable.zip` |
-| Linux x86_64 | `Materialfy-<версия>-x86_64.AppImage` или `materialfy-<версия>-linux-x86_64.tar.gz` |
-| Linux aarch64 | `Materialfy-<версия>-aarch64.AppImage` или `materialfy-<версия>-linux-aarch64.tar.gz` |
-| macOS 13+, Apple silicon | `Materialfy-<версия>-macos-arm64.dmg` (экспериментально) |
-| macOS 13+, Intel | `Materialfy-<версия>-macos-x86_64.dmg` (экспериментально) |
+| Android 9+, arm64 | `Materialfy-<версия>-arm64-v8a.apk` |
 
-Контрольные суммы лежат в том же релизе в `SHA256SUMS.txt`. С версии 0.2.1 программа сама проверяет Releases
-на новые версии («Настройки» → «Обновления»). Инсталлер, portable-папка и AppImage скачивают и ставят обновление
-на месте, на macOS открывается новый `.dmg`, а копия из `tar.gz` только даёт ссылку на страницу релиза.
+Контрольная сумма лежит в том же релизе в `SHA256SUMS.txt`. Программа сама проверяет релизы на новые версии
+(«Настройки» → «Обновления»): новый APK скачивается, сверяется с контрольной суммой и передаётся системному
+установщику. Сборки для компьютера и их обновления — в [fatyzzz/materialfy](https://github.com/fatyzzz/materialfy/releases).
+
+## Android
+
+<p align="center"><img src="docs/screenshots/android/phone-ru.png" width="100%" alt="Materialfy на телефоне: главная, альбом, «Сейчас играет», меню трека"></p>
+<p align="center"><sub>Главная, альбом, «Сейчас играет» и меню трека. Снято на тестовых данных в окне 412×915.</sub></p>
+
+На телефоне работают те же функции, что и на компьютере, в раскладке под одну руку: нижняя навигация, мини-плеер
+над ней, полноэкранный плеер (закрывается свайпом вниз), меню нижними листами, долгое нажатие вместо правой кнопки
+мыши, системная кнопка «Назад».
+
+- Музыка играет в фоне: уведомление плеера с обложкой и перемоткой, экран блокировки, кнопки гарнитуры и Bluetooth,
+  пауза при звонке и при отключении наушников.
+- Плеер в «острове» системы: на Android 16 — как Live Update (чип в строке состояния, Samsung Now Bar, HyperOS
+  Super Island, ColorOS Fluid Cloud), на vivo — атомный остров OriginOS. Выключается в «Настройки» →
+  «Воспроизведение».
+- Телефон виден в Spotify Connect как смартфон: на него можно перенести музыку с компьютера и наоборот.
+- Статус «Слушает Spotify» в Discord ставит связка Spotify ↔ Discord, на телефоне он работает так же.
+- Обновления: «Настройки» → «Обновления» скачивает APK свежего релиза и ставит его поверх.
+
+**Установка.** Скачайте `Materialfy-<версия>-arm64-v8a.apk` из [последнего релиза](https://github.com/makdren/materialfy/releases/latest)
+и откройте его. Android попросит разрешить установку из браузера или файлового менеджера — это один раз. Если
+стояла тестовая сборка, подписанная другим ключом (`-debugsigned.apk`), сначала удалите её: поверх неё APK из
+релиза не встанет. Вход такой же, как на компьютере: откроется браузер, после входа вернитесь в приложение.
+
+Нужен телефон на arm64 с Android 9 или новее, для звука — Spotify Premium. Версия для Android пока
+экспериментальная: о проблемах пишите в [Issues](https://github.com/makdren/materialfy/issues), лучше с
+моделью телефона и версией Android.
 
 ## Скриншоты
 
@@ -135,7 +165,6 @@ Materialfy ставят вместо официального настольно
   через Connect они не передаются, а другие устройства Spotify видят позицию трека с поправками раз в секунду.
 - Скачать треки для офлайна нельзя, DRM программа не обходит. Аудиокэш только ускоряет повторное
   воспроизведение.
-- Программа не обновляется сама, новую версию нужно поставить вручную.
 - Общий Client ID для Web API один на всех пользователей программы, и Spotify часто его ограничивает.
   Поэтому программа сначала ходит через вашу сессию Spotify, а Web API держит запасным путём. Подробности и
   настройка своего Client ID в разделе [Сессия Spotify и Web API](#сессия-spotify-и-web-api).
@@ -147,7 +176,7 @@ Materialfy ставят вместо официального настольно
 ## Требования
 
 - Аккаунт Spotify. Для звука на этом компьютере и для радио нужен Premium.
-- Windows 10 1809 или новее (x64); Linux x86_64 или aarch64; macOS 13 или новее (сборка экспериментальная, медиаклавиши на macOS не проверены).
+- Windows 10 1809 или новее (x64); Linux x86_64 или aarch64; macOS 13 или новее (сборка экспериментальная, медиаклавиши на macOS не проверены); Android 9 или новее (arm64).
 - Свободные локальные порты 8989 и 8898: на них Spotify возвращает браузер после входа. Если брандмауэр спросит,
   разрешите подключения на `127.0.0.1`.
 
@@ -161,7 +190,7 @@ Materialfy ставят вместо официального настольно
 собирает программу и инсталлер:
 
 ```powershell
-git clone https://github.com/fatyzzz/materialfy
+git clone https://github.com/makdren/materialfy
 cd materialfy
 .\build_windows.ps1 -QtDir C:\Qt\6.12.0\msvc2022_64
 ```
@@ -172,7 +201,7 @@ cd materialfy
 ### Linux
 
 ```bash
-git clone https://github.com/fatyzzz/materialfy
+git clone https://github.com/makdren/materialfy
 cd materialfy
 ./install.sh
 ```
@@ -190,6 +219,11 @@ sudo, и ждёт подтверждения. Rust он ставит через 
 ### macOS
 
 Инсталлера нет, соберите `.app` по инструкции в разделе [Сборка](#macos-экспериментально).
+
+### Android
+
+APK из релиза — в разделе [Android](#android), сборка APK из исходников — в разделе
+[Сборка](#android-экспериментально).
 
 ## Первый запуск
 
@@ -381,6 +415,47 @@ cargo build --locked --release -p materialfy
 bash .github/scripts/package_macos.sh 0.1.0   # target/dist/Materialfy.app и .dmg
 ```
 
+### Android (экспериментально)
+
+Те же ядро на Rust и QML работают на Android (arm64-v8a, Android 9+) с раскладкой для телефона: нижняя навигация,
+мини-плеер над ней и полноэкранный плеер, меню нижними листами, касания вместо наведения. Музыка играет в фоне
+через уведомление плеера (экран блокировки, кнопки гарнитуры, аудиофокус). Вход — как на компьютере: открывается
+браузер, Spotify возвращает его на `127.0.0.1`. Токены хранятся файлами в закрытом каталоге приложения (связки
+ключей для нативного кода в Android нет), резервное копирование приложения выключено.
+
+Нужны Rust с целью `aarch64-linux-android`, JDK 17+, Android SDK (platform 36, build-tools 36) с NDK r28 и две
+установки Qt 6.12: для Android и для хоста (его инструменты собирают пакет).
+
+```bash
+rustup target add aarch64-linux-android
+python3 .github/scripts/install_qt.py --host android --out ~/Qt/6.12.0/android_arm64_v8a
+python3 .github/scripts/install_qt.py --out ~/Qt/6.12.0/gcc_64
+export QT_ANDROID=~/Qt/6.12.0/android_arm64_v8a QT_HOST=~/Qt/6.12.0/gcc_64
+export ANDROID_SDK_ROOT=~/Android/Sdk ANDROID_NDK_ROOT=~/Android/Sdk/ndk/28.2.13676358
+android/build_apk.sh --release   # target/android/Materialfy-<версия>-arm64-v8a-debugsigned.apk
+```
+
+Плеер умеет жить и в «острове» системы: на Android 16 — как Live Update (чип в статус-баре, Samsung Now Bar,
+HyperOS Super Island, ColorOS Fluid Cloud), на телефонах vivo — в атомном острове OriginOS (Настройки →
+Воспроизведение → «Плеер в острове системы»). Музыкальную карточку острова vivo открывает только разрешённым
+прошивкой приложениям, поэтому на части прошивок останется обычное уведомление плеера. Статус «Слушает
+Spotify» в Discord ставит сама связка Spotify ↔ Discord: Materialfy играет как устройство Spotify Connect, так что
+на Android это работает так же.
+
+Обновления приходят из GitHub Releases этого форка (`makdren/materialfy`): Настройки → Обновления скачивает
+`-arm64-v8a.apk` свежего релиза, сверяет его с `SHA256SUMS.txt` и отдаёт системному установщику. Android ставит
+обновление только поверх APK, подписанного тем же ключом, поэтому сборка в CI (`build.yml`, задача `android`)
+подписывает его ключом из секретов репозитория `ANDROID_KEYSTORE_BASE64` и `ANDROID_KEYSTORE_PASS` (псевдоним
+`materialfy` или переменная `ANDROID_KEY_ALIAS`). Тег `v*` публикует релиз с APK; без ключа релиз не
+создаётся.
+
+Без ключа APK подписан отладочным ключом SDK: он ставится как есть, но сборку с другим ключом поверх него не
+поставить. Для своего ключа задайте `ANDROID_KEYSTORE`, `ANDROID_KEY_ALIAS` и `ANDROID_KEYSTORE_PASS`. Часть для
+Android — в [`android/`](android) (манифест, активность, сервисы воспроизведения и входа) и
+[`crates/materialfy/cpp/mobile.cpp`](crates/materialfy/cpp/mobile.cpp); раскладка телефона —
+[`MobileMain.qml`](src/materialfy/qml/MobileMain.qml). На компьютере ключ `--mobile` открывает её же в окне,
+например `--mobile --size 412x915`.
+
 ### Ключи запуска и переменные
 
 | Ключ | Что делает |
@@ -393,6 +468,7 @@ bash .github/scripts/package_macos.sh 0.1.0   # target/dist/Materialfy.app и .d
 | `--config-dir DIR` | отдельный каталог настроек |
 | `--set ключ=значение` | начальное свойство окна, например `--set startPage=settings` |
 | `--gallery` | галерея компонентов Material 3 |
+| `--mobile` | раскладка телефона (как на Android) |
 
 Переменные окружения: `MATERIALFY_QML_DIR` задаёт свой каталог QML, `MATERIALFY_SESSION_FILE` задаёт файл
 сессии плеера, `RUST_LOG` управляет журналом (например, `RUST_LOG=materialfy=debug,sf_player=debug`).
@@ -403,9 +479,9 @@ bash .github/scripts/package_macos.sh 0.1.0   # target/dist/Materialfy.app и .d
 cargo test --locked --workspace
 ```
 
-[`build.yml`](.github/workflows/build.yml) запускается на pull request в `main` и вручную. Сборка Windows
-(тесты, инсталлер, portable-архив, проверочный снимок окна) обязательна. Linux и macOS собираются по возможности,
-их сбой не валит весь запуск.
+[`build.yml`](.github/workflows/build.yml) запускается на push и pull request в `main` и вручную. В этом форке
+он собирает только APK; задачи Windows, Linux и macOS пропускаются, пока переменная репозитория `DESKTOP_BUILDS`
+не равна `true`.
 
 ## Как устроено
 
@@ -427,6 +503,9 @@ cargo test --locked --workspace
 | `materialfy` | исполняемый файл: мосты в QML, ключи запуска, кэш картинок, рамка окна в Windows |
 
 ## Происхождение и лицензия
+
+Этот репозиторий — форк [fatyzzz/materialfy](https://github.com/fatyzzz/materialfy), в нём добавлена версия
+для Android (`android/`, `MobileMain.qml`, `crates/materialfy/cpp/mobile.cpp`). Лицензия та же.
 
 Materialfy основан на двух проектах под лицензией MIT:
 

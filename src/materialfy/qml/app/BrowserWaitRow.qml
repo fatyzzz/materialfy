@@ -43,7 +43,10 @@ ColumnLayout {
                     elide: Text.ElideNone
                 }
             }
-            RowLayout {
+            // Flow: в узком окне кнопки переносятся (у RowLayout минимум — сумма кнопок)
+            Flow {
+                // в две колонки — своей ширины (одной строкой), в одну — на всю ширину с переносом
+                Layout.fillWidth: grid.columns === 1
                 spacing: 8
                 Button {
                     text: I18n.t("Open again")

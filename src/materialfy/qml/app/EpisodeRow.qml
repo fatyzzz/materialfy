@@ -22,7 +22,8 @@ Item {
     readonly property real progress: isCurrent ? Player.position
                                    : durationMs > 0 ? Math.min(1, resumeMs / durationMs) : 0
     readonly property bool saved: Library.savedRevision >= 0 && uri !== "" ? Library.isSaved(uri) : episode.saved === true
-    readonly property bool hovered: hover.hovered
+    // на телефоне действия строки видны всегда: наведения нет
+    readonly property bool hovered: hover.hovered || Theme.mobile
 
     implicitHeight: content.implicitHeight + 24
     implicitWidth: 480
@@ -67,6 +68,15 @@ Item {
         anchors.fill: parent
         radius: Theme.shape.extraLarge
         onClicked: if ((root.episode.episodeId ?? "") !== "") Catalog.openEpisode(root.episode.episodeId)
+        onPressAndHold: mouse => {
+            if (!Theme.mobile) {
+                mouse.accepted = false
+                return
+            }
+            MobileShell.haptic()
+            const p = mapToItem(null, mouse.x, mouse.y)
+            Catalog.requestTrackMenu(root.trackData(), p.x, p.y)
+        }
     }
     HoverHandler { id: hover }
     // выпуск можно перетащить в очередь, как строку трека
@@ -80,6 +90,7 @@ Item {
     }
     TapHandler {
         acceptedButtons: Qt.RightButton
+        acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad   // касание — не правый клик: у него нет кнопок, TapHandler принял бы любой тап
         onTapped: point => {
             const p = root.mapToItem(null, point.position.x, point.position.y)
             Catalog.requestTrackMenu(root.trackData(), p.x, p.y)

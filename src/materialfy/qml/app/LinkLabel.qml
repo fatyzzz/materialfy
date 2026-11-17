@@ -19,7 +19,7 @@ Label {
         width: Math.min(root.width, root.implicitWidth)
         height: root.height
         enabled: root.linkEnabled
-        hoverEnabled: true
+        hoverEnabled: !Theme.mobile
         cursorShape: Qt.PointingHandCursor
         onClicked: {
             hoverDelay.stop()

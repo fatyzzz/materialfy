@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtCore as Persist
 import Md3
 import Materialfy.Core
 import ".."
@@ -11,6 +12,7 @@ Page {
     title: I18n.t("Search")
     showHeader: false
 
+    property string initialQuery
     property int filter: 0
     readonly property var filters: [
         { text: I18n.t("All"), type: "all" }, { text: I18n.t("Tracks"), type: "tracks" }, { text: I18n.t("Albums"), type: "albums" },
@@ -24,7 +26,11 @@ Page {
     // в старом бинарнике новых моделей поиска может ещё не быть
     readonly property var showsModel: Catalog.searchShows ?? null
     readonly property var episodesModel: Catalog.searchEpisodes ?? null
-    readonly property int perRow: Math.max(1, Math.floor((width - 2 * sideMargin + 20) / (168 + 20)))
+    // телефон: плитки от 140 с зазором 16 растягиваются на всю ширину (две колонки на любом экране)
+    readonly property real tileGap: Theme.mobile ? 16 : 20
+    readonly property int perRow: Theme.mobile ? Math.max(2, Math.floor((width - 2 * sideMargin + tileGap) / (140 + tileGap)))
+                                               : Math.max(1, Math.floor((width - 2 * sideMargin + 20) / (168 + 20)))
+    readonly property real tile: Theme.mobile ? Math.floor((width - 2 * sideMargin - (perRow - 1) * tileGap) / perRow) : 168
 
     function followersText(n) {
         if (!(n > 0))
@@ -34,23 +40,139 @@ Page {
     function focusSearch() { field.inputItem.forceActiveFocus() }
     // запрос уже запущен снаружи (Catalog.openUri("spotify:search:…")): только показать его
     function showQuery(q) {
-        if (q === "" || q === field.text)
+        if (!q)
             return
+        resetSearchFeedback()
+        _syncingQuery = true
         filter = 0
         field.text = q
         debounce.stop()
+        _syncingQuery = false
+        updateSearchFeedback()
     }
     Component.onCompleted: {
-        showQuery(Catalog.searchQuery)
-        Qt.callLater(focusSearch)
+        showQuery(initialQuery)
+        // телефон: клавиатура — только по касанию поля, а не при каждом входе в раздел
+        if (!Theme.mobile)
+            Qt.callLater(focusSearch)
     }
 
     Timer {
         id: debounce
         interval: 350
-        onTriggered: Catalog.search(field.text, page.type)
+        onTriggered: {
+            page.submitSearch(false)
+            page.updateSearchFeedback()
+        }
     }
-    onTypeChanged: if (field.text.trim() !== "") Catalog.search(field.text, page.type)
+
+    readonly property string query: field.text.trim()
+    readonly property bool currentPage: visible && (!router || router.currentItem === page)
+    // Catalog также используется в подборе трека для радио и добавлении в плейлист.
+    readonly property string searchState: Catalog.searchQuery === query && Catalog.searchKind === type
+                                          ? Catalog.searchState : "idle"
+    property bool _syncingQuery: false
+    property bool _retried: false
+
+    function resetSearchFeedback() {
+        retryTimer.stop()
+        rememberTimer.stop()
+        _retried = false
+    }
+    function submitSearch(save) {
+        debounce.stop()
+        if (!signedIn)
+            return
+        if (save && query !== "")
+            remember(query)
+        Catalog.search(query, type)
+    }
+    function updateSearchFeedback() {
+        if (!currentPage || !signedIn || query === "" || debounce.running)
+            return
+        if (searchState === "ok") {
+            if (recent[0] !== query)
+                rememberTimer.restart()
+        } else if (searchState === "error" && !_retried && !retryTimer.running) {
+            retryTimer.start()
+        }
+    }
+    onTypeChanged: {
+        if (!_syncingQuery && query !== "") {
+            resetSearchFeedback()
+            submitSearch(false)
+            updateSearchFeedback()
+        }
+    }
+    onCurrentPageChanged: {
+        if (currentPage) {
+            Qt.callLater(restoreSearch)
+        } else {
+            debounce.stop()
+            retryTimer.stop()
+            rememberTimer.stop()
+        }
+    }
+    function restoreSearch() {
+        if (!currentPage)
+            return
+        if (query !== "" && searchState === "idle" && !debounce.running)
+            submitSearch(false)
+        updateSearchFeedback()
+    }
+    onSearchStateChanged: updateSearchFeedback()
+    Timer {
+        id: retryTimer
+        interval: 600
+        onTriggered: {
+            if (page.currentPage && page.signedIn && page.query !== "" && page.searchState === "error") {
+                page._retried = true
+                page.submitSearch(false)
+            }
+        }
+    }
+
+    // ---- Недавние запросы ----
+    // Запрос попадает в историю, когда по нему есть результаты и его не меняли 2,5 с (или нажат Enter / выбран
+    // из истории) — недопечатанные «pyr», «pyro» не сохраняются. Хранится локально (QSettings), до 8 штук
+    Persist.Settings {
+        id: searchHistory
+        // свой файл: без него QSettings из QML требует organizationDomain, а приложение его не задаёт
+        location: Persist.StandardPaths.writableLocation(Persist.StandardPaths.AppConfigLocation) + "/search-history.ini"
+        category: "SearchHistory"
+        property string recent: "[]"
+    }
+    readonly property var recent: {
+        try {
+            const list = JSON.parse(searchHistory.recent)
+            return Array.isArray(list) ? list.filter(q => typeof q === "string" && q !== "") : []
+        } catch (e) {
+            return []
+        }
+    }
+    function remember(q) {
+        q = (q ?? "").trim()
+        if (q.length < 2)
+            return
+        const low = q.toLowerCase()
+        searchHistory.recent = JSON.stringify([q].concat(recent.filter(x => x.toLowerCase() !== low)).slice(0, 8))
+    }
+    function forget(q) { searchHistory.recent = JSON.stringify(recent.filter(x => x !== q)) }
+    function searchFor(q) {
+        field.text = q
+        resetSearchFeedback()
+        submitSearch(true)
+        updateSearchFeedback()
+    }
+    Timer {
+        id: rememberTimer
+        interval: 2500
+        onTriggered: {
+            if (page.currentPage && page.signedIn && page.searchState === "ok")
+                page.remember(page.query)
+        }
+    }
+    readonly property bool showRecent: signedIn && query === "" && recent.length > 0
 
     SearchField {
         id: field
@@ -59,13 +181,18 @@ Page {
         Layout.alignment: Qt.AlignHCenter
         Layout.topMargin: 8
         implicitHeight: 56
-        placeholder: I18n.t("Track, album, artist, playlist or podcast")
-        onTextChanged: debounce.restart()
+        // телефон: коротко — длинная подсказка не помещается в поле
+        placeholder: Theme.mobile ? I18n.t("Search") : I18n.t("Track, album, artist, playlist or podcast")
+        onTextChanged: {
+            if (!page._syncingQuery) {
+                page.resetSearchFeedback()
+                debounce.restart()
+            }
+        }
         // Enter — искать сразу, не дожидаясь паузы ввода; Esc — очистить поле
         onAccepted: {
-            debounce.stop()
-            if (field.text.trim() !== "")
-                Catalog.search(field.text, page.type)
+            page.resetSearchFeedback()
+            page.submitSearch(true)
         }
         Keys.onEscapePressed: event => {
             if (field.text !== "")
@@ -75,45 +202,99 @@ Page {
         }
     }
 
-    Flow {
+    ChipRow {
         Layout.fillWidth: true
         Layout.maximumWidth: 720
         Layout.alignment: Qt.AlignHCenter
-        spacing: 8
+        bleed: page.sideMargin
+        model: page.filters
+        current: page.filter
+        onPicked: key => page.filter = key
+    }
+
+    // ---- Состояния ----
+    // Недавние запросы — вместо приглашения, пока поле пустое
+    ColumnLayout {
+        Layout.fillWidth: true
+        Layout.maximumWidth: 720
+        Layout.alignment: Qt.AlignHCenter
+        visible: page.showRecent
+        spacing: 0
+        RowLayout {
+            Layout.fillWidth: true
+            Layout.bottomMargin: 4
+            Label {
+                Layout.fillWidth: true
+                text: I18n.t("Recent searches")
+                type: "titleMedium"
+                weight: 600
+            }
+            Button {
+                style: "text"
+                text: I18n.t("Clear")
+                onClicked: searchHistory.recent = "[]"
+            }
+        }
         Repeater {
-            model: page.filters
-            Chip {
-                required property var modelData
-                required property int index
-                text: modelData.text
-                selected: page.filter === index
-                onClicked: page.filter = index
+            model: page.recent
+            Item {
+                id: recentRow
+                required property string modelData
+                Layout.fillWidth: true
+                implicitHeight: 52
+                Accessible.role: Accessible.Button
+                Accessible.name: modelData
+                Accessible.onPressAction: page.searchFor(recentRow.modelData)
+                StateLayer {
+                    anchors.fill: parent
+                    radius: Theme.shape.large
+                    onClicked: page.searchFor(recentRow.modelData)
+                }
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 8
+                    spacing: 16
+                    Icon { name: "history"; size: 22; color: Theme.fgSurfaceVariant }
+                    Label {
+                        Layout.fillWidth: true
+                        text: recentRow.modelData
+                        type: "bodyLarge"
+                    }
+                    IconButton {
+                        icon: "close"
+                        Accessible.name: I18n.t("Remove") + " · " + recentRow.modelData
+                        size: "s"
+                        onClicked: page.forget(recentRow.modelData)
+                    }
+                }
             }
         }
     }
 
-    // ---- Состояния ----
     EmptyState {
         Layout.alignment: Qt.AlignHCenter
         Layout.topMargin: 48
-        visible: !page.signedIn || Catalog.searchState === "idle" || Catalog.searchState === "empty" || Catalog.searchState === "error"
-        icon: !page.signedIn ? "login" : Catalog.searchState === "empty" ? "search_off"
-            : Catalog.searchState === "error" ? "cloud_off" : "travel_explore"
+        readonly property bool failed: page.query !== "" && page.searchState === "error" && !retryTimer.running && !debounce.running
+        readonly property bool empty: page.query !== "" && page.searchState === "empty" && !debounce.running
+        visible: !page.signedIn || (page.query === "" && !page.showRecent) || empty || failed
+        icon: !page.signedIn ? "login" : empty ? "search_off" : failed ? "cloud_off" : "travel_explore"
         title: !page.signedIn ? I18n.t("Sign in to search")
-             : Catalog.searchState === "empty" ? I18n.t("Nothing found")
-             : Catalog.searchState === "error" ? I18n.t("Search didn't respond")
+             : empty ? I18n.t("Nothing found")
+             : failed ? I18n.t("Search didn't respond")
              : I18n.t("What do you want to hear?")
         text: !page.signedIn ? I18n.t("Search works through your Spotify account")
-            : Catalog.searchState === "empty" ? I18n.t("Try different wording or another filter")
-            : Catalog.searchState === "error" ? I18n.t("Check your connection and try again")
+            : empty ? I18n.t("Try different wording or another filter")
+            : failed ? I18n.t("Check your connection and try again")
             : I18n.t("Search for tracks, albums, artists, playlists and podcasts. You can also just paste an open.spotify.com link")
-        actionText: !page.signedIn ? I18n.t("Sign in") : Catalog.searchState === "error" ? I18n.t("Retry") : ""
+        actionText: !page.signedIn ? I18n.t("Sign in") : failed ? I18n.t("Retry") : ""
         actionIcon: !page.signedIn ? "login" : "refresh"
         onAction: {
             if (!page.signedIn)
                 page.router.reset("account")
-            else
-                Catalog.search(field.text, page.type)
+            else {
+                page.resetSearchFeedback()
+                page.submitSearch(false)
+            }
         }
     }
     LoadingIndicator {
@@ -121,7 +302,7 @@ Page {
         Layout.topMargin: 48
         size: 64
         contained: true
-        visible: page.signedIn && Catalog.searchState === "loading"
+        visible: page.signedIn && page.query !== "" && (debounce.running || page.searchState === "loading" || retryTimer.running)
     }
 
     // ---- Результаты ----
@@ -129,7 +310,7 @@ Page {
         id: results
         Layout.fillWidth: true
         spacing: 24
-        visible: page.signedIn && Catalog.searchState === "ok"
+        visible: page.signedIn && page.query !== "" && !debounce.running && page.searchState === "ok"
 
         // Лучший результат
         Item {
@@ -138,7 +319,7 @@ Page {
             readonly property var item: best.item ?? ({})
             visible: page.all && best.type !== undefined
             Layout.fillWidth: true
-            Layout.preferredHeight: 168
+            Layout.preferredHeight: Theme.mobile ? 120 : 168
 
             Rectangle {
                 anchors.fill: parent
@@ -152,11 +333,11 @@ Page {
             }
             RowLayout {
                 anchors.fill: parent
-                anchors.margins: 20
-                spacing: 24
+                anchors.margins: Theme.mobile ? 16 : 20
+                spacing: Theme.mobile ? 16 : 24
                 MorphImage {
-                    Layout.preferredWidth: 128
-                    Layout.preferredHeight: 128
+                    Layout.preferredWidth: Theme.mobile ? 88 : 128
+                    Layout.preferredHeight: Layout.preferredWidth
                     source: bestCard.item.coverLarge || bestCard.item.cover || ""
                     shape: bestCard.best.type === "artist" ? "circle" : "softSquare"
                 }
@@ -172,7 +353,7 @@ Page {
                     Label {
                         Layout.fillWidth: true
                         text: bestCard.item.title ?? bestCard.item.name ?? ""
-                        type: "headlineMedium"
+                        type: Theme.mobile ? "titleLarge" : "headlineMedium"
                         weight: 700
                     }
                     Label {
@@ -187,7 +368,7 @@ Page {
                 }
                 PlayButton {
                     visible: bestCard.best.type === "track"
-                    size: 64
+                    size: Theme.mobile ? 48 : 64
                     playing: Player.playing && Player.trackId === (bestCard.item.trackId ?? "-")
                     onClicked: page.openBest()
                 }
@@ -204,6 +385,9 @@ Page {
         ColumnLayout {
             Layout.fillWidth: true
             Layout.topMargin: -12
+            // строки треков — вровень с полями страницы (их собственный отступ 8 на телефоне)
+            Layout.leftMargin: Theme.mobile ? -8 : 0
+            Layout.rightMargin: Theme.mobile ? -8 : 0
             visible: page.all || page.type === "tracks"
             spacing: 0
             Repeater {
@@ -243,14 +427,14 @@ Page {
         Flow {
             Layout.fillWidth: true
             visible: page.all || page.type === "artists"
-            spacing: 20
+            spacing: page.tileGap
             Repeater {
                 model: Catalog.searchArtists
                 MediaTile {
                     required property int index
                     required property var model
                     visible: !page.all || index < page.perRow
-                    size: 148
+                    size: Theme.mobile ? page.tile : 148
                     round: true
                     placeholderIcon: "person"
                     cover: model.cover
@@ -270,13 +454,14 @@ Page {
         Flow {
             Layout.fillWidth: true
             visible: page.all || page.type === "albums"
-            spacing: 20
+            spacing: page.tileGap
             Repeater {
                 model: Catalog.searchAlbums
                 MediaTile {
                     required property int index
                     required property var model
                     visible: !page.all || index < page.perRow
+                    size: page.tile
                     cover: model.cover
                     title: model.title
                     subtitle: [model.artists, model.year || ""].filter(x => x).join(" · ")
@@ -296,13 +481,14 @@ Page {
         Flow {
             Layout.fillWidth: true
             visible: page.all || page.type === "playlists"
-            spacing: 20
+            spacing: page.tileGap
             Repeater {
                 model: Catalog.searchPlaylists
                 MediaTile {
                     required property int index
                     required property var model
                     visible: !page.all || index < page.perRow
+                    size: page.tile
                     placeholderIcon: "queue_music"
                     cover: model.cover
                     title: model.title
@@ -325,13 +511,14 @@ Page {
         Flow {
             Layout.fillWidth: true
             visible: page.all || page.type === "shows"
-            spacing: 20
+            spacing: page.tileGap
             Repeater {
                 model: page.showsModel
                 MediaTile {
                     required property int index
                     required property var model
                     visible: !page.all || index < page.perRow
+                    size: page.tile
                     placeholderIcon: "podcasts"
                     cover: model.cover
                     title: model.name

@@ -10,6 +10,8 @@ Item {
     id: root
 
     property bool opened: false
+    onVisibleChanged: visible ? BackStack.push(root) : BackStack.pop(root)
+    Component.onDestruction: BackStack.pop(root)
     property bool _shownThisRun: false
     // Client ID отправлен: ждём браузер и показываем, чем кончилось
     property bool _connecting: false
@@ -62,7 +64,7 @@ Item {
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.AllButtons
-            onPressed: root.close()
+            onClicked: root.close()
             onWheel: wheel => {}
         }
     }
@@ -74,9 +76,9 @@ Item {
         height: Math.min(flick.contentHeight + 48, parent.height - 48)
         radius: Theme.shape.extraLarge
         color: Theme.surfaceContainerHigh
-        scale: root.opened ? 1 : 0.92
+        scale: Theme.reducedMotion || root.opened ? 1 : Theme.mobile ? 0.96 : 0.92
         opacity: root.opened ? 1 : 0
-        Behavior on scale { NumberAnimation { duration: Theme.motion.spatialFast; easing.type: Easing.OutBack } }
+        Behavior on scale { NumberAnimation { duration: Theme.motion.spatialFast; easing.type: Theme.mobile ? Easing.OutCubic : Easing.OutBack } }
         Behavior on opacity { NumberAnimation { duration: Theme.motion.effectsFast } }
         Keys.onEscapePressed: root.close()
 
@@ -209,9 +211,18 @@ Item {
                     }
                 }
 
-                RowLayout {
+                // Flow справа налево: на телефоне три кнопки не помещаются в ряд — переносятся, а не распирают
+                // диалог шире экрана (у RowLayout минимальная ширина — сумма кнопок)
+                Flow {
                     Layout.fillWidth: true
+                    layoutDirection: Qt.RightToLeft
                     spacing: 8
+                    Button {
+                        text: I18n.t("Connect")
+                        enabled: field.text.trim() !== "" && root._st !== "authorizing"
+                        onClicked: root.connect()
+                    }
+                    Button { text: I18n.t("Later"); style: "text"; onClicked: root.close() }
                     Button {
                         text: I18n.t("Don’t show again")
                         style: "text"
@@ -219,13 +230,6 @@ Item {
                             Settings.apiLimitTipDismissed = true
                             root.close()
                         }
-                    }
-                    Item { Layout.fillWidth: true }
-                    Button { text: I18n.t("Later"); style: "text"; onClicked: root.close() }
-                    Button {
-                        text: I18n.t("Connect")
-                        enabled: field.text.trim() !== "" && root._st !== "authorizing"
-                        onClicked: root.connect()
                     }
                 }
             }

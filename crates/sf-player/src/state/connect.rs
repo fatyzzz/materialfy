@@ -41,6 +41,10 @@ const QUEUE_LIMIT: usize = 30;
 const TRACK_CACHE_LIMIT: usize = 1000;
 /// Сколько названий контекстов помнить (карточка «Играет из …»).
 const CONTEXT_CACHE_LIMIT: usize = 200;
+/// Данные треков через сессию ждём не дольше: повисший spclient не должен держать опрос состояния.
+const TRACK_LOOKUP_TIMEOUT: Duration = Duration::from_secs(10);
+/// Трек без данных из сессии спрашиваем у Web API (/me/player) не чаще этого.
+const WEB_ITEM_EVERY: Duration = Duration::from_secs(30);
 const CLUSTER_URI: &str = "hm://connect-state/v1/cluster";
 const PROTOBUF: &str = "application/x-protobuf";
 
@@ -79,6 +83,8 @@ struct State {
     contexts: HashMap<String, Option<(String, String)>>,
     /// когда опрос состояния в последний раз ушёл в Web API из-за отказа сессии
     web_poll_at: Option<Instant>,
+    /// какой трек и когда в последний раз спрашивали у Web API из-за пустых данных сессии
+    web_item_at: Option<(String, Instant)>,
 }
 
 /// Опрос состояния и очереди при сбое сессии идёт в Web API не чаще этого: кластер обычно оживает сам,
@@ -323,12 +329,57 @@ impl ConnectBackend {
     async fn playback(&self, link: &Link) -> Result<Option<RemoteState>, String> {
         let (cluster, now) = self.cluster(link).await?;
         let uri = &cluster.player_state.track.uri;
-        let tracks = if cluster.active_device_id.is_empty() || uri.is_empty() {
-            HashMap::new()
-        } else {
-            self.tracks(link, std::slice::from_ref(uri)).await
-        };
+        if cluster.active_device_id.is_empty() || uri.is_empty() {
+            return Ok(remote_state(&cluster, now, &HashMap::new()));
+        }
+        let mut tracks = self.tracks(link, std::slice::from_ref(uri)).await;
+        if !tracks.get(uri).is_some_and(|item| !item.title.is_empty()) {
+            // сессия промолчала (хозяин-librespot своих данных в кластер не кладёт): метаданные строки
+            // кластера, иначе Web API; в кэш не идёт — следующий опрос снова спросит сессию
+            let fallback = match provided_item(&cluster.player_state.track, cluster.player_state.duration) {
+                Some(item) => Some(item),
+                None => self.web_item(uri).await,
+            };
+            if let Some(item) = fallback {
+                tracks.insert(uri.clone(), item);
+            }
+        }
         Ok(remote_state(&cluster, now, &tracks))
+    }
+
+    /// Данные трека из /me/player Web API, если там играет он же; не чаще WEB_ITEM_EVERY на трек.
+    async fn web_item(&self, uri: &str) -> Option<TrackItem> {
+        {
+            let mut state = self.lock();
+            if state.web_item_at.as_ref().is_some_and(|(asked, at)| asked == uri && at.elapsed() < WEB_ITEM_EVERY) {
+                return None;
+            }
+            state.web_item_at = Some((uri.to_owned(), Instant::now()));
+        }
+        let item = match self.web.call(ApiCall::Playback { seq: 0 }).await {
+            ApiReply::Playback { result: Ok(Some(state)), .. } => state.item,
+            ApiReply::Playback { result: Err(error), .. } => {
+                tracing::warn!("track data for {uri} via the Web API unavailable: {error:#}");
+                None
+            }
+            _ => None,
+        };
+        let item = item.filter(|item| item.uri == uri && !item.title.is_empty())?;
+        self.cache_track(uri.to_owned(), item.clone());
+        Some(item)
+    }
+
+    fn cache_track(&self, uri: String, item: TrackItem) {
+        let mut state = self.lock();
+        if !state.tracks.contains_key(&uri) {
+            state.track_order.push_back(uri.clone());
+        }
+        state.tracks.insert(uri, item);
+        while state.track_order.len() > TRACK_CACHE_LIMIT {
+            if let Some(old) = state.track_order.pop_front() {
+                state.tracks.remove(&old);
+            }
+        }
     }
 
     /// Играет этот ПК — очередь из Spirc (без сети); иначе — из кластера.
@@ -415,24 +466,23 @@ impl ConnectBackend {
         if missing.is_empty() {
             return found;
         }
-        match crate::engine::session_reads::metadata(&link.session, missing.iter()).await {
-            Ok(items) => {
-                let mut state = self.lock();
+        let lookup = crate::engine::session_reads::metadata(&link.session, missing.iter());
+        match tokio::time::timeout(TRACK_LOOKUP_TIMEOUT, lookup).await {
+            Ok(Ok(items)) => {
                 for (uri, item) in items {
                     let item = map::playable(&item);
-                    if !state.tracks.contains_key(&uri) {
-                        state.track_order.push_back(uri.clone());
-                    }
-                    state.tracks.insert(uri.clone(), item.clone());
+                    self.cache_track(uri.clone(), item.clone());
                     found.insert(uri, item);
                 }
-                while state.track_order.len() > TRACK_CACHE_LIMIT {
-                    if let Some(old) = state.track_order.pop_front() {
-                        state.tracks.remove(&old);
-                    }
+                let unanswered: Vec<String> =
+                    missing.iter().map(SpotifyUri::to_uri).filter(|uri| !found.contains_key(uri)).collect();
+                if !unanswered.is_empty() {
+                    tracing::warn!("no track data via the session for {unanswered:?}");
                 }
             }
-            Err(error) => tracing::debug!("track data via the session unavailable: {error:?}"),
+            // неудачи не кэшируются: следующий опрос спросит снова
+            Ok(Err(error)) => tracing::warn!("track data via the session unavailable: {error:?}"),
+            Err(_) => tracing::warn!("track data via the session timed out after {TRACK_LOOKUP_TIMEOUT:?}"),
         }
         found
     }
@@ -763,6 +813,50 @@ fn track_item(uri: &str, tracks: &HashMap<String, TrackItem>, duration_ms: i64) 
         item.duration_ms = duration_ms;
     }
     item
+}
+
+/// Трек из метаданных строки кластера: официальные клиенты пишут туда название, альбом, исполнителя и
+/// обложки (librespot — только если они пришли с контекстом). None — названия нет.
+pub(crate) fn provided_item(track: &ProvidedTrack, duration_ms: i64) -> Option<TrackItem> {
+    let meta = |keys: &[&str]| {
+        keys.iter()
+            .filter_map(|key| track.metadata.get(*key))
+            .map(|value| value.trim())
+            .find(|value| !value.is_empty())
+            .map(str::to_owned)
+    };
+    if track.uri.is_empty() {
+        return None;
+    }
+    let mut item = track_item(&track.uri, &HashMap::new(), duration_ms);
+    item.title = meta(&["title", "track_title"])?;
+    item.artists = meta(&["artist_name", "album_artist_name"]).unwrap_or_default();
+    if let Some(artist) = meta(&["artist_uri"]).as_deref().and_then(uri_id) {
+        item.artist_refs = vec![md3_model::ArtistRef { id: artist.to_owned(), name: item.artists.clone() }];
+    }
+    item.album = meta(&["album_title"]).unwrap_or_default();
+    item.album_id = meta(&["album_uri"]).as_deref().and_then(uri_id).unwrap_or_default().to_owned();
+    let small = meta(&["image_url", "image_small_url", "image_large_url", "image_xlarge_url"]);
+    let large = meta(&["image_large_url", "image_xlarge_url", "image_url"]);
+    item.cover = small.as_deref().and_then(image_link).unwrap_or_default();
+    item.cover_large = large.as_deref().and_then(image_link).unwrap_or_else(|| item.cover.clone());
+    if item.duration_ms <= 0
+        && let Some(duration) = meta(&["duration"]).and_then(|duration| duration.parse::<i64>().ok())
+    {
+        item.duration_ms = duration;
+    }
+    Some(item)
+}
+
+/// Обложка из метаданных: веб-адрес или spotify:image:<hex> на хосте картинок.
+fn image_link(reference: &str) -> Option<String> {
+    if reference.starts_with("https://") || reference.starts_with("http://") {
+        return Some(reference.to_owned());
+    }
+    reference
+        .strip_prefix("spotify:image:")
+        .filter(|hex| !hex.is_empty())
+        .map(|hex| format!("{}{hex}", crate::engine::session_reads::IMAGE_HOST))
 }
 
 /// Контекст, который показал бы Web API (у списка без контекста — нет).

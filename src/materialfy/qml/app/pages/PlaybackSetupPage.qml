@@ -204,7 +204,9 @@ Page {
                         model: page.mode === "done" || page.mode === "signedOut" ? [] : [
                             { icon: "high_quality", text: I18n.t("Up to 320 kbps, gapless") },
                             { icon: "devices", text: I18n.t("Remote: move music between your phone and computer") },
-                            { icon: "lock", text: Qt.platform.os === "windows"
+                            { icon: "lock", text: Qt.platform.os === "android"
+                                                  ? I18n.t("No password needed: you confirm on the Spotify website, and the key is stored in the app's private storage")
+                                                  : Qt.platform.os === "windows"
                                                   ? I18n.t("No password needed: you confirm on the Spotify website, and the key is stored in Credential Manager")
                                                   : I18n.t("No password needed: you confirm on the Spotify website, and the key is stored in the keychain") }
                         ]
@@ -253,7 +255,7 @@ Page {
                             }
                             Icon {
                                 visible: page.shownMode === "done"
-                                name: "computer"
+                                name: Theme.mobile ? "smartphone" : "computer"
                                 size: 24
                                 fill: 1
                                 color: Theme.primary
@@ -470,10 +472,10 @@ Page {
                         description: I18n.t("How this computer appears on phones and speakers")
                         TextField {
                             id: nameField
-                            width: 240
+                            implicitWidth: Theme.mobile ? 280 : 240
                             trailingIcon: "edit"
                             onTrailingClicked: nameField.inputItem.forceActiveFocus()
-                            leadingIcon: "computer"
+                            leadingIcon: Theme.mobile ? "smartphone" : "computer"
                             text: Settings.deviceName
                             placeholderText: (Devices.thisDeviceName ?? "") !== "" ? Devices.thisDeviceName : "Materialfy"
                             maximumLength: 64
@@ -523,9 +525,9 @@ Page {
                     DevRow {
                         title: I18n.t("Audio output")
                         MenuField {
-                            width: 240
+                            implicitWidth: Theme.mobile ? 280 : 240
                             leadingIcon: "headphones"
-                            model: [{ id: "", text: I18n.t("System default output") }]
+                            model: [{ id: "", text: Theme.mobile ? I18n.t("System default") : I18n.t("System default output") }]
                                    .concat((Settings.audioDevices ?? []).map(d => ({ id: d, text: d })))
                             currentValue: Settings.audioDevice
                             onActivated: v => Settings.audioDevice = v

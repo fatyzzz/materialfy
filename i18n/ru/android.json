@@ -1,0 +1,23 @@
+{
+  "Keys are stored in the app's private storage.": "Ключи хранятся в закрытом хранилище приложения.",
+  "Keys in app storage": "Ключи в хранилище приложения",
+  "Permissions are stored in the app's private storage. “Sign out” removes all three; the cache stays.": "Разрешения хранятся в закрытом хранилище приложения. «Выйти» удаляет все три; кэш остаётся.",
+  "The proxy password is stored in the app's private storage. Local network device discovery bypasses the proxy.": "Пароль прокси хранится в закрытом хранилище приложения. Поиск устройств в локальной сети идёт мимо прокси.",
+  "No password needed: you confirm on the Spotify website, and the key is stored in the app's private storage": "Пароль не нужен: подтверждение проходит на сайте Spotify, ключ хранится в закрытом хранилище приложения",
+  "Details": "Подробнее",
+  "Confirm the update in the system window, then open Materialfy again": "Подтвердите обновление в окне системы, затем снова откройте Materialfy",
+  "Allow Materialfy to install apps in the settings that opened, then press Install again": "Разрешите Materialfy устанавливать приложения в открывшихся настройках и снова нажмите «Установить»",
+  "Player in the system island": "Плеер в острове системы",
+  "Track and progress in the status bar chip, Now Bar, Super Island, Origin Island and similar": "Трек и прогресс в чипе статус-бара, Now Bar, Super Island, атомном острове и подобных",
+  "Follows the system: animations are currently off": "Как в системе: сейчас анимации выключены",
+  "Follows the system animation setting": "Как в настройках анимации системы",
+  "phone:How this computer appears on phones and speakers": "Так телефон виден на других устройствах и колонках",
+  "phone:How this computer appears in Spotify on your phone and other devices": "Так этот телефон виден в Spotify на других устройствах",
+  "phone:Materialfy becomes a Spotify Connect device: music plays here, and your phone sees this computer in its device list. Confirm in your browser; after that your library also goes through this sign-in, with no Web API limits.": "Materialfy станет устройством Spotify Connect: музыка будет играть здесь, а компьютер и колонки увидят телефон в списке устройств. Нужно подтверждение в браузере; после него медиатека тоже идёт через этот вход, без лимитов Web API.",
+  "phone:Remote: move music between your phone and computer": "Пульт: переносите музыку между телефоном, компьютером и колонками",
+  "phone:Without Premium you can sign in another way — through the Web API: you get your library, search and a remote for phones and speakers, but no music on this computer. Spotify sometimes limits these requests.": "Без Premium можно войти иначе — через Web API: будут медиатека, поиск и пульт для других устройств и колонок, но не музыка на этом телефоне. Spotify иногда ограничивает такие запросы.",
+  "phone:Open Spotify on a phone or speaker and it will show up here. Or start playing music on this computer.": "Откройте Spotify на компьютере или колонке, и они появятся здесь. Или включите музыку на этом телефоне.",
+  "phone:The playing track’s cover, blurred behind the whole window as a soft colored glow": "Размытая обложка играющего трека за всем экраном — слабым цветным свечением",
+  "App log": "Журнал приложения",
+  "For a bug report: what the app did at sign-in, playback and lyrics. No passwords or keys.": "Для сообщения об ошибке: что приложение делало при входе, воспроизведении и загрузке текстов. Без паролей и ключей."
+}

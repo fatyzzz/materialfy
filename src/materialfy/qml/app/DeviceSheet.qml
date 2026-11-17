@@ -8,10 +8,16 @@ import Materialfy.Core
 // Закрывается по scrim, Esc и свайпу ручки вниз.
 T.Popup {
     id: root
+    Component.onCompleted: MobileShell.prepareAccessibility(contentItem.parent, root)
 
     readonly property bool _instant: Theme.reducedMotion === true
 
-    onClosed: sheet.drag = 0
+    onClosed: {
+        sheet.drag = 0
+        BackStack.pop(root)
+    }
+    onOpened: BackStack.push(root)
+    Component.onDestruction: BackStack.pop(root)
 
     function openSheet() {
         Devices.refresh()
@@ -61,7 +67,7 @@ T.Popup {
             property real drag: 0
             anchors.horizontalCenter: parent.horizontalCenter
             width: Math.min(parent.width, 640)
-            height: Math.min(handleBox.height + flick.contentHeight + 16, parent.height * 0.85)
+            height: Math.min(handleBox.height + flick.contentHeight + 16 + Theme.safeBottom, parent.height * 0.85)
             y: parent.height - height * (root._instant ? 1 : root.reveal) + drag + (root._instant ? 0 : (1 - root.reveal) * 40)
             opacity: root._instant ? root.reveal : Math.min(1, root.reveal * 2)
             topLeftRadius: Theme.shape.extraLarge
@@ -94,7 +100,7 @@ T.Popup {
                     target: null
                     yAxis.enabled: true
                     xAxis.enabled: false
-                    onTranslationChanged: sheet.drag = Math.max(0, translation.y)
+                    onTranslationChanged: if (active) sheet.drag = Math.max(0, translation.y)   // в конце жеста translation сбрасывается в 0
                     onActiveChanged: if (!active) {
                         if (sheet.drag > 80)
                             root.close()
@@ -112,7 +118,7 @@ T.Popup {
                 anchors.bottom: parent.bottom
                 anchors.leftMargin: 12
                 anchors.rightMargin: 12
-                anchors.bottomMargin: 16
+                anchors.bottomMargin: 16 + Theme.safeBottom
                 clip: true
                 contentWidth: width
                 contentHeight: body.implicitHeight

@@ -2310,7 +2310,6 @@ dependencies = [
 [[package]]
 name = "librespot-audio"
 version = "0.8.0"
-source = "git+https://github.com/fatyzzz/librespot?rev=4041835bd314969fbf8a1cb9f83e5eccba4bc36d#4041835bd314969fbf8a1cb9f83e5eccba4bc36d"
 dependencies = [
  "aes 0.8.4",
  "bytes",
@@ -2329,7 +2328,6 @@ dependencies = [
 [[package]]
 name = "librespot-connect"
 version = "0.8.0"
-source = "git+https://github.com/fatyzzz/librespot?rev=4041835bd314969fbf8a1cb9f83e5eccba4bc36d#4041835bd314969fbf8a1cb9f83e5eccba4bc36d"
 dependencies = [
  "futures-util",
  "librespot-core",
@@ -2348,7 +2346,6 @@ dependencies = [
 [[package]]
 name = "librespot-core"
 version = "0.8.0"
-source = "git+https://github.com/fatyzzz/librespot?rev=4041835bd314969fbf8a1cb9f83e5eccba4bc36d#4041835bd314969fbf8a1cb9f83e5eccba4bc36d"
 dependencies = [
  "aes 0.8.4",
  "base64 0.22.1",
@@ -2406,7 +2403,6 @@ dependencies = [
 [[package]]
 name = "librespot-metadata"
 version = "0.8.0"
-source = "git+https://github.com/fatyzzz/librespot?rev=4041835bd314969fbf8a1cb9f83e5eccba4bc36d#4041835bd314969fbf8a1cb9f83e5eccba4bc36d"
 dependencies = [
  "async-trait",
  "bytes",
@@ -2437,7 +2433,6 @@ dependencies = [
 [[package]]
 name = "librespot-playback"
 version = "0.8.0"
-source = "git+https://github.com/fatyzzz/librespot?rev=4041835bd314969fbf8a1cb9f83e5eccba4bc36d#4041835bd314969fbf8a1cb9f83e5eccba4bc36d"
 dependencies = [
  "bytes",
  "form_urlencoded",
@@ -2570,6 +2565,7 @@ dependencies = [
  "mf-lyrics",
  "mf-platform",
  "mf-theme",
+ "ndk-context",
  "serde",
  "serde_json",
  "sf-api",
@@ -4046,6 +4042,7 @@ dependencies = [
  "hmac 0.12.1",
  "http",
  "jiff",
+ "libc",
  "librespot-connect",
  "librespot-core",
  "librespot-metadata",

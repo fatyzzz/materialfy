@@ -12,7 +12,18 @@ pub use oauth::{
 };
 pub use proxy::{ManualProxy, ProxyConfig, ProxyMode};
 
+type BrowserOpener = Box<dyn Fn(&str) -> Result<(), String> + Send + Sync>;
+static BROWSER_OPENER: std::sync::OnceLock<BrowserOpener> = std::sync::OnceLock::new();
+
+/// Свой способ открыть браузер (Android: Intent через Qt) вместо крейта `open`. Ставится один раз при запуске.
+pub fn set_browser_opener(opener: impl Fn(&str) -> Result<(), String> + Send + Sync + 'static) {
+    let _ = BROWSER_OPENER.set(Box::new(opener));
+}
+
 /// Открыть URL в браузере по умолчанию (не блокирует).
 pub fn open_browser(url: &str) -> Result<(), String> {
+    if let Some(opener) = BROWSER_OPENER.get() {
+        return opener(url);
+    }
     open::that_detached(url).map_err(|e| e.to_string())
 }

@@ -85,7 +85,7 @@ Item {
         id: sheet
         readonly property real shift: root.opened ? 0 : (root.compact ? 24 : 16)
         width: root.compact ? parent.width : root.panelWidth
-        height: root.compact ? parent.height * 0.72 : parent.height - root.bottomInset - 8
+        height: root.compact ? parent.height * (Theme.mobile ? 0.8 : 0.72) : parent.height - root.bottomInset - 8
         x: root.compact ? 0 : parent.width - width - 8 + shift
         y: root.compact ? parent.height - height + shift : 8
         Behavior on x { enabled: Theme.reducedMotion !== true; NumberAnimation { duration: Theme.motion.spatialDefault; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.motion.emphasizedDecelerate } }
@@ -103,6 +103,8 @@ Item {
         ColumnLayout {
             anchors.fill: parent
             anchors.topMargin: 16
+            // телефон: над полосой навигации системы
+            anchors.bottomMargin: Theme.mobile ? Theme.safeBottom : 0
             spacing: 8
 
             RowLayout {
@@ -151,8 +153,8 @@ Item {
                 Layout.rightMargin: 8
                 clip: true
                 model: root.listModel
-                boundsBehavior: Flickable.StopAtBounds
-                acceptedButtons: Qt.NoButton
+                boundsBehavior: Theme.mobile ? Flickable.OvershootBounds : Flickable.StopAtBounds
+                acceptedButtons: Theme.mobile ? Qt.LeftButton : Qt.NoButton
                 reuseItems: true
                 delegate: Item {
                     id: row

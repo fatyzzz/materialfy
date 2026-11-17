@@ -36,15 +36,22 @@ Item {
         color: root._bg
     }
 
-    RowLayout {
+    // узкая карточка (телефон): кнопка под текстом, иначе текст сжимается в столбик по слову
+    readonly property bool _narrow: width < 480
+
+    GridLayout {
         id: body
         x: 16
         y: 16
         width: root.width - 32
-        spacing: 14
+        columns: root._narrow ? 2 : 4
+        columnSpacing: 14
+        rowSpacing: 12
 
         Icon {
             Layout.alignment: Qt.AlignTop
+            Layout.row: 0
+            Layout.column: 0
             name: root.icon
             size: 22
             fill: 1
@@ -52,6 +59,8 @@ Item {
         }
         ColumnLayout {
             Layout.fillWidth: true
+            Layout.row: 0
+            Layout.column: 1
             spacing: 2
             Label {
                 visible: root.title !== ""
@@ -73,11 +82,15 @@ Item {
             }
         }
         LoadingIndicator {
+            Layout.row: root._narrow ? 1 : 0
+            Layout.column: root._narrow ? 1 : 2
             visible: root.busy
             size: 28
             color: root._fg
         }
         Button {
+            Layout.row: root._narrow ? 1 : 0
+            Layout.column: root._narrow ? 1 : 3
             visible: root.actionText !== "" && !root.busy
             text: root.actionText
             icon: root.actionIcon

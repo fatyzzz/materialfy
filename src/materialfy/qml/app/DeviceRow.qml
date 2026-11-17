@@ -78,7 +78,7 @@ Item {
             color: root.setup ? Theme.primaryContainer : Theme.surfaceContainerHighest
             Icon {
                 anchors.centerIn: parent
-                name: root._receiver ? "wifi_tethering" : root.setup ? "computer" : info.icon
+                name: root._receiver ? "wifi_tethering" : root.setup ? (Theme.mobile ? "smartphone" : "computer") : info.icon
                 size: 22
                 color: root.setup ? Theme.fgPrimaryContainer : Theme.fgSurfaceVariant
             }

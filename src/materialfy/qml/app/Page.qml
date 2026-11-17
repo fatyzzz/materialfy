@@ -12,15 +12,27 @@ Item {
     property string title
     property string subtitle
     property bool showHeader: true
-    property real sideMargin: 32
-    property real bottomInset: 120
+    property real sideMargin: Theme.mobile ? 16 : 32
+    // под плавающим мини-плеером (на телефоне он ниже и уже)
+    property real bottomInset: Theme.mobile ? 96 : 120
     default property alias content: column.data
     // Слой под содержимым, вне прокручиваемой области — её clip его не режет (фон шапки, см. HeroShapes)
     property alias underlay: underlayHost.data
     readonly property alias flickable: flick
     readonly property bool scrolled: flick.contentY > 48
+    // телефон: «потянуть вниз — обновить» (страница включает и задаёт refreshing / onPullRefresh)
+    property bool pullToRefresh: false
+    property bool refreshing: false
+    signal pullRefresh()
 
     Item { id: underlayHost; anchors.fill: parent }
+
+    PullToRefresh {
+        flickable: flick
+        enabled: page.pullToRefresh
+        busy: page.refreshing
+        onRefresh: page.pullRefresh()
+    }
 
     SmoothFlickable {
         id: flick
@@ -33,7 +45,7 @@ Item {
             x: page.sideMargin
             y: 8
             width: flick.width - 2 * page.sideMargin
-            spacing: 24
+            spacing: Theme.mobile ? 20 : 24
 
             ColumnLayout {
                 visible: page.showHeader
@@ -42,13 +54,15 @@ Item {
                 Label {
                     Layout.fillWidth: true
                     text: page.title
-                    type: "displaySmall"
+                    type: Theme.mobile ? "headlineMedium" : "displaySmall"
                     weight: 600
                 }
                 Label {
                     visible: page.subtitle !== ""
                     Layout.fillWidth: true
                     text: page.subtitle
+                    wrapMode: Text.WordWrap
+                    elide: Text.ElideNone
                     type: "bodyLarge"
                     color: Theme.fgSurfaceVariant
                 }

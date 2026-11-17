@@ -432,6 +432,9 @@ impl Engine {
     ) -> Result<Self> {
         let device_id = config.device_id();
         let session_config = SessionConfig {
+            // client ID — тот, которым выдан OAuth-токен входа (sf_auth). По умолчанию librespot берёт ID по ОС:
+            // на Android — ID клиента Android, и AP отвергает токен чужого клиента (INVALID_CREDENTIALS)
+            client_id: sf_auth::PLAYBACK_CLIENT_ID.to_owned(),
             device_id: device_id.clone(),
             autoplay: Some(config.autoplay),
             proxy,
@@ -494,7 +497,8 @@ impl Engine {
 
         let connect_config = ConnectConfig {
             name: config.device_name.clone(),
-            device_type: DeviceType::Computer,
+            // Android: в списке устройств Spotify — телефон, а не компьютер
+            device_type: if cfg!(target_os = "android") { DeviceType::Smartphone } else { DeviceType::Computer },
             initial_volume: config.initial_volume,
             disable_volume: false,
             volume_steps: 64,
@@ -1040,9 +1044,7 @@ fn apply_event(state: &mut LocalState, event: PlayerEvent) -> bool {
         }
         PlayerEvent::Seeked { position_ms, .. } => {
             state.position_ms = position_ms;
-            if state.playback == Playback::Playing {
-                state.position_at = Some(Instant::now());
-            }
+            state.position_at = (state.playback == Playback::Playing && !state.narrating).then(Instant::now);
             state.seek_sequence = state.seek_sequence.wrapping_add(1);
             true
         }
@@ -1556,6 +1558,8 @@ mod tests {
         );
         assert!(state.position_at.is_none());
 
+        apply_event(&mut state, PlayerEvent::Seeked { play_request_id: 1, track_id: uri(), position_ms: 1000 });
+        assert!(state.position_at.is_none(), "A seek must not start the song clock during narration");
         assert!(apply_event(&mut state, PlayerEvent::NarrationEnded { play_request_id: 1, track_id: uri() }));
         assert!(!state.narrating);
         assert!(state.position_at.is_some());

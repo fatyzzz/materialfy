@@ -29,7 +29,7 @@ Page {
 
     underlay: HeroShapes {
         width: page.width
-        active: page.visible
+        active: page.visible && !Theme.mobile
         headerHeight: hero.height + 24
         scroll: page.flickable.contentY
         contentX: page.sideMargin - 16
@@ -44,17 +44,20 @@ Page {
         Layout.fillWidth: true
         Layout.preferredHeight: heroRow.implicitHeight + 32
 
-        RowLayout {
+        // телефон: обложка над подписями, по центру
+        GridLayout {
             id: heroRow
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
-            spacing: page.compact ? 20 : 28
+            columns: Theme.mobile ? 1 : 2
+            rowSpacing: 16
+            columnSpacing: page.compact ? 20 : 28
 
             MorphImage {
-                Layout.preferredWidth: page.compact ? 128 : 168
+                Layout.preferredWidth: Theme.mobile ? 168 : page.compact ? 128 : 168
                 Layout.preferredHeight: Layout.preferredWidth
-                Layout.alignment: Qt.AlignTop
+                Layout.alignment: Theme.mobile ? Qt.AlignHCenter : Qt.AlignTop
                 source: page.info.coverLarge || page.info.cover || ""
                 shape: page.isCurrent ? "cookie12" : "softSquare"
                 duration: Theme.motion.spatialSlow

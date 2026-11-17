@@ -29,6 +29,8 @@ Third-party components
 
 - librespot (fork https://github.com/fatyzzz/librespot, based on crmne's patches) - MIT,
   Copyright (c) 2015 Paul Lietar and librespot-org contributors. Playback and Spotify Connect.
+  The audio, connect, core, metadata and playback crates of that fork are copied into vendor/ (same
+  revision, MIT license files kept), with one change in core: on Android it reports itself as Linux.
 - fastframe-audio, fastframe-now-playing (https://github.com/dennisgr7/fastframe) - MIT,
   Copyright (c) 2026 Carmine Paolino. Audio output device, media keys and SMTC/MPRIS.
 - hyper-proxy2 (fork https://github.com/crmne/hyper-proxy2) - MIT.

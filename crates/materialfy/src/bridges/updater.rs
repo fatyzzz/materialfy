@@ -243,7 +243,7 @@ impl qobject::Updater {
             this.version = qs(&offer.version);
             this.notes = qs(&offer.notes);
             this.published_at = qs(&offer.published_at);
-            this.release_url = qs(if offer.release_url.is_empty() { update::RELEASES_PAGE } else { &offer.release_url });
+            this.release_url = qs(&if offer.release_url.is_empty() { update::releases_page() } else { offer.release_url.clone() });
             this.prerelease = offer.prerelease;
             this.size = offer.size as f64;
             this.can_install = !offer.asset_url.is_empty();

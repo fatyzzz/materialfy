@@ -231,7 +231,8 @@ Page {
             width: page.width
             y: -8
             height: nav.height + 16
-            color: Theme.surfaceContainer     // цвет панели контента (Surface level "container")
+            // цвет фона под страницей: панель контента (Surface level "container"), на телефоне — само окно
+            color: Theme.mobile ? Theme.surface : Theme.surfaceContainer
             opacity: navHost.stick > 0 ? 1 : 0
             Behavior on opacity { NumberAnimation { duration: Theme.motion.effectsFast } }
         }
@@ -250,16 +251,20 @@ Page {
         title: I18n.t("Spotify account")
         icon: "account_circle"
 
-        RowLayout {
+        // На телефоне кнопка входа/выхода — под именем: в одну строку с аватаром ей не хватает места
+        GridLayout {
             Layout.fillWidth: true
-            spacing: 20
+            columns: Theme.mobile ? 2 : 3
+            columnSpacing: Theme.mobile ? 16 : 20
+            rowSpacing: 12
 
             Item {
-                Layout.preferredWidth: 72
-                Layout.preferredHeight: 72
+                Layout.preferredWidth: Theme.mobile ? 56 : 72
+                Layout.preferredHeight: Theme.mobile ? 56 : 72
+                Layout.alignment: Qt.AlignTop
                 Avatar {
                     anchors.fill: parent
-                    size: 72
+                    size: parent.width
                     visible: (page.account.avatar ?? "") === ""
                     name: page.signedIn ? (page.account.displayName ?? "") : ""
                 }
@@ -287,7 +292,9 @@ Page {
                           : I18n.t("Sign in to see your library and control playback")
                     type: "bodyMedium"
                     color: Theme.fgSurfaceVariant
-                    wrapMode: Text.WordWrap
+                    // spotify:user:<id> — одно длинное «слово»: по словам его не перенести, и на телефоне
+                    // строка уходила за край карточки
+                    wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                     elide: Text.ElideNone
                 }
                 StatusChip {
@@ -301,6 +308,8 @@ Page {
             Button {
                 visible: page.signedIn
                 Layout.alignment: Qt.AlignTop
+                Layout.column: Theme.mobile ? 1 : 2
+                Layout.row: Theme.mobile ? 1 : 0
                 // всегда с подписью: голая иконка «выйти» рядом с именем легко нажать, не поняв, что это
                 text: I18n.t("Sign out")
                 icon: "logout"
@@ -310,9 +319,11 @@ Page {
             Button {
                 visible: !page.signedIn
                 Layout.alignment: Qt.AlignTop
+                Layout.column: Theme.mobile ? 1 : 2
+                Layout.row: Theme.mobile ? 1 : 0
                 text: I18n.t("Sign in")
                 icon: "login"
-                onClicked: page.router ? page.router.reset("account") : Auth.startLogin()
+                onClicked: page.router ? (Theme.mobile ? page.router.push("account") : page.router.reset("account")) : Auth.startLogin()
             }
         }
 
@@ -614,7 +625,9 @@ Page {
         Label {
             Layout.fillWidth: true
             text: Auth.tokenStorage === "keyring"
-                  ? (Qt.platform.os === "windows"
+                  ? (Qt.platform.os === "android"
+                        ? I18n.t("Permissions are stored in the app's private storage. “Sign out” removes all three; the cache stays.")
+                        : Qt.platform.os === "windows"
                         ? I18n.t("Permissions are stored in Windows Credential Manager. “Sign out” removes all three; the cache stays.")
                         : I18n.t("Permissions are stored in the system keychain. “Sign out” removes all three; the cache stays."))
                   : I18n.t("Secret storage is unavailable: permissions last until the app closes. “Sign out” removes all three; the cache stays.")
@@ -634,7 +647,7 @@ Page {
         SettingsBanner {
             kind: "info"
             icon: "restart_alt"
-            shown: page.scalePending
+            shown: !Theme.mobile && page.scalePending
             title: I18n.t("Restart to apply the scale")
             text: I18n.t("The interface scale is read when the app starts. Apply now reopens the app at the new size.")
             actionText: I18n.t("Apply now")
@@ -645,11 +658,21 @@ Page {
             title: I18n.t("Language")
             // "system" (default) follows the OS UI language; the language names stay in their own language
             ButtonGroup {
+                // телефон: четыре языка в ряд не помещаются — выпадающий список
+                visible: !Theme.mobile
                 model: [I18n.t("System default"), "English", "Русский", "Português"]
                 autoSelect: false
                 size: page.compact ? "xs" : "s"
                 currentIndex: Math.max(0, ["system", "en", "ru", "pt"].indexOf(Settings.language))
                 onActivated: i => Settings.language = ["system", "en", "ru", "pt"][i]
+            }
+            MenuField {
+                visible: Theme.mobile
+                leadingIcon: "translate"
+                model: [{ id: "system", text: I18n.t("System default") }, { id: "en", text: "English" },
+                        { id: "ru", text: "Русский" }, { id: "pt", text: "Português" }]
+                currentValue: ["system", "en", "ru", "pt"].indexOf(Settings.language) >= 0 ? Settings.language : "system"
+                onActivated: v => Settings.language = v
             }
         }
 
@@ -665,6 +688,7 @@ Page {
         }
 
         SettingRow {
+            visible: !Theme.mobile
             title: I18n.t("Interface scale")
             description: I18n.t("Size of text and controls. Takes effect after restarting the app")
             ButtonGroup {
@@ -709,7 +733,7 @@ Page {
                         MouseArea {
                             id: swatchArea
                             anchors.fill: parent
-                            hoverEnabled: true
+                            hoverEnabled: !Theme.mobile
                             cursorShape: Qt.PointingHandCursor
                             onClicked: Settings.customSeed = parent.modelData
                         }
@@ -856,6 +880,8 @@ Page {
 
         // ---- Окно и плеер вне окна ----
         RowLayout {
+            // окна, трея и колеса мыши у телефона нет
+            visible: !Theme.mobile
             Layout.fillWidth: true
             Layout.topMargin: 8
             spacing: 10
@@ -874,7 +900,7 @@ Page {
             modes: ["off"]
                 .concat(Qt.platform.os === "windows" || Qt.platform.os === "osx" || (Qt.platform.os === "linux" && (!Qt.platform.pluginName.startsWith("wayland") || WindowShell.kwinAvailable())) ? ["island"] : [])
                 .concat(Qt.platform.os === "windows" ? ["taskbar", "both"] : [])
-            visible: modes.length > 1
+            visible: !Theme.mobile && modes.length > 1
         }
 
         SettingRow {
@@ -1000,6 +1026,7 @@ Page {
         }
 
         SettingRow {
+            visible: !Theme.mobile
             title: I18n.t("Compact sidebar")
             description: I18n.t("Icons only. Turns on automatically in a narrow window")
             Switch { checked: Settings.sidebarCollapsed; onToggled: c => Settings.sidebarCollapsed = c }
@@ -1012,6 +1039,7 @@ Page {
         }
 
         SettingRow {
+            visible: !Theme.mobile
             title: I18n.t("Sidebar list")
             description: Settings.sidebarLibrary === true
                          ? I18n.t("What you added or played last: playlists, albums, artists, podcasts and Liked Songs")
@@ -1026,12 +1054,14 @@ Page {
         }
 
         SettingRow {
+            visible: !Theme.mobile
             title: I18n.t("Minimize to tray on close")
             description: I18n.t("Closing the window hides it in the tray and the music keeps playing. Quit from the tray menu or with Ctrl+Q")
             Switch { checked: Settings.closeToTray; onToggled: c => Settings.closeToTray = c }
         }
 
         SettingRow {
+            visible: !Theme.mobile
             title: I18n.t("Mouse wheel scroll step")
             description: I18n.t("{0} px per notch; grows up to ×2 when scrolling fast", Settings.wheelStep)
             Slider {
@@ -1061,20 +1091,28 @@ Page {
 
         SettingRow {
             title: I18n.t("Animations")
-            description: Settings.animations === "reduced" ? I18n.t("No motion or morphing: only short fades")
+            description: Settings.animations === "reduced" || (Theme.mobile && Settings.lowPowerMode === "on") ? I18n.t("No motion or morphing: only short fades")
                          : Settings.animations === "full" ? I18n.t("All transitions, waves and morphs")
+                         : Theme.mobile ? (Settings.systemReducedMotion === true ? I18n.t("Follows the system: animations are currently off")
+                                                                                  : I18n.t("Follows the system animation setting"))
                          : Settings.systemReducedMotion === true ? I18n.t("Follows Windows: animation effects are currently off")
                          : I18n.t("Follows Windows “Animation effects”")
             ButtonGroup {
-                model: [I18n.t("System default"), I18n.t("Full"), I18n.t("Minimal")]
+                // телефон: «Как в системе» не помещается рядом с двумя другими
+                model: [Theme.mobile ? I18n.t("Auto") : I18n.t("System default"), I18n.t("Full"), I18n.t("Minimal")]
                 autoSelect: false
                 size: page.compact ? "xs" : "s"
-                currentIndex: ["system", "full", "reduced"].indexOf(Settings.animations)
-                onActivated: i => Settings.animations = ["system", "full", "reduced"][i]
+                currentIndex: Theme.mobile && Settings.lowPowerMode === "on" ? 2 : ["system", "full", "reduced"].indexOf(Settings.animations)
+                onActivated: i => {
+                    if (Theme.mobile)
+                        Settings.lowPowerMode = "auto"
+                    Settings.animations = ["system", "full", "reduced"][i]
+                }
             }
         }
 
         SettingRow {
+            visible: !Theme.mobile
             title: I18n.t("Weak computer mode")
             description: Settings.lowPowerMode === "on" ? I18n.t("No background motion, shimmer, theme wipe or cover fades, minimal transitions")
                          : Settings.lowPowerMode === "off" ? I18n.t("All effects, even when graphics are drawn by the processor")
@@ -1090,7 +1128,7 @@ Page {
         }
         // Видеокарта (Linux, гибридная графика): по умолчанию — как решит система; «Дискретная» включает PRIME offload
         SettingRow {
-            visible: Qt.platform.os === "linux"
+            visible: !Theme.mobile && Qt.platform.os === "linux"
             title: I18n.t("Graphics processor")
             description: (Settings.gpuPreference === "integrated"
                          ? I18n.t("Forces integrated graphics")
@@ -1108,6 +1146,8 @@ Page {
         }
 
         SettingRow {
+            // телефон: в фоне анимации стоят всегда
+            visible: !Theme.mobile
             title: I18n.t("Save power in background")
             description: I18n.t("While the window is out of focus, decorative animations (progress wave, shapes, background shimmer) pause to reduce CPU load. Lyrics keep going")
             Switch { checked: Settings.calmWhenInactive; onToggled: c => Settings.calmWhenInactive = c }
@@ -1519,11 +1559,20 @@ Page {
             description: I18n.t("Spotify’s DJ talks between the songs it plays. Off: just the music")
             Switch { checked: Settings.djVoice; onToggled: c => Settings.djVoice = c }
         }
+        // Android: плеер в «острове» системы (Live Updates Android 16, атомный остров vivo)
         SettingRow {
+            visible: MobileShell.islandSupported
+            title: I18n.t("Player in the system island")
+            description: I18n.t("Track and progress in the status bar chip, Now Bar, Super Island, Origin Island and similar")
+            Switch { checked: MobileShell.islandEnabled; onToggled: c => MobileShell.islandEnabled = c }
+        }
+
+        SettingRow {
+            visible: !Theme.mobile
             title: I18n.t("Output device")
             description: I18n.t("Where this computer’s audio goes")
             MenuField {
-                width: page.compact ? 220 : 280
+                implicitWidth: page.compact && !Theme.mobile ? 220 : 280
                 leadingIcon: "speaker"
                 model: [{ id: "", text: I18n.t("System default") }].concat((Settings.audioDevices ?? []).map(d => ({ id: d, text: d })))
                 currentValue: Settings.audioDevice
@@ -1559,10 +1608,10 @@ Page {
             description: I18n.t("How this computer appears in Spotify on your phone and other devices")
             TextField {
                 id: deviceNameField
-                width: page.compact ? 220 : 280
+                implicitWidth: page.compact && !Theme.mobile ? 220 : 280
                 text: Settings.deviceName
                 placeholderText: Devices.thisDeviceName || "Materialfy"
-                leadingIcon: "computer"
+                leadingIcon: Theme.mobile ? "smartphone" : "computer"
                 function commit() {
                     const t = text.trim()
                     if (t !== Settings.deviceName)
@@ -1690,17 +1739,18 @@ Page {
             }
         }
 
-        readonly property var modes: ["off", "system", "http", "socks"]
+        // Android: системный прокси для Rust-части не виден (переменных окружения нет) — «как в системе» = напрямую
+        readonly property var modes: Theme.mobile ? ["off", "http", "socks"] : ["off", "system", "http", "socks"]
         SettingRow {
             title: I18n.t("Proxy")
-            description: proxy.mode === "off" ? I18n.t("Direct, no proxy")
+            description: proxy.mode === "off" || (Theme.mobile && proxy.mode === "system") ? I18n.t("Direct, no proxy")
                          : proxy.mode === "system" ? I18n.t("Same as Windows settings")
                          : proxy.mode === "http" ? I18n.t("HTTP proxy (CONNECT)") : I18n.t("SOCKS5 proxy")
             ButtonGroup {
-                model: [I18n.t("Off"), I18n.t("System proxy"), "HTTP", "SOCKS5"]
+                model: Theme.mobile ? [I18n.t("Off"), "HTTP", "SOCKS5"] : [I18n.t("Off"), I18n.t("System proxy"), "HTTP", "SOCKS5"]
                 autoSelect: false
                 size: page.compact ? "xs" : "s"
-                currentIndex: networkCard.modes.indexOf(proxy.mode)
+                currentIndex: Math.max(0, networkCard.modes.indexOf(proxy.mode))
                 onActivated: i => proxy.mode = networkCard.modes[i]
             }
         }
@@ -1805,7 +1855,9 @@ Page {
 
         Label {
             Layout.fillWidth: true
-            text: I18n.t("The proxy password is stored in Credential Manager. Local network device discovery bypasses the proxy.")
+            text: Qt.platform.os === "android"
+                  ? I18n.t("The proxy password is stored in the app's private storage. Local network device discovery bypasses the proxy.")
+                  : I18n.t("The proxy password is stored in Credential Manager. Local network device discovery bypasses the proxy.")
             type: "bodySmall"
             color: Theme.fgSurfaceVariant
             wrapMode: Text.WordWrap
@@ -1861,6 +1913,7 @@ Page {
                 }
             }
             Button {
+                visible: !Theme.mobile && Qt.platform.os !== "android"
                 text: I18n.t("Open folder")
                 icon: "folder_open"
                 style: "text"
@@ -1890,6 +1943,19 @@ Page {
             title: Updater.buildCommit !== "" ? I18n.t("Materialfy {0}", Updater.appVersion) + " · " + Updater.buildCommit
                                               : I18n.t("Materialfy {0}", Updater.appVersion)
             description: I18n.t("An unofficial Spotify client in Material 3 Expressive style. Playback requires Spotify Premium; no lossless or offline downloads.")
+        }
+        // Телефон: журнал без adb — для отчёта, когда что-то не работает (вход, звук, тексты)
+        SettingRow {
+            visible: MobileShell.android
+            title: I18n.t("App log")
+            description: I18n.t("For a bug report: what the app did at sign-in, playback and lyrics. No passwords or keys.")
+            Button {
+                style: "tonal"
+                size: "s"
+                icon: "share"
+                text: I18n.t("Share")
+                onClicked: MobileShell.shareLog()
+            }
         }
         Label {
             Layout.fillWidth: true

@@ -149,9 +149,35 @@ fn lookup(en: &str) -> Option<&'static str> {
     dictionary(lang())?.get(en).map(String::as_str)
 }
 
+static PHONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Phone build / layout: texts speak of "this phone" instead of "this computer" (QML: I18n.phone).
+pub fn set_phone(on: bool) {
+    PHONE.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// "computer" → "phone" in the current language when the phone wording is on; the nouns decline alike, so one
+/// replacement per stem is enough.
+fn phone(text: &str) -> String {
+    if !PHONE.load(std::sync::atomic::Ordering::Relaxed) {
+        return text.to_owned();
+    }
+    let pairs: &[(&str, &str)] = match lang() {
+        Lang::Ru => &[("компьютер", "телефон"), ("Компьютер", "Телефон")],
+        Lang::Pt => &[
+            ("computadores", "celulares"),
+            ("computador", "celular"),
+            ("Computadores", "Celulares"),
+            ("Computador", "Celular"),
+        ],
+        _ => &[("computers", "phones"), ("computer", "phone"), ("Computer", "Phone")],
+    };
+    pairs.iter().fold(text.to_owned(), |acc, (from, to)| acc.replace(from, to))
+}
+
 /// Translates an English source string into the current language (unchanged if English or untranslated).
 pub fn t(en: &str) -> String {
-    lookup(en).unwrap_or(en).to_owned()
+    phone(lookup(en).unwrap_or(en))
 }
 
 /// Substitutes `{0}`, `{1}`… in `pattern` (unknown or out-of-range placeholders stay as is).
@@ -183,7 +209,7 @@ pub fn format(pattern: &str, args: &[&dyn Display]) -> String {
 
 /// Translates, then substitutes `{0}`, `{1}`…
 pub fn tf(en: &str, args: &[&dyn Display]) -> String {
-    format(lookup(en).unwrap_or(en), args)
+    format(&phone(lookup(en).unwrap_or(en)), args)
 }
 
 /// Russian plural category: 0 = one (1, 21, 101…), 1 = few (2–4, 22–24…), 2 = many (0, 5–20, 11–14, 25…).
@@ -219,7 +245,7 @@ pub fn n(count: i64, one: &str, many: &str) -> String {
         None if count == 1 => one.to_owned(),
         None => many.to_owned(),
     };
-    format(&form, &[&count])
+    format(&phone(&form), &[&count])
 }
 
 /// `tr!("Played {0} of {1}", a, b)` — `t` without arguments, `tf` with them.

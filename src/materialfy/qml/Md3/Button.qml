@@ -18,6 +18,23 @@ Item {
 
     signal clicked()
 
+    Accessible.role: checkable ? Accessible.CheckBox : Accessible.Button
+    Accessible.name: text
+    Accessible.checkable: checkable
+    Accessible.checked: checked
+    Accessible.onPressAction: root.activate()
+    activeFocusOnTab: true
+    Keys.onReturnPressed: root.activate()
+    Keys.onSpacePressed: root.activate()
+
+    function activate() {
+        if (!enabled)
+            return
+        if (checkable && autoToggle)
+            checked = !checked
+        clicked()
+    }
+
     readonly property var _spec: ({
         xs: { h: 32,  pad: 12, gap: 4,  icon: 20, type: "labelLarge",    pressedR: 8,  squareR: 12 },
         s:  { h: 40,  pad: 16, gap: 8,  icon: 20, type: "labelLarge",    pressedR: 8,  squareR: 12 },
@@ -53,10 +70,10 @@ Item {
 
     property real cornerRadius: area.pressed ? _spec.pressedR : _selected ? _spec.squareR : height / 2
     Behavior on cornerRadius {
-        NumberAnimation { duration: Theme.motion.spatialFast; easing.type: Easing.OutBack; easing.overshoot: Theme.motion.overshoot }
+        NumberAnimation { duration: area.pressed ? Theme.motion.press : Theme.motion.spatialFast; easing.type: Theme.mobile ? Easing.OutCubic : Easing.OutBack; easing.overshoot: Theme.motion.overshoot }
     }
 
-    implicitHeight: _spec.h
+    implicitHeight: Math.max(_spec.h, Theme.type[_spec.type].line + 12)
     implicitWidth: content.implicitWidth + 2 * _spec.pad
     opacity: 1
 
@@ -104,10 +121,6 @@ Item {
         enabled: root.enabled
         radius: container.radius
         color: root.contentColor
-        onClicked: {
-            if (root.checkable && root.autoToggle)
-                root.checked = !root.checked
-            root.clicked()
-        }
+        onClicked: root.activate()
     }
 }

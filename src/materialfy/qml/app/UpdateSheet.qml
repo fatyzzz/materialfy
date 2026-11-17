@@ -11,6 +11,8 @@ Item {
     id: root
 
     property bool opened: false
+    onVisibleChanged: visible ? BackStack.push(root) : BackStack.pop(root)
+    Component.onDestruction: BackStack.pop(root)
 
     function open() {
         opened = true
@@ -91,7 +93,7 @@ Item {
         MouseArea {
             anchors.fill: parent
             acceptedButtons: Qt.AllButtons
-            onPressed: root.close()
+            onClicked: root.close()
             onWheel: wheel => {}
         }
     }
@@ -103,9 +105,9 @@ Item {
         height: Math.min(content.implicitHeight + 48, parent.height - 32)
         radius: Theme.shape.extraLarge
         color: Theme.surfaceContainerHigh
-        scale: root.opened ? 1 : 0.92
+        scale: Theme.reducedMotion || root.opened ? 1 : Theme.mobile ? 0.96 : 0.92
         opacity: root.opened ? 1 : 0
-        Behavior on scale { NumberAnimation { duration: Theme.motion.spatialFast; easing.type: Easing.OutBack } }
+        Behavior on scale { NumberAnimation { duration: Theme.motion.spatialFast; easing.type: Theme.mobile ? Easing.OutCubic : Easing.OutBack } }
         Behavior on opacity { NumberAnimation { duration: Theme.motion.effectsFast } }
         Behavior on height { enabled: root.opened; NumberAnimation { duration: Theme.motion.spatialDefault; easing.type: Easing.BezierSpline; easing.bezierCurve: Theme.motion.emphasized } }
         Keys.onEscapePressed: root.close()
@@ -376,7 +378,7 @@ Item {
                     Button {
                         visible: root.st === "readyToInstall" || root.st === "installing"
                         enabled: root.st === "readyToInstall"
-                        text: root.mac ? I18n.t("Open installer") : I18n.t("Restart to update")
+                        text: root.mac || Updater.installKind === "apk" ? I18n.t("Open installer") : I18n.t("Restart to update")
                         icon: root.mac ? "open_in_new" : "restart_alt"
                         onClicked: Updater.install()
                     }

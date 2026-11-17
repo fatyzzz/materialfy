@@ -53,7 +53,7 @@ Item {
         Behavior on color { enabled: !Theme.transitioning; ColorAnimation { duration: Theme.motion.effectsDefault } }
         Icon {
             anchors.centerIn: parent
-            name: Player.deviceLost ? "portable_wifi_off" : root.movingHere ? "computer" : info.icon
+            name: Player.deviceLost ? "portable_wifi_off" : root.movingHere ? (Theme.mobile ? "smartphone" : "computer") : info.icon
             size: Math.round(root.size * 0.64)
             fill: 1
             weight: 600

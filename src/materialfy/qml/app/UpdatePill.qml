@@ -34,7 +34,7 @@ Item {
         switch (st) {
         case "downloading": return Math.floor(Updater.progress * 100) + " %"
         case "verifying": return I18n.t("Verifying…")
-        case "readyToInstall": return Updater.installKind === "mac" ? I18n.t("Open installer") : I18n.t("Restart to update")
+        case "readyToInstall": return Updater.installKind === "mac" || Updater.installKind === "apk" ? I18n.t("Open installer") : I18n.t("Restart to update")
         case "installing": return I18n.t("Restarting…")
         case "error": return I18n.t("Details and retry")
         default: return I18n.t("Version {0}", Updater.version)

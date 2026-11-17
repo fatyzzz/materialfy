@@ -33,6 +33,7 @@ jobs:
       - name: Release files and checksums
         run: |
           ls -la dist
+          ls dist/*.apk >/dev/null 2>&1 || { echo "::error::no release-signed APK (check ANDROID_KEYSTORE_BASE64 / ANDROID_KEYSTORE_PASS)"; exit 1; }
           cd dist && sha256sum -- * > SHA256SUMS.txt && cat SHA256SUMS.txt
 
       - uses: softprops/action-gh-release@v3
@@ -41,8 +42,12 @@ jobs:
           tag_name: ${{ github.ref_name }}
           prerelease: ${{ contains(github.ref_name, '-') }}
           generate_release_notes: true
-          fail_on_unmatched_files: true
+          # Only the APK signed with the release key (secrets ANDROID_KEYSTORE_BASE64/_PASS) is published:
+          # without the key the build uploads android-arm64-debugsigned instead and the release fails here.
+          # Desktop builds (repository variable DESKTOP_BUILDS=true) are attached when present.
+          fail_on_unmatched_files: false
           files: |
+            dist/*.apk
             dist/*-Setup.exe
             dist/*-portable.zip
             dist/*.AppImage
