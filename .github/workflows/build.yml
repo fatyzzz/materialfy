@@ -266,7 +266,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: player-tests
-      - run: cargo test --locked -p md3-model --lib && cargo test --locked -p sf-player --lib
+      - run: cargo test --locked -p md3-model --lib && cargo test --locked -p sf-player --lib && cargo test --locked -p librespot-connect --lib context_resolver::tests
 
   qml-regressions:
     name: QML interactions

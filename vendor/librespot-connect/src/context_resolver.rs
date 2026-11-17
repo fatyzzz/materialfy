@@ -45,6 +45,16 @@ pub(super) struct ResolveContext {
 }
 
 impl ResolveContext {
+    fn playback_session_url(&self) -> Option<String> {
+        self.session_url.clone().or_else(|| {
+            // DJ's backing playlist can contain tracks too. Those are not the
+            // listener's paged session and do not carry its spoken segments.
+            (self.update == ContextType::Default
+                && self.context_uri() == "spotify:playlist:37i9dQZF1EYkqdzj48dyYq")
+                .then(|| SpClient::context_session_url(self.context_uri()))
+        })
+    }
+
     fn append_context(uri: impl Into<String>) -> Self {
         Self {
             resolve: Resolve::Uri(uri.into()),
@@ -272,7 +282,8 @@ impl ContextResolver {
         match next.update {
             ContextType::Default => {
                 let spclient = self.session.spclient();
-                let mut ctx = match next.session_url {
+                let session_url = next.playback_session_url();
+                let mut ctx = match session_url {
                     Some(ref url) => spclient.get_context_from_url(url).await,
                     None => spclient.get_context(resolve_uri).await,
                 };
@@ -280,7 +291,7 @@ impl ContextResolver {
                 // A context with no track list of its own, such as the DJ,
                 // is played from a session made for the listener.
                 let context_uri = next.context_uri();
-                if next.session_url.is_none()
+                if session_url.is_none()
                     && context_uri.starts_with("spotify:playlist:")
                     && !ctx.as_ref().is_ok_and(has_tracks)
                 {
@@ -429,6 +440,17 @@ impl ContextResolver {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn dj_uses_its_session_before_looking_at_the_backing_playlist() {
+        let dj = "spotify:playlist:37i9dQZF1EYkqdzj48dyYq";
+        let resolve = ResolveContext::from_uri(dj, "", ContextType::Default, ContextAction::Replace);
+        assert_eq!(resolve.playback_session_url(), Some(SpClient::context_session_url(dj)));
+        let explicit = resolve.with_session_url(Some("hm://existing-session".into()));
+        assert_eq!(explicit.playback_session_url().as_deref(), Some("hm://existing-session"));
+        let ordinary = ResolveContext::from_uri("spotify:playlist:ordinary", "", ContextType::Default, ContextAction::Replace);
+        assert_eq!(ordinary.playback_session_url(), None);
+    }
 
     #[test]
     fn a_next_page_resolves_by_its_url_into_its_context() {
