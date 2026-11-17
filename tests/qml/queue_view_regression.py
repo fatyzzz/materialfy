@@ -74,6 +74,7 @@ Window {width:360;height:800;visible:true
  function dropIndex(y){return v._dropIndexAt(180,y)}
  function djMode(on){Player.source=on?"dj":"playlist"}
  function engineCount(){return Player.queue.count}
+ function remote(on){Player.remote=on;Player.isLocal=!on}
 }'''
 app=QGuiApplication([]);engine=QQmlEngine();engine.addImportPath(str(base));c=QQmlComponent(engine)
 c.setData(qml.encode(),QUrl.fromLocalFile(str(base/'test.qml')))
@@ -118,6 +119,10 @@ def run_checks():
     assert not headers(), 'DJ exposed queue section labels/counts'
     assert not any(o.objectName().startswith('qa-row-') for o in visual_items()), 'DJ still instantiated hidden future rows'
     assert w.dropIndex(400)==-1, 'DJ accepted a queue drop'
+    w.remote(True);QTest.qWait(20)
+    drops=[o for o in visual_items() if o.metaObject().className().startswith('QQuickDropArea')]
+    assert drops and all(not o.isEnabled() for o in drops), 'Remote DJ still accepted hidden queue drops'
+    w.remote(False)
     w.djMode(False);QTest.qWait(60)
     assert len(headers())==3, 'Returning to an ordinary playlist did not restore the queue'
     print('PASS: DJ hides future rows without clearing engine queue; ordinary queue returns',flush=True)

@@ -376,6 +376,7 @@ Item {
     // трек, брошенный из списков: на этом компьютере — на место, на другом устройстве — в конец
     DropArea {
         id: dropZoneHover
+        enabled: !root.djMode
         anchors.fill: parent
         keys: ["materialfy/track", "application/x-materialfy-track"]
         onDropped: drop => {
