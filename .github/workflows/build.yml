@@ -327,6 +327,18 @@ jobs:
           distribution: temurin
           java-version: "21"
 
+      - name: Restore Gradle dependencies
+        id: gradle-cache
+        uses: actions/cache/restore@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-qt-${{ env.QT_VERSION }}-${{ hashFiles('android/build_apk.sh') }}-${{ github.run_id }}
+          restore-keys: |
+            gradle-${{ runner.os }}-qt-${{ env.QT_VERSION }}-${{ hashFiles('android/build_apk.sh') }}-
+            gradle-${{ runner.os }}-qt-${{ env.QT_VERSION }}-
+
       - name: Android SDK packages
         run: |
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses > /dev/null || true
@@ -371,6 +383,16 @@ jobs:
             # debug-signed: not for a release (it couldn't update an installed signed APK)
             cp "$(ls target/android/Materialfy-*-arm64-v8a*.apk | head -1)" "target/dist/Materialfy-$VERSION-arm64-v8a-debugsigned.apk"
           fi
+
+      # Preserve already downloaded dependencies even if Maven throttles a later request.
+      - name: Save Gradle dependencies
+        if: ${{ always() && !cancelled() && steps.gradle-cache.outcome == 'success' }}
+        uses: actions/cache/save@v6
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ steps.gradle-cache.outputs.cache-primary-key }}
 
       # release.yml takes materialfy-* artifacts: only a release-signed APK goes there
       - uses: actions/upload-artifact@v7
