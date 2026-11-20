@@ -24,6 +24,7 @@ use crate::lock;
 const REMOTE_KEPT: usize = 200;
 /// Недавних контекстов у сессии (столько же, сколько у веб-плеера).
 const SESSION_RECENT: u32 = 50;
+const REMOTE_AFTER_PLAY: std::time::Duration = std::time::Duration::from_secs(15);
 /// Чтение недавнего через сессию и запасной Web API.
 const READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(20);
 
@@ -48,6 +49,8 @@ pub enum HistoryEvent {
 struct State {
     journal: Journal,
     remote: Vec<PlayRecord>,
+    /// недавнее Spotify по трекам (Web API): какие треки играли в контекстах `remote`
+    remote_tracks: Vec<PlayRecord>,
     /// поздний ответ Web API после выхода отбрасывается
     generation: u64,
     /// чтение в полёте: повторные refresh (вход, главная) его не дублируют
@@ -118,6 +121,17 @@ impl HistoryService {
                             }
                             previous_natural = ended.natural;
                             service.note_played(ended.track, ended.context, ended.played);
+                            // отправленное в Spotify появляется в его истории через несколько секунд
+                            if !play_report::enabled() {
+                                continue;
+                            }
+                            let me = me.clone();
+                            tokio::spawn(async move {
+                                tokio::time::sleep(REMOTE_AFTER_PLAY).await;
+                                if let Some(service) = me.upgrade() {
+                                    service.refresh();
+                                }
+                            });
                         }
                     }
                     Ok(_) | Err(broadcast::error::RecvError::Lagged(_)) => {}
@@ -144,6 +158,7 @@ impl HistoryService {
                             let mut state = lock(&service.state);
                             state.generation += 1;
                             state.remote.clear();
+                            state.remote_tracks.clear();
                             state.loading = false;
                             state.via_session = false;
                             state.session_pending = false;
@@ -225,6 +240,21 @@ impl HistoryService {
         let mut plays = journal::merged(state.journal.plays(), &state.remote);
         plays.truncate(limit);
         plays
+    }
+
+    /// «Недавнее» по дням для страницы «Недавнее»: история Spotify (как в телефоне) вместе со сыгранным
+    /// здесь — без отправки прослушиваний в Spotify его там нет; одно и то же прослушивание — одной записью.
+    pub fn recent_days(&self, limit: usize) -> Vec<crate::data::recents::RecentDay> {
+        let plays = self.recent(limit);
+        let zone = jiff::tz::TimeZone::system();
+        let mut days = crate::data::recents::by_day(&plays, &zone);
+        // что играло внутри контекста: Web API по трекам, если в него вошли, и сыгранное здесь
+        let tracks = {
+            let state = lock(&self.state);
+            journal::merged(state.journal.plays(), &state.remote_tracks)
+        };
+        crate::data::recents::fill_tracks(&mut days, &tracks, &zone);
+        days
     }
 
     /// Статистика прослушиваний этого ПК (только локальная история: у Spotify нет времени прослушивания).
@@ -327,41 +357,16 @@ impl HistoryService {
             None => None,
         };
         let via_session = from_session.is_some();
-        let records = match from_session {
-            Some(records) => records,
+        // по трекам (что именно играло в плейлисте) знает только Web API: недавнее сессии — контексты.
+        // Общий Client ID быстро ловит 429 — с сессией спрашиваем Web API только при своём ключе
+        let (records, tracks) = match from_session {
+            Some(records) => {
+                let tracks = if api.personal_ready() { self.web_recent().await.unwrap_or_default() } else { Vec::new() };
+                (records, tracks)
+            }
             None => {
-                let read = async { api.client_for(Operation::UserData).await?.recently_played(50, None, None).await };
-                let page = match tokio::time::timeout(READ_TIMEOUT, read).await {
-                    Ok(Ok(page)) => page,
-                    Ok(Err(error)) => {
-                        self.auth.note_api_error(&error);
-                        tracing::debug!("Spotify history failed to load: {error:#}");
-                        return None;
-                    }
-                    Err(_) => {
-                        tracing::debug!("Spotify history: Web API is taking too long");
-                        return None;
-                    }
-                };
-                known::remember_recordings(page.items.iter().map(|play| &play.track));
-                let records: Vec<PlayRecord> = page
-                    .items
-                    .iter()
-                    .map(|play| PlayRecord {
-                        track: sf_api::map::track_item(&play.track),
-                        context: play
-                            .context
-                            .as_ref()
-                            .filter(|context| !context.uri.is_empty())
-                            .map(|context| PlayContext::with_uri(context_kind(&context.kind), context.uri.clone()))
-                            .unwrap_or_else(|| PlayContext::new(contexts::TRACKS)),
-                        played_at: play.played_at.clone().unwrap_or_default(),
-                        ..Default::default()
-                    })
-                    .collect();
-                // у недавнего сессии треки неполные — в реестр только ответ Web API
-                known::remember(records.iter().map(|record| &record.track));
-                records
+                let records = self.web_recent().await?;
+                (records.clone(), records)
             }
         };
         let added = {
@@ -371,7 +376,11 @@ impl HistoryService {
             }
             let added = journal::absorb_remote(&mut state.remote, records);
             state.remote.truncate(REMOTE_KEPT);
-            added
+            let tracks_changed = !tracks.is_empty() && tracks != state.remote_tracks;
+            if tracks_changed {
+                state.remote_tracks = tracks;
+            }
+            added + usize::from(tracks_changed)
         };
         if added > 0 {
             let _ = self.events.send(HistoryEvent::Changed);
@@ -379,11 +388,31 @@ impl HistoryService {
         Some(via_session)
     }
 
+    /// Последние 50 прослушиваний по трекам из Web API; None — не ответил.
+    async fn web_recent(&self) -> Option<Vec<PlayRecord>> {
+        let api = self.auth.api();
+        let read = async { api.client_for(Operation::UserData).await?.recently_played(50, None, None).await };
+        let page = match tokio::time::timeout(READ_TIMEOUT, read).await {
+            Ok(Ok(page)) => page,
+            Ok(Err(error)) => {
+                self.auth.note_api_error(&error);
+                tracing::debug!("Spotify history failed to load: {error:#}");
+                return None;
+            }
+            Err(_) => {
+                tracing::debug!("Spotify history: Web API is taking too long");
+                return None;
+            }
+        };
+        Some(play_records(&page.items))
+    }
+
     pub fn clear(&self) {
         {
             let mut state = lock(&self.state);
             state.journal.clear();
             state.remote.clear();
+            state.remote_tracks.clear();
         }
         self.save_later();
         let _ = self.events.send(HistoryEvent::Changed);
@@ -419,3 +448,26 @@ async fn session_recent(http: &sf_api::Http, session: &sf_player::Session) -> an
     });
     Ok(feed::recent_records(&recent, &cards))
 }
+
+/// Ответ /me/player/recently-played → записи истории (и треки в реестр: они полные).
+fn play_records(items: &[sf_api::models::PlayHistory]) -> Vec<PlayRecord> {
+    known::remember_recordings(items.iter().map(|play| &play.track));
+    let records: Vec<PlayRecord> = items
+        .iter()
+        .map(|play| PlayRecord {
+            track: sf_api::map::track_item(&play.track),
+            context: play
+                .context
+                .as_ref()
+                .filter(|context| !context.uri.is_empty())
+                .map(|context| PlayContext::with_uri(context_kind(&context.kind), context.uri.clone()))
+                .unwrap_or_else(|| PlayContext::new(contexts::TRACKS)),
+            played_at: play.played_at.clone().unwrap_or_default(),
+            ..Default::default()
+        })
+        .collect();
+    // у недавнего сессии треки неполные — в реестр только ответ Web API
+    known::remember(records.iter().map(|record| &record.track));
+    records
+}
+

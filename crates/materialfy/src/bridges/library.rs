@@ -110,6 +110,10 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "playlistInfo"]
         fn playlist_info(self: &Library, playlist_id: &QString) -> QMap_QString_QVariant;
+        /// «Недавнее» по дням: { days: [RecentDay] } (локальное + Spotify)
+        #[qinvokable]
+        #[cxx_name = "recentDays"]
+        fn recent_days(self: &Library) -> QMap_QString_QVariant;
         /// статистика прослушиваний этого ПК за `days` последних дней (ListeningStats)
         #[qinvokable]
         #[cxx_name = "listeningStats"]
@@ -403,6 +407,10 @@ impl qobject::Library {
             this.playlist_refs.remove(&id);
             ctx().services.library.cancel_playlist(&id);
         }
+    }
+
+    fn recent_days(&self) -> QVariantMap {
+        to_qmap(&serde_json::json!({ "days": ctx().services.history.recent_days(500) }))
     }
 
     fn listening_stats(&self, days: i32) -> QVariantMap {
