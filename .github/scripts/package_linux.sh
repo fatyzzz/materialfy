@@ -90,9 +90,18 @@ done
 # Canvas video: the FFmpeg backend only. plugin-qt deploys every multimedia plugin it finds, and GStreamer
 # would need the system's gst libraries, so take it out of this (CI-only) Qt
 rm -f "$QTDIR"/plugins/multimedia/libgstreamermediaplugin.so "$APPDIR"/usr/plugins/multimedia/libgstreamermediaplugin.so
+# linuxdeploy does not walk usr/plugins, so the FFmpeg plugin's libraries (Qt's FFmpeg and its X11 bits) go in by hand
+media_libs=()
+for lib in "$QTDIR"/lib/lib{avcodec,avformat,avutil,swresample,swscale}.so.[0-9]*; do
+    [ -L "$lib" ] || media_libs+=(--library "$lib")
+done
+for soname in libXrandr.so.2 libXext.so.6; do
+    lib="$(ldconfig -p | awk -v n="$soname" '$1 == n { print $NF; exit }')"
+    [ -n "$lib" ] && media_libs+=(--library "$lib")
+done
 
 "linuxdeploy-$ARCH.AppImage" --appdir "$APPDIR" \
-    --executable "$APPDIR/usr/bin/materialfy" \
+    --executable "$APPDIR/usr/bin/materialfy" "${media_libs[@]}" \
     --desktop-file "$APPDIR/usr/share/applications/materialfy.desktop" \
     --icon-file "$APPDIR/usr/share/icons/hicolor/scalable/apps/materialfy.svg" \
     --plugin qt
