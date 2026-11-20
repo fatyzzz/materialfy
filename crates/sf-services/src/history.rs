@@ -15,7 +15,7 @@ use tokio::sync::broadcast;
 
 use crate::auth::{AuthEvent, AuthService};
 use crate::data::journal::{self, Journal};
-use crate::data::{home_feed, known, route};
+use crate::data::{home_feed, known, route, stats};
 use crate::extra::feed;
 use crate::lock;
 
@@ -34,6 +34,8 @@ pub struct PlayRecord {
     pub context: PlayContext,
     /// ISO-время
     pub played_at: String,
+    /// сколько реально слушали, мс; 0 — неизвестно (старая история, записи Spotify)
+    pub played_ms: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -159,7 +161,8 @@ impl HistoryService {
         let started = jiff::Timestamp::now()
             .checked_sub(jiff::SignedDuration::from_secs_f64(played.max(0.0)))
             .unwrap_or_else(|_| jiff::Timestamp::now());
-        let record = PlayRecord { track, context, played_at: started.to_string() };
+        let played_ms = (played.max(0.0) * 1000.0) as i64;
+        let record = PlayRecord { track, context, played_at: started.to_string(), played_ms };
         lock(&self.state).journal.record(record);
         self.save_later();
         let _ = self.events.send(HistoryEvent::Changed);
@@ -180,6 +183,11 @@ impl HistoryService {
         let mut plays = journal::merged(state.journal.plays(), &state.remote);
         plays.truncate(limit);
         plays
+    }
+
+    /// Статистика прослушиваний этого ПК (только локальная история: у Spotify нет времени прослушивания).
+    pub fn listening_stats(&self, days: usize) -> stats::ListeningStats {
+        stats::listening(lock(&self.state).journal.plays(), &jiff::Zoned::now(), days)
     }
 
     /// Недавние уникальные контексты (для сидов радио и «Недавно прослушанное»).
@@ -306,6 +314,7 @@ impl HistoryService {
                             .map(|context| PlayContext::with_uri(context_kind(&context.kind), context.uri.clone()))
                             .unwrap_or_else(|| PlayContext::new(contexts::TRACKS)),
                         played_at: play.played_at.clone().unwrap_or_default(),
+                        ..Default::default()
                     })
                     .collect();
                 // у недавнего сессии треки неполные — в реестр только ответ Web API

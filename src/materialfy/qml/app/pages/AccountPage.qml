@@ -478,6 +478,11 @@ Page {
                     }
                 }
 
+                ListeningStats {
+                    Layout.fillWidth: true
+                    narrow: acc.narrow
+                }
+
                 // Этот компьютер: звук и где лежат ключи входа
                 ColumnLayout {
                     Layout.fillWidth: true
