@@ -529,7 +529,7 @@ Window {
                     anchors.fill: parent
                     visible: root._onCover && root.mode !== "idle"
                     layer.enabled: visible
-                    layer.textureSize: Qt.size(width * root.k, height * root.k)
+                    layer.textureSize: Qt.size(width * root.k * Screen.devicePixelRatio, height * root.k * Screen.devicePixelRatio)
                     layer.effect: MultiEffect {
                         maskEnabled: true
                         maskSource: coverMask
@@ -557,7 +557,7 @@ Window {
                     anchors.fill: parent
                     visible: false
                     layer.enabled: coverFill.visible
-                    layer.textureSize: Qt.size(width * root.k, height * root.k)
+                    layer.textureSize: Qt.size(width * root.k * Screen.devicePixelRatio, height * root.k * Screen.devicePixelRatio)
                     topLeftRadius: island.radiusTL
                     topRightRadius: island.radiusTR
                     bottomLeftRadius: island.radiusBL
@@ -1058,7 +1058,7 @@ Window {
         id: islandWipe
         anchors.fill: parent
         source: stage
-        textureSize: Qt.size(width * root.k, height * root.k)
+        textureSize: Qt.size(width * root.k * Screen.devicePixelRatio, height * root.k * Screen.devicePixelRatio)
         mode: Theme.reducedMotion ? "dissolve" : Settings.trackTransition
         originItem: root.mode === "expanded" ? expCover : cmpCover
         Component.onCompleted: Theme.addWipe(islandWipe)

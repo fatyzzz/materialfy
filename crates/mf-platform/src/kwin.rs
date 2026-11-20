@@ -271,6 +271,7 @@ mod imp {
         conn.call_method(Some(SERVICE), SCRIPTING, Some(SCRIPTING_IFACE), "start", &())
             .await
             .map_err(dbus_err)?;
+        LOADED.store(true, std::sync::atomic::Ordering::SeqCst);
         Ok(())
     }
 
@@ -303,12 +304,17 @@ mod imp {
     static LISTEN: std::sync::Once = std::sync::Once::new();
     static KEYS_WANTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
     static KEYS_ON: tokio::sync::Mutex<bool> = tokio::sync::Mutex::const_new(false);
+    // скрипт KWin отпускает клавиши, если мы упадём (kglobalaccel сам их не вернёт): без скрипта не захватываем
+    static LOADED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
     pub fn on_key(callback: KeyFn) {
         let _ = ON_KEY.set(callback);
     }
 
     pub async fn keys(on: bool) -> Result<(), PlatformError> {
+        if on && !LOADED.load(std::sync::atomic::Ordering::SeqCst) {
+            return Err(PlatformError::Unsupported);
+        }
         KEYS_WANTED.store(on, std::sync::atomic::Ordering::SeqCst);
         let mut active = KEYS_ON.lock().await;
         // вызовы гонятся друг с другом в пуле: ставим последнее желание, а не своё
