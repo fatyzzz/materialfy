@@ -35,7 +35,10 @@ impl Journal {
             .ok()
             .and_then(|text| serde_json::from_str::<Vec<PlayRecord>>(&text).ok())
             .unwrap_or_default();
-        Self { plays, dirty: false }
+        Self {
+            plays,
+            dirty: false,
+        }
     }
 
     pub fn plays(&self) -> &[PlayRecord] {
@@ -71,7 +74,10 @@ impl Journal {
 }
 
 fn seconds(play: &PlayRecord) -> Option<i64> {
-    play.played_at.parse::<jiff::Timestamp>().ok().map(|at| at.as_second())
+    play.played_at
+        .parse::<jiff::Timestamp>()
+        .ok()
+        .map(|at| at.as_second())
 }
 
 /// Слияние локальной истории и истории Spotify, новые первыми. Запись Spotify рядом (≤ 60 с) со своей —
@@ -82,7 +88,10 @@ pub fn merged(local: &[PlayRecord], remote: &[PlayRecord]) -> Vec<PlayRecord> {
     for play in local {
         let at = seconds(play);
         if let Some(at) = at {
-            unmatched.entry(play.track.uri.as_str()).or_default().push(at);
+            unmatched
+                .entry(play.track.uri.as_str())
+                .or_default()
+                .push(at);
         }
         out.push((at, play.clone()));
     }
@@ -115,7 +124,10 @@ pub fn merged(local: &[PlayRecord], remote: &[PlayRecord]) -> Vec<PlayRecord> {
 pub fn absorb_remote(known: &mut Vec<PlayRecord>, page: Vec<PlayRecord>) -> usize {
     let mut added = 0;
     for play in page {
-        if !known.iter().any(|k| k.track.uri == play.track.uri && k.played_at == play.played_at) {
+        if !known
+            .iter()
+            .any(|k| k.track.uri == play.track.uri && k.played_at == play.played_at)
+        {
             known.push(play);
             added += 1;
         }
@@ -132,7 +144,10 @@ mod tests {
 
     fn play(uri: &str, at: &str) -> PlayRecord {
         PlayRecord {
-            track: TrackItem { uri: uri.to_owned(), ..Default::default() },
+            track: TrackItem {
+                uri: uri.to_owned(),
+                ..Default::default()
+            },
             played_at: at.to_owned(),
             ..Default::default()
         }
@@ -152,13 +167,26 @@ mod tests {
             play("spotify:track:here-early", "2026-09-01T09:00:00Z"),
         ];
         let remote = vec![play("spotify:track:phone", "2026-09-01T12:00:00Z")];
-        let uris: Vec<String> = merged(&local, &remote).into_iter().map(|p| p.track.uri).collect();
-        assert_eq!(uris, ["spotify:track:here-late", "spotify:track:phone", "spotify:track:here-early"]);
+        let uris: Vec<String> = merged(&local, &remote)
+            .into_iter()
+            .map(|p| p.track.uri)
+            .collect();
+        assert_eq!(
+            uris,
+            [
+                "spotify:track:here-late",
+                "spotify:track:phone",
+                "spotify:track:here-early"
+            ]
+        );
     }
 
     #[test]
     fn recents_keep_a_song_played_twice() {
-        let local = vec![play("spotify:track:a", "2026-09-01T15:00:00Z"), play("spotify:track:a", "2026-09-01T09:00:00Z")];
+        let local = vec![
+            play("spotify:track:a", "2026-09-01T15:00:00Z"),
+            play("spotify:track:a", "2026-09-01T09:00:00Z"),
+        ];
         assert_eq!(merged(&local, &[]).len(), 2);
     }
 
@@ -173,18 +201,29 @@ mod tests {
 
     #[test]
     fn each_repeat_of_a_short_song_is_its_own_row() {
-        let remote = vec![play("spotify:track:s", "2026-09-01T15:00:40Z"), play("spotify:track:s", "2026-09-01T15:00:00Z")];
+        let remote = vec![
+            play("spotify:track:s", "2026-09-01T15:00:40Z"),
+            play("spotify:track:s", "2026-09-01T15:00:00Z"),
+        ];
         assert_eq!(merged(&[], &remote).len(), 2);
         assert_eq!(merged(&remote, &[]).len(), 2);
-        let reported =
-            vec![play("spotify:track:s", "2026-09-01T15:00:45Z"), play("spotify:track:s", "2026-09-01T15:00:05Z")];
+        let reported = vec![
+            play("spotify:track:s", "2026-09-01T15:00:45Z"),
+            play("spotify:track:s", "2026-09-01T15:00:05Z"),
+        ];
         assert_eq!(merged(&remote, &reported).len(), 2);
     }
 
     #[test]
     fn a_play_with_no_time_sinks_to_the_end() {
-        let local = vec![play("spotify:track:timeless", ""), play("spotify:track:a", "2026-09-01T09:00:00Z")];
-        let uris: Vec<String> = merged(&local, &[]).into_iter().map(|p| p.track.uri).collect();
+        let local = vec![
+            play("spotify:track:timeless", ""),
+            play("spotify:track:a", "2026-09-01T09:00:00Z"),
+        ];
+        let uris: Vec<String> = merged(&local, &[])
+            .into_iter()
+            .map(|p| p.track.uri)
+            .collect();
         assert_eq!(uris, ["spotify:track:a", "spotify:track:timeless"]);
     }
 
@@ -193,7 +232,10 @@ mod tests {
         let mut known = vec![play("spotify:track:a", "2026-09-01T09:00:00Z")];
         let added = absorb_remote(
             &mut known,
-            vec![play("spotify:track:a", "2026-09-01T09:00:00Z"), play("spotify:track:b", "2026-09-01T10:00:00Z")],
+            vec![
+                play("spotify:track:a", "2026-09-01T09:00:00Z"),
+                play("spotify:track:b", "2026-09-01T10:00:00Z"),
+            ],
         );
         assert_eq!(added, 1);
         assert_eq!(known[0].track.uri, "spotify:track:b");
@@ -203,10 +245,16 @@ mod tests {
     fn the_newest_play_is_first_and_the_list_is_capped() {
         let mut journal = Journal::default();
         for index in 0..KEPT + 10 {
-            journal.record(play(&format!("spotify:track:{index}"), "2026-09-01T09:00:00Z"));
+            journal.record(play(
+                &format!("spotify:track:{index}"),
+                "2026-09-01T09:00:00Z",
+            ));
         }
         assert_eq!(journal.plays().len(), KEPT);
-        assert_eq!(journal.plays()[0].track.uri, format!("spotify:track:{}", KEPT + 9));
+        assert_eq!(
+            journal.plays()[0].track.uri,
+            format!("spotify:track:{}", KEPT + 9)
+        );
     }
 
     #[test]

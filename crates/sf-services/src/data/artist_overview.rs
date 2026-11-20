@@ -3,7 +3,9 @@
 //! похожие исполнители, биография и широкая шапка. Без квоты Web API. Проверено вживую (2026-10):
 //! data.artistUnion { stats { followers, monthlyListeners }, saved, relatedContent.relatedArtists,
 //! profile.biography.text, headerImage.data.sources[{url, maxWidth}], visuals.avatarImage,
-//! discography.topTracks.items[{ track { uri, playcount ("984913127") } }] }.
+//! discography.topTracks.items[{ track { uri, playcount ("984913127") } }],
+//! preRelease { uri: "spotify:prerelease:…", releaseDate.isoString, preReleaseContent { name, type, coverArt } } }
+//! (preRelease приходит только с includePrerelease: true; у кого ничего не анонсировано — null).
 use anyhow::{anyhow, bail};
 use serde_json::{Value, json};
 use sf_api::models::{Artist, Image};
@@ -31,19 +33,50 @@ pub struct ArtistOverview {
     pub header_image: Option<String>,
     /// популярные треки: URI → прослушивания (> 0)
     pub top_plays: Vec<(String, i64)>,
+    /// анонсированный релиз (обратный отсчёт в телефоне)
+    pub pre_release: Option<PreRelease>,
 }
 
-pub async fn artist(http: &Http, session: &sf_player::Session, artist_id: &str) -> anyhow::Result<ArtistOverview> {
-    let variables = json!({ "uri": format!("spotify:artist:{artist_id}"), "locale": "", "includePrerelease": false });
+/// Анонс: альбом или сингл, который ещё не вышел.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PreRelease {
+    /// spotify:prerelease:… (не альбом: до выхода его не открыть и не сыграть)
+    pub uri: String,
+    pub name: String,
+    /// ALBUM | SINGLE | EP
+    pub kind: String,
+    pub cover: String,
+    /// момент выхода, ISO 8601 UTC
+    pub release_at: String,
+    pub artist_id: String,
+    pub artist: String,
+}
+
+pub async fn artist(
+    http: &Http,
+    session: &sf_player::Session,
+    artist_id: &str,
+) -> anyhow::Result<ArtistOverview> {
+    let variables = json!({ "uri": format!("spotify:artist:{artist_id}"), "locale": "", "includePrerelease": true });
     let body = persisted::query(http, session, "queryArtistOverview", &HASHES, &variables).await?;
     parse(&body)
 }
 
 fn parse(body: &Value) -> anyhow::Result<ArtistOverview> {
-    let Some(artist) = body.pointer("/data/artistUnion").filter(|artist| artist.is_object()) else {
-        bail!("no data.artistUnion: {}", body.get("errors").unwrap_or(&Value::Null));
+    let Some(artist) = body
+        .pointer("/data/artistUnion")
+        .filter(|artist| artist.is_object())
+    else {
+        bail!(
+            "no data.artistUnion: {}",
+            body.get("errors").unwrap_or(&Value::Null)
+        );
     };
-    let kind = artist.get("__typename").and_then(Value::as_str).unwrap_or("Artist");
+    let kind = artist
+        .get("__typename")
+        .and_then(Value::as_str)
+        .unwrap_or("Artist");
     if kind != "Artist" {
         return Err(anyhow!("artistUnion: {kind}"));
     }
@@ -62,20 +95,47 @@ fn parse(body: &Value) -> anyhow::Result<ArtistOverview> {
             .filter_map(related)
             .take(RELATED)
             .collect(),
-        biography: util::strip_html(&text(artist, "/profile/biography/text")).trim().to_owned(),
+        biography: util::strip_html(&text(artist, "/profile/biography/text"))
+            .trim()
+            .to_owned(),
         header_image: header(artist),
         top_plays: top_plays(artist),
+        pre_release: pre_release(artist),
+    })
+}
+
+fn pre_release(artist: &Value) -> Option<PreRelease> {
+    let pre = artist.get("preRelease").filter(|pre| pre.is_object())?;
+    let content = pre.get("preReleaseContent")?;
+    let release_at = text(pre, "/releaseDate/isoString");
+    let name = text(content, "/name");
+    if name.is_empty() || release_at.is_empty() {
+        return None;
+    }
+    Some(PreRelease {
+        uri: text(pre, "/uri"),
+        name,
+        kind: text(content, "/type"),
+        cover: map::cover(&images(content.get("coverArt")), 300),
+        release_at,
+        artist_id: id_of(&text(artist, "/uri")),
+        artist: text(artist, "/profile/name"),
     })
 }
 
 fn top_plays(artist: &Value) -> Vec<(String, i64)> {
-    let items = artist.pointer("/discography/topTracks/items").and_then(Value::as_array);
+    let items = artist
+        .pointer("/discography/topTracks/items")
+        .and_then(Value::as_array);
     items
         .into_iter()
         .flatten()
         .filter_map(|item| {
             let track = item.get("track")?;
-            let uri = track.get("uri").and_then(Value::as_str).filter(|uri| !uri.is_empty())?;
+            let uri = track
+                .get("uri")
+                .and_then(Value::as_str)
+                .filter(|uri| !uri.is_empty())?;
             let plays = match track.get("playcount")? {
                 Value::String(text) => text.trim().parse().ok()?,
                 Value::Number(number) => number.as_i64()?,
@@ -87,7 +147,10 @@ fn top_plays(artist: &Value) -> Vec<(String, i64)> {
 }
 
 fn related(data: &Value) -> Option<Artist> {
-    let uri = data.get("uri").and_then(Value::as_str).filter(|uri| uri.starts_with("spotify:artist:"))?;
+    let uri = data
+        .get("uri")
+        .and_then(Value::as_str)
+        .filter(|uri| uri.starts_with("spotify:artist:"))?;
     Some(Artist {
         id: id_of(uri),
         name: text(data, "/profile/name"),
@@ -107,7 +170,11 @@ fn header(artist: &Value) -> Option<String> {
             best = Some(source);
         }
     }
-    best?.get("url")?.as_str().filter(|url| !url.is_empty()).map(str::to_owned)
+    best?
+        .get("url")?
+        .as_str()
+        .filter(|url| !url.is_empty())
+        .map(str::to_owned)
 }
 
 /// Дополнить страницу исполнителя тем, что знает шлюз: подписчики, слушатели, подписка, похожие (если
@@ -180,7 +247,14 @@ mod tests {
                 { "id": "r1", "uri": "spotify:artist:r1", "profile": { "name": "Franz Ferdinand" },
                   "visuals": { "avatarImage": { "sources": [{ "height": 640, "width": 640, "url": "ff" }] } } },
                 { "id": "x", "uri": "", "profile": { "name": "Broken" } }
-            ] } }
+            ] } },
+            "preRelease": {
+                "preReleaseContent": { "name": "Castelos & Ruínas (Remix 10 Anos)", "type": "ALBUM", "coverArt": { "sources": [
+                    { "height": 64, "width": 64, "url": "c64" }, { "height": 300, "width": 300, "url": "c300" }, { "height": 640, "width": 640, "url": "c640" }
+                ] } },
+                "releaseDate": { "isoString": "2026-11-17T03:00:00Z" },
+                "uri": "spotify:prerelease:43AOJotQ2jR7y76VSqwiXH"
+            }
         } } })
     }
 
@@ -188,43 +262,103 @@ mod tests {
     fn an_overview_reads_stats_related_and_profile() {
         let overview = parse(&body()).unwrap();
         assert_eq!(overview.name, "Muse");
-        assert_eq!((overview.followers, overview.monthly_listeners), (Some(9_094_030), Some(21_950_166)));
+        assert_eq!(
+            (overview.followers, overview.monthly_listeners),
+            (Some(9_094_030), Some(21_950_166))
+        );
         assert_eq!(overview.followed, Some(true));
-        assert_eq!(overview.related.len(), 1, "an artist without a link is passed over");
+        assert_eq!(
+            overview.related.len(),
+            1,
+            "an artist without a link is passed over"
+        );
         let related = &overview.related[0];
-        assert_eq!((related.id.as_str(), related.name.as_str(), related.images[0].url.as_str()), ("r1", "Franz Ferdinand", "ff"));
+        assert_eq!(
+            (
+                related.id.as_str(),
+                related.name.as_str(),
+                related.images[0].url.as_str()
+            ),
+            ("r1", "Franz Ferdinand", "ff")
+        );
         assert_eq!(overview.biography, "The Wow! Signal. Out & now.");
         assert_eq!(overview.header_image.as_deref(), Some("wide"));
         assert_eq!(overview.avatar.len(), 2);
         assert_eq!(
             overview.top_plays,
             [
-                ("spotify:track:0DiWol3AO6WpXZgp0goxAV".to_owned(), 984_913_127),
-                ("spotify:track:2Foc5Q5nqNiosCNqttzHof".to_owned(), 1_456_452_451)
+                (
+                    "spotify:track:0DiWol3AO6WpXZgp0goxAV".to_owned(),
+                    984_913_127
+                ),
+                (
+                    "spotify:track:2Foc5Q5nqNiosCNqttzHof".to_owned(),
+                    1_456_452_451
+                )
             ],
             "a track without plays is passed over"
         );
+        let pre = overview.pre_release.unwrap();
+        assert_eq!(
+            (
+                pre.name.as_str(),
+                pre.kind.as_str(),
+                pre.release_at.as_str()
+            ),
+            (
+                "Castelos & Ruínas (Remix 10 Anos)",
+                "ALBUM",
+                "2026-11-17T03:00:00Z"
+            )
+        );
+        assert_eq!(
+            (
+                pre.artist_id.as_str(),
+                pre.artist.as_str(),
+                pre.uri.as_str()
+            ),
+            ("a1", "Muse", "spotify:prerelease:43AOJotQ2jR7y76VSqwiXH")
+        );
+        assert!(!pre.cover.is_empty());
     }
 
     #[test]
     fn a_missing_artist_is_an_error() {
-        assert!(parse(&json!({ "data": { "artistUnion": { "__typename": "NotFound" } } })).is_err());
+        assert!(
+            parse(&json!({ "data": { "artistUnion": { "__typename": "NotFound" } } })).is_err()
+        );
         assert!(parse(&json!({ "errors": [{ "message": "Unauthorized" }] })).is_err());
         // пустой профиль — не ошибка: страница возьмёт то, что есть
-        let bare = parse(&json!({ "data": { "artistUnion": { "__typename": "Artist" } } })).unwrap();
-        assert_eq!((bare.followers, bare.followed, bare.header_image), (None, None, None));
+        let bare =
+            parse(&json!({ "data": { "artistUnion": { "__typename": "Artist" } } })).unwrap();
+        assert_eq!(
+            (bare.followers, bare.followed, bare.header_image),
+            (None, None, None)
+        );
+        assert_eq!(bare.pre_release, None);
     }
 
     #[test]
     fn the_overview_fills_the_session_page_without_overriding_it() {
         let mut page = ArtistPage {
             info: ArtistInfo {
-                item: ArtistItem { artist_id: "a1".into(), name: "Muse".into(), cover: "own".into(), ..Default::default() },
+                item: ArtistItem {
+                    artist_id: "a1".into(),
+                    name: "Muse".into(),
+                    cover: "own".into(),
+                    ..Default::default()
+                },
                 ..Default::default()
             },
             popular: vec![
-                TrackItem { track_id: "2Foc5Q5nqNiosCNqttzHof".into(), ..Default::default() },
-                TrackItem { track_id: "other".into(), ..Default::default() },
+                TrackItem {
+                    track_id: "2Foc5Q5nqNiosCNqttzHof".into(),
+                    ..Default::default()
+                },
+                TrackItem {
+                    track_id: "other".into(),
+                    ..Default::default()
+                },
             ],
             ..Default::default()
         };
@@ -235,12 +369,18 @@ mod tests {
         assert!(page.info.followed);
         assert_eq!(page.info.header_image, "wide");
         assert_eq!(page.similar[0].artist_id, "r1");
-        assert_eq!(page.popular[0].play_count, 1_456_452_451, "plays follow the URI, not the place");
+        assert_eq!(
+            page.popular[0].play_count, 1_456_452_451,
+            "plays follow the URI, not the place"
+        );
         assert_eq!(page.popular[1].play_count, 0);
 
         let mut empty = ArtistPage::default();
         apply(&mut empty, &parse(&body()).unwrap());
         assert_eq!(empty.info.item.name, "Muse");
-        assert!(!empty.info.item.cover.is_empty(), "the overview's photo fills in");
+        assert!(
+            !empty.info.item.cover.is_empty(),
+            "the overview's photo fills in"
+        );
     }
 }

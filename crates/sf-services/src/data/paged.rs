@@ -29,7 +29,10 @@ impl<T> Default for PagedList<T> {
 
 impl<T> PagedList<T> {
     pub fn reset(&mut self) {
-        *self = Self { revision: self.revision.wrapping_add(1), ..Default::default() };
+        *self = Self {
+            revision: self.revision.wrapping_add(1),
+            ..Default::default()
+        };
     }
 
     pub fn can_load_more(&self) -> bool {

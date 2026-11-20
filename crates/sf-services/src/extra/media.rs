@@ -5,7 +5,9 @@ use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use fastframe_now_playing::{App, Command, Controls, NowPlaying, Playback, Repeat as NpRepeat, State, Track};
+use fastframe_now_playing::{
+    App, Command, Controls, NowPlaying, Playback, Repeat as NpRepeat, State, Track,
+};
 use sf_player::{PlayerHandle, PlayerSnapshot, Repeat};
 use tokio::runtime::Handle;
 use tokio::sync::broadcast;
@@ -57,11 +59,19 @@ fn repeat_from(repeat: NpRepeat) -> Repeat {
 pub fn state_from(s: &PlayerSnapshot) -> State {
     let track = s.track.as_ref().map(|t| {
         let artists = if t.artist_refs.is_empty() {
-            t.artists.split(", ").filter(|a| !a.is_empty()).map(str::to_owned).collect()
+            t.artists
+                .split(", ")
+                .filter(|a| !a.is_empty())
+                .map(str::to_owned)
+                .collect()
         } else {
             t.artist_refs.iter().map(|a| a.name.clone()).collect()
         };
-        let art_url = if t.cover_large.is_empty() { &t.cover } else { &t.cover_large };
+        let art_url = if t.cover_large.is_empty() {
+            &t.cover
+        } else {
+            &t.cover_large
+        };
         Track {
             id: t.play_uri(),
             title: t.title.clone(),
@@ -105,12 +115,22 @@ pub fn jumped(prev: &PlayerSnapshot, elapsed: Duration, now: &PlayerSnapshot) ->
     if track_id(prev) != track_id(now) || now.track.is_none() {
         return false;
     }
-    let expected = prev.position_ms + if prev.playing { elapsed.as_millis() as i64 } else { 0 };
+    let expected = prev.position_ms
+        + if prev.playing {
+            elapsed.as_millis() as i64
+        } else {
+            0
+        };
     (now.position_ms - expected).abs() > SEEK_JUMP_MS
 }
 
 /// Команда системы → плеер / оболочка.
-pub fn apply(command: Command, current: Option<&PlayerSnapshot>, player: &PlayerHandle, requests: &broadcast::Sender<AppRequest>) {
+pub fn apply(
+    command: Command,
+    current: Option<&PlayerSnapshot>,
+    player: &PlayerHandle,
+    requests: &broadcast::Sender<AppRequest>,
+) {
     match command {
         Command::Play => player.play(),
         Command::Pause | Command::Stop => player.pause(),
@@ -118,7 +138,10 @@ pub fn apply(command: Command, current: Option<&PlayerSnapshot>, player: &Player
         Command::Next => player.next(),
         Command::Previous => player.previous(),
         Command::SeekBy(ms) => player.seek_relative(ms),
-        Command::SetPosition { track_id: id, position } => {
+        Command::SetPosition {
+            track_id: id,
+            position,
+        } => {
             if current.and_then(track_id).as_deref() == Some(id.as_str()) {
                 player.seek_ms(position.as_millis() as i64);
             }
@@ -133,42 +156,54 @@ pub fn apply(command: Command, current: Option<&PlayerSnapshot>, player: &Player
 }
 
 /// Запустить поток медиаклавиш. None — поток не создался.
-pub fn start(rt: &Handle, player: PlayerHandle, requests: broadcast::Sender<AppRequest>) -> Option<Media> {
+pub fn start(
+    rt: &Handle,
+    player: PlayerHandle,
+    requests: broadcast::Sender<AppRequest>,
+) -> Option<Media> {
     let (tx, rx) = mpsc::channel::<Msg>();
     let (done_tx, done_rx) = mpsc::channel();
     let wake = tx.clone();
     let commands_player = player.clone();
-    let spawned = std::thread::Builder::new().name("now-playing".into()).spawn(move || {
-        let app = App {
-            desktop_entry: fastframe_now_playing::desktop_entry(DESKTOP_ENTRY),
-            ..App::new(BUS_NAME, IDENTITY)
-        };
-        let mut controls = NowPlaying::start(app, move || {
-            let _ = wake.send(Msg::Commands);
-        });
-        let mut last: Option<(PlayerSnapshot, Instant)> = None;
-        while let Ok(msg) = rx.recv() {
-            match msg {
-                Msg::Snapshot(snapshot) => {
-                    if let Some((prev, at)) = &last
-                        && jumped(prev, at.elapsed(), &snapshot)
-                    {
-                        controls.seeked(Duration::from_millis(snapshot.position_ms.max(0) as u64));
+    let spawned = std::thread::Builder::new()
+        .name("now-playing".into())
+        .spawn(move || {
+            let app = App {
+                desktop_entry: fastframe_now_playing::desktop_entry(DESKTOP_ENTRY),
+                ..App::new(BUS_NAME, IDENTITY)
+            };
+            let mut controls = NowPlaying::start(app, move || {
+                let _ = wake.send(Msg::Commands);
+            });
+            let mut last: Option<(PlayerSnapshot, Instant)> = None;
+            while let Ok(msg) = rx.recv() {
+                match msg {
+                    Msg::Snapshot(snapshot) => {
+                        if let Some((prev, at)) = &last
+                            && jumped(prev, at.elapsed(), &snapshot)
+                        {
+                            controls
+                                .seeked(Duration::from_millis(snapshot.position_ms.max(0) as u64));
+                        }
+                        controls.update(state_from(&snapshot));
+                        last = Some((*snapshot, Instant::now()));
                     }
-                    controls.update(state_from(&snapshot));
-                    last = Some((*snapshot, Instant::now()));
-                }
-                Msg::Commands => {
-                    for command in controls.commands() {
-                        apply(command, last.as_ref().map(|(s, _)| s), &commands_player, &requests);
+                    Msg::Commands => {
+                        for command in controls.commands() {
+                            apply(
+                                command,
+                                last.as_ref().map(|(s, _)| s),
+                                &commands_player,
+                                &requests,
+                            );
+                        }
                     }
+                    Msg::Stop => break,
                 }
-                Msg::Stop => break,
             }
-        }
-        drop(controls);
-        let _ = done_tx.send(());
-    });
+            drop(controls);
+            let _ = done_tx.send(());
+        });
     if let Err(e) = spawned {
         tracing::warn!("media keys unavailable: {e}");
         return None;
@@ -203,7 +238,16 @@ mod tests {
                 uri: "spotify:track:1".into(),
                 title: "Песня".into(),
                 artists: "А, Б".into(),
-                artist_refs: vec![ArtistRef { id: "a".into(), name: "А".into() }, ArtistRef { id: "b".into(), name: "Б".into() }],
+                artist_refs: vec![
+                    ArtistRef {
+                        id: "a".into(),
+                        name: "А".into(),
+                    },
+                    ArtistRef {
+                        id: "b".into(),
+                        name: "Б".into(),
+                    },
+                ],
                 album: "Альбом".into(),
                 cover: "https://i/300".into(),
                 cover_large: "https://i/640".into(),
@@ -239,7 +283,10 @@ mod tests {
         assert_eq!(state.volume, Some(0.5));
         assert_eq!(state.playback, Playback::Paused);
         assert_eq!(state.repeat, Some(NpRepeat::Track));
-        assert_eq!(state.track.unwrap().art_file, Some(PathBuf::from("C:/cache/c.jpg")));
+        assert_eq!(
+            state.track.unwrap().art_file,
+            Some(PathBuf::from("C:/cache/c.jpg"))
+        );
         let empty = state_from(&PlayerSnapshot::default());
         assert_eq!(empty.playback, Playback::Stopped);
         assert!(!empty.controls.play && !empty.controls.seek);

@@ -30,7 +30,10 @@ impl Cache {
                 Some(offset) => offset == self.items.len() as u32 && offset < self.total,
                 None => self.items.len() == self.total as usize,
             }
-            && self.changes.iter().all(|(uri, change)| change.confirmed && uri == &change.item.track.uri)
+            && self
+                .changes
+                .iter()
+                .all(|(uri, change)| change.confirmed && uri == &change.item.track.uri)
     }
 }
 
@@ -64,8 +67,13 @@ pub struct LikedSongs {
 
 impl LikedSongs {
     pub fn restore(&mut self, cache: Cache) {
-        self.server.restore_cached(cache.items, cache.total, cache.next_offset);
-        self.refreshed_at = if cache.changes.is_empty() { cache.refreshed_at } else { 0 };
+        self.server
+            .restore_cached(cache.items, cache.total, cache.next_offset);
+        self.refreshed_at = if cache.changes.is_empty() {
+            cache.refreshed_at
+        } else {
+            0
+        };
         for (uri, change) in cache.changes {
             self.changes.entry(uri).or_insert(change);
         }
@@ -73,7 +81,8 @@ impl LikedSongs {
     }
 
     pub fn fresh(&self, now: i64) -> bool {
-        self.server.loaded_once && (0..FRESH_SECONDS).contains(&now.saturating_sub(self.refreshed_at))
+        self.server.loaded_once
+            && (0..FRESH_SECONDS).contains(&now.saturating_sub(self.refreshed_at))
     }
 
     pub fn refreshing(&self) -> bool {
@@ -86,7 +95,10 @@ impl LikedSongs {
 
     pub fn start_refresh(&mut self, generation: u64) {
         self.generation = generation;
-        self.refresh = Some(Refresh { rows: PagedList::default(), through: self.server.items.len().max(50) });
+        self.refresh = Some(Refresh {
+            rows: PagedList::default(),
+            through: self.server.items.len().max(50),
+        });
     }
 
     /// Смещение следующей страницы (одна в полёте), None — грузить нечего.
@@ -94,7 +106,11 @@ impl LikedSongs {
         if !self.cache_checked {
             return None;
         }
-        let rows = self.refresh.as_mut().map(|r| &mut r.rows).unwrap_or(&mut self.server);
+        let rows = self
+            .refresh
+            .as_mut()
+            .map(|r| &mut r.rows)
+            .unwrap_or(&mut self.server);
         if !rows.can_load_more() {
             return None;
         }
@@ -120,7 +136,11 @@ impl LikedSongs {
                 let present = server.items.iter().any(|item| &item.track.uri == uri);
                 !(change.confirmed
                     && change.confirmed_generation < generation
-                    && if change.saved { present } else { complete && !present })
+                    && if change.saved {
+                        present
+                    } else {
+                        complete && !present
+                    })
             });
         } else {
             self.server.absorb(offset, page);
@@ -141,9 +161,19 @@ impl LikedSongs {
             .find(|item| item.track.uri == uri)
             .cloned()
             .or_else(|| self.changes.get(&uri).map(|change| change.item.clone()))
-            .unwrap_or_else(|| SavedTrack { added_at: Some(jiff::Timestamp::now().to_string()), track });
-        self.changes
-            .insert(uri, Change { saved, item, confirmed: false, confirmed_generation: self.generation });
+            .unwrap_or_else(|| SavedTrack {
+                added_at: Some(jiff::Timestamp::now().to_string()),
+                track,
+            });
+        self.changes.insert(
+            uri,
+            Change {
+                saved,
+                item,
+                confirmed: false,
+                confirmed_generation: self.generation,
+            },
+        );
     }
 
     pub fn confirm(&mut self, uri: &str, saved: bool, success: bool) {
@@ -165,7 +195,10 @@ impl LikedSongs {
     }
 
     pub fn intents(&self) -> Vec<(String, bool)> {
-        self.changes.iter().map(|(uri, change)| (uri.clone(), change.saved)).collect()
+        self.changes
+            .iter()
+            .map(|(uri, change)| (uri.clone(), change.saved))
+            .collect()
     }
 
     pub fn server_complete(&self) -> bool {
@@ -215,7 +248,8 @@ impl LikedSongs {
         let through = self.server.next_offset.unwrap_or(total);
         if !force
             && self.saved_through.is_some_and(|previous| {
-                through == previous || (self.server.next_offset.is_some() && through.saturating_sub(previous) < 500)
+                through == previous
+                    || (self.server.next_offset.is_some() && through.saturating_sub(previous) < 500)
             })
         {
             return None;
@@ -258,7 +292,11 @@ mod tests {
 
     fn item(n: u32) -> SavedTrack {
         SavedTrack {
-            track: Track { uri: format!("spotify:track:{n}"), name: format!("Song {n}"), ..Default::default() },
+            track: Track {
+                uri: format!("spotify:track:{n}"),
+                name: format!("Song {n}"),
+                ..Default::default()
+            },
             ..Default::default()
         }
     }
@@ -274,7 +312,10 @@ mod tests {
     }
 
     fn loaded(count: u32, total: u32) -> LikedSongs {
-        let mut songs = LikedSongs { cache_checked: true, ..Default::default() };
+        let mut songs = LikedSongs {
+            cache_checked: true,
+            ..Default::default()
+        };
         songs.start_refresh(1);
         songs.absorb(0, page(0, count, total), 10_000);
         songs
@@ -285,7 +326,10 @@ mod tests {
         let mut original = loaded(10_000, 10_000);
         let cache = original.checkpoint("alice".into(), false).unwrap();
         let encoded = serde_json::to_vec(&cache).unwrap();
-        let mut restored = LikedSongs { cache_checked: true, ..Default::default() };
+        let mut restored = LikedSongs {
+            cache_checked: true,
+            ..Default::default()
+        };
         restored.restore(serde_json::from_slice(&encoded).unwrap());
         let mut view = PagedList::default();
         restored.sync_view(&mut view);
@@ -301,7 +345,10 @@ mod tests {
     fn partial_restart_resumes_from_its_server_offset() {
         let mut original = loaded(500, 10_000);
         let cache = original.checkpoint("alice".into(), false).unwrap();
-        let mut restored = LikedSongs { cache_checked: true, ..Default::default() };
+        let mut restored = LikedSongs {
+            cache_checked: true,
+            ..Default::default()
+        };
         restored.restore(cache);
         assert_eq!(restored.request_offset(), Some(500));
         assert_eq!(restored.request_offset(), None, "only one page in flight");
@@ -326,7 +373,10 @@ mod tests {
         assert!(songs.absorb(0, first, 20_000));
         songs.sync_view(&mut view);
         assert_eq!(view.items, original);
-        assert_eq!(view.revision, revision, "unchanged visible rows retain their revision");
+        assert_eq!(
+            view.revision, revision,
+            "unchanged visible rows retain their revision"
+        );
         assert!(!songs.absorb(50, page(50, 50, 100), 20_000));
         songs.sync_view(&mut view);
         assert_eq!(view.items.len(), 100);
@@ -369,13 +419,19 @@ mod tests {
         restored.restore(cache);
         restored.sync_view(&mut view);
         assert_eq!(view.items[0].track.uri, item(999).track.uri);
-        assert!(!restored.fresh(20_001), "unreconciled edits trigger a refresh on restart");
+        assert!(
+            !restored.fresh(20_001),
+            "unreconciled edits trigger a refresh on restart"
+        );
         songs.start_refresh(3);
         let mut answer = page(0, 100, 100);
         answer.items.remove(0);
         answer.items.insert(0, item(999));
         songs.absorb(0, answer, 20_002);
-        assert!(songs.changes.is_empty(), "a later confirming refresh retires the overrides");
+        assert!(
+            songs.changes.is_empty(),
+            "a later confirming refresh retires the overrides"
+        );
     }
 
     #[test]
@@ -398,8 +454,18 @@ mod tests {
         let mut songs = loaded(50, 50);
         songs.change(item(999).track.uri, true, item(999).track);
         songs.change(item(888).track.uri, true, item(888).track);
-        songs.changes.get_mut(&item(999).track.uri).unwrap().item.added_at = Some("2026-09-09T10:00:00Z".into());
-        songs.changes.get_mut(&item(888).track.uri).unwrap().item.added_at = Some("2026-09-09T10:00:01Z".into());
+        songs
+            .changes
+            .get_mut(&item(999).track.uri)
+            .unwrap()
+            .item
+            .added_at = Some("2026-09-09T10:00:00Z".into());
+        songs
+            .changes
+            .get_mut(&item(888).track.uri)
+            .unwrap()
+            .item
+            .added_at = Some("2026-09-09T10:00:01Z".into());
         let mut view = PagedList::default();
         songs.sync_view(&mut view);
         assert_eq!(view.items[0].track.uri, item(888).track.uri);
@@ -409,16 +475,22 @@ mod tests {
 
     #[tokio::test]
     async fn corrupt_wrong_account_and_interrupted_cache_writes_are_harmless() {
-        let root = std::env::temp_dir().join(format!("sf-liked-cache-{:016x}", rand::random::<u64>()));
+        let root =
+            std::env::temp_dir().join(format!("sf-liked-cache-{:016x}", rand::random::<u64>()));
         let path = root.join("liked.json");
         let mut songs = loaded(50, 100);
         let cache = songs.checkpoint("alice".into(), true).unwrap();
         write(&path, &cache).await.unwrap();
         assert!(read(&path, "alice").await.is_some());
         assert!(read(&path, "bob").await.is_none());
-        tokio::fs::create_dir(root.join("liked.json.tmp")).await.unwrap();
+        tokio::fs::create_dir(root.join("liked.json.tmp"))
+            .await
+            .unwrap();
         assert!(write(&path, &cache).await.is_err());
-        assert!(read(&path, "alice").await.is_some(), "interrupted replacement preserves previous data");
+        assert!(
+            read(&path, "alice").await.is_some(),
+            "interrupted replacement preserves previous data"
+        );
         tokio::fs::write(&path, b"broken JSON").await.unwrap();
         assert!(read(&path, "alice").await.is_none());
         tokio::fs::remove_dir_all(root).await.unwrap();

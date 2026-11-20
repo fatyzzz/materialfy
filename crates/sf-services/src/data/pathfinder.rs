@@ -5,7 +5,9 @@
 use anyhow::{anyhow, bail};
 use serde_json::{Value, json};
 use sf_api::Http;
-use sf_api::models::{Album, Artist, ArtistRef, Episode, Image, Owner, Page, Playlist, SearchResults, Show, Track};
+use sf_api::models::{
+    Album, Artist, ArtistRef, Episode, Image, Owner, Page, Playlist, SearchResults, Show, Track,
+};
 
 use super::persisted;
 
@@ -21,7 +23,11 @@ const SEARCH_HASHES: [&str; 4] = [
 pub const SEARCH_LIMIT: u32 = 20;
 
 /// Все разделы поиска по `query`.
-pub async fn search(http: &Http, session: &sf_player::Session, query: &str) -> anyhow::Result<SearchResults> {
+pub async fn search(
+    http: &Http,
+    session: &sf_player::Session,
+    query: &str,
+) -> anyhow::Result<SearchResults> {
     let variables = json!({
         "searchTerm": query,
         "offset": 0,
@@ -47,7 +53,9 @@ enum Failure {
 
 fn parse(body: &Value) -> Result<SearchResults, Failure> {
     if let Some(errors) = body.get("errors").and_then(Value::as_array) {
-        let retired = errors.iter().any(|e| e.get("message").and_then(Value::as_str) == Some("PersistedQueryNotFound"));
+        let retired = errors
+            .iter()
+            .any(|e| e.get("message").and_then(Value::as_str) == Some("PersistedQueryNotFound"));
         if retired {
             return Err(Failure::Retired);
         }
@@ -55,7 +63,9 @@ fn parse(body: &Value) -> Result<SearchResults, Failure> {
             return Err(Failure::Other(anyhow!("GraphQL errors: {errors:?}")));
         }
     }
-    let search = body.pointer("/data/searchV2").ok_or_else(|| Failure::Other(anyhow!("no data.searchV2")))?;
+    let search = body
+        .pointer("/data/searchV2")
+        .ok_or_else(|| Failure::Other(anyhow!("no data.searchV2")))?;
     results(search).map_err(Failure::Other)
 }
 
@@ -65,7 +75,9 @@ fn results(search: &Value) -> anyhow::Result<SearchResults> {
         bail!("searchV2 is not an object");
     }
     Ok(SearchResults {
-        tracks: section(search, "tracksV2", |item| track(item.pointer("/item/data").unwrap_or(&item["data"]))),
+        tracks: section(search, "tracksV2", |item| {
+            track(item.pointer("/item/data").unwrap_or(&item["data"]))
+        }),
         artists: section(search, "artists", |item| artist(&item["data"])),
         albums: section(search, "albumsV2", |item| album(&item["data"])),
         playlists: section(search, "playlists", |item| playlist(&item["data"])),
@@ -77,16 +89,33 @@ fn results(search: &Value) -> anyhow::Result<SearchResults> {
 /// Раздел как страница Web API; раздела нет — None, как у Web API без этого типа.
 fn section<T>(search: &Value, name: &str, map: impl Fn(&Value) -> Option<T>) -> Option<Page<T>> {
     let section = search.get(name)?;
-    let items: Vec<T> = section.get("items")?.as_array()?.iter().filter_map(map).collect();
+    let items: Vec<T> = section
+        .get("items")?
+        .as_array()?
+        .iter()
+        .filter_map(map)
+        .collect();
     let total = section
         .get("totalCount")
         .and_then(Value::as_u64)
-        .map_or(items.len() as u32, |total| u32::try_from(total).unwrap_or(u32::MAX));
-    Some(Page { limit: SEARCH_LIMIT, total, items, offset: 0, next: None })
+        .map_or(items.len() as u32, |total| {
+            u32::try_from(total).unwrap_or(u32::MAX)
+        });
+    Some(Page {
+        limit: SEARCH_LIMIT,
+        total,
+        items,
+        offset: 0,
+        next: None,
+    })
 }
 
 pub(super) fn text(value: &Value, pointer: &str) -> String {
-    value.pointer(pointer).and_then(Value::as_str).unwrap_or_default().to_owned()
+    value
+        .pointer(pointer)
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .to_owned()
 }
 
 /// "spotify:album:ID" → ID.
@@ -96,14 +125,26 @@ pub(super) fn id_of(uri: &str) -> String {
 
 /// Сущность нужного вида: {"__typename": kind, "uri": "spotify:…"}; иное (PreRelease, Audiobook…) — мимо.
 fn uri_of(data: &Value, kind: &str) -> Option<String> {
-    if data.get("__typename").and_then(Value::as_str).is_some_and(|name| name != kind) {
+    if data
+        .get("__typename")
+        .and_then(Value::as_str)
+        .is_some_and(|name| name != kind)
+    {
         return None;
     }
-    data.get("uri").and_then(Value::as_str).filter(|uri| !uri.is_empty()).map(str::to_owned)
+    data.get("uri")
+        .and_then(Value::as_str)
+        .filter(|uri| !uri.is_empty())
+        .map(str::to_owned)
 }
 
 pub(super) fn images(value: Option<&Value>) -> Vec<Image> {
-    let dimension = |source: &Value, key: &str| source.get(key).and_then(Value::as_u64).and_then(|n| u32::try_from(n).ok());
+    let dimension = |source: &Value, key: &str| {
+        source
+            .get(key)
+            .and_then(Value::as_u64)
+            .and_then(|n| u32::try_from(n).ok())
+    };
     value
         .and_then(|sources| sources.get("sources"))
         .and_then(Value::as_array)
@@ -111,7 +152,11 @@ pub(super) fn images(value: Option<&Value>) -> Vec<Image> {
         .flatten()
         .filter_map(|source| {
             let url = source.get("url")?.as_str()?.to_owned();
-            Some(Image { url, width: dimension(source, "width"), height: dimension(source, "height") })
+            Some(Image {
+                url,
+                width: dimension(source, "width"),
+                height: dimension(source, "height"),
+            })
         })
         .collect()
 }
@@ -123,7 +168,11 @@ fn artist_refs(data: &Value) -> Vec<ArtistRef> {
         .flatten()
         .map(|artist| {
             let uri = text(artist, "/uri");
-            ArtistRef { id: Some(id_of(&uri)).filter(|id| !id.is_empty()), name: text(artist, "/profile/name"), uri: Some(uri) }
+            ArtistRef {
+                id: Some(id_of(&uri)).filter(|id| !id.is_empty()),
+                name: text(artist, "/profile/name"),
+                uri: Some(uri),
+            }
         })
         .collect()
 }
@@ -136,16 +185,27 @@ fn track(data: &Value) -> Option<Track> {
     let uri = uri_of(data, "Track")?;
     let album = data.get("albumOfTrack").map(|album| {
         let uri = text(album, "/uri");
-        Album { id: id_of(&uri), uri, name: text(album, "/name"), images: images(album.get("coverArt")), ..Default::default() }
+        Album {
+            id: id_of(&uri),
+            uri,
+            name: text(album, "/name"),
+            images: images(album.get("coverArt")),
+            ..Default::default()
+        }
     });
     Some(Track {
         id: Some(id_of(&uri)),
         name: text(data, "/name"),
-        duration_ms: data.pointer("/duration/totalMilliseconds").and_then(Value::as_u64).map_or(0, |ms| ms as u32),
+        duration_ms: data
+            .pointer("/duration/totalMilliseconds")
+            .and_then(Value::as_u64)
+            .map_or(0, |ms| ms as u32),
         explicit: explicit(data),
         artists: artist_refs(data),
         album,
-        is_playable: data.pointer("/playability/playable").and_then(Value::as_bool),
+        is_playable: data
+            .pointer("/playability/playable")
+            .and_then(Value::as_bool),
         uri,
         ..Default::default()
     })
@@ -167,10 +227,17 @@ fn album(data: &Value) -> Option<Album> {
     Some(Album {
         id: id_of(&uri),
         name: text(data, "/name"),
-        album_type: data.get("type").and_then(Value::as_str).map(str::to_lowercase),
+        album_type: data
+            .get("type")
+            .and_then(Value::as_str)
+            .map(str::to_lowercase),
         images: images(data.get("coverArt")),
         artists: artist_refs(data),
-        release_date: data.pointer("/date/year").and_then(Value::as_i64).filter(|year| *year > 0).map(|y| y.to_string()),
+        release_date: data
+            .pointer("/date/year")
+            .and_then(Value::as_i64)
+            .filter(|year| *year > 0)
+            .map(|y| y.to_string()),
         uri,
         ..Default::default()
     })
@@ -186,9 +253,11 @@ fn playlist(data: &Value) -> Option<Playlist> {
         description: Some(text(data, "/description")).filter(|text| !text.is_empty()),
         images: images(data.pointer("/images/items/0")),
         owner: Owner {
-            id: owner.get("username").and_then(Value::as_str).map(str::to_owned).or_else(|| {
-                Some(id_of(&owner_uri)).filter(|id| !id.is_empty())
-            }),
+            id: owner
+                .get("username")
+                .and_then(Value::as_str)
+                .map(str::to_owned)
+                .or_else(|| Some(id_of(&owner_uri)).filter(|id| !id.is_empty())),
             display_name: owner.get("name").and_then(Value::as_str).map(str::to_owned),
             uri: Some(owner_uri).filter(|uri| !uri.is_empty()),
         },
@@ -216,7 +285,10 @@ fn episode(data: &Value) -> Option<Episode> {
         id: id_of(&uri),
         name: text(data, "/name"),
         description: text(data, "/description"),
-        duration_ms: data.pointer("/duration/totalMilliseconds").and_then(Value::as_u64).map_or(0, |ms| ms as u32),
+        duration_ms: data
+            .pointer("/duration/totalMilliseconds")
+            .and_then(Value::as_u64)
+            .map_or(0, |ms| ms as u32),
         images: images(data.get("coverArt")),
         release_date: Some(text(data, "/releaseDate/isoString")).filter(|date| !date.is_empty()),
         explicit: explicit(data),
@@ -267,21 +339,36 @@ mod tests {
 
     #[test]
     fn a_search_answer_reads_as_the_web_api_gives_it() {
-        let Ok(results) = parse(&body()) else { panic!("parsed") };
+        let Ok(results) = parse(&body()) else {
+            panic!("parsed")
+        };
         let tracks = results.tracks.unwrap();
         assert_eq!(tracks.total, 318);
         let track = &tracks.items[0];
-        assert_eq!((track.id.as_deref(), track.uri.as_str()), (Some("t1"), "spotify:track:t1"));
+        assert_eq!(
+            (track.id.as_deref(), track.uri.as_str()),
+            (Some("t1"), "spotify:track:t1")
+        );
         assert_eq!(track.duration_ms, 212_000);
         assert!(track.explicit);
         assert_eq!(track.artists[0].name, "Muse");
         assert_eq!(track.artists[0].id.as_deref(), Some("a1"));
         let album = track.album.as_ref().unwrap();
-        assert_eq!((album.id.as_str(), album.images[0].url.as_str()), ("al1", "big"));
+        assert_eq!(
+            (album.id.as_str(), album.images[0].url.as_str()),
+            ("al1", "big")
+        );
         assert_eq!(album.images[1].width, None, "unknown sizes stay unknown");
 
         let artist = &results.artists.unwrap().items[0];
-        assert_eq!((artist.id.as_str(), artist.name.as_str(), artist.images[0].url.as_str()), ("a1", "Muse", "face"));
+        assert_eq!(
+            (
+                artist.id.as_str(),
+                artist.name.as_str(),
+                artist.images[0].url.as_str()
+            ),
+            ("a1", "Muse", "face")
+        );
 
         let albums = results.albums.unwrap();
         assert_eq!(albums.items.len(), 1, "pre-releases are passed over");
@@ -300,8 +387,14 @@ mod tests {
 
         let episode = &results.episodes.unwrap().items[0];
         assert_eq!(episode.duration_ms, 60_000);
-        assert_eq!(episode.release_date.as_deref(), Some("2026-09-30T11:13:00Z"));
-        assert_eq!(episode.show.as_ref().map(|show| show.id.as_str()), Some("s2"));
+        assert_eq!(
+            episode.release_date.as_deref(),
+            Some("2026-09-30T11:13:00Z")
+        );
+        assert_eq!(
+            episode.show.as_ref().map(|show| show.id.as_str()),
+            Some("s2")
+        );
     }
 
     #[test]
@@ -310,9 +403,15 @@ mod tests {
         assert!(matches!(parse(&retired), Err(Failure::Retired)));
         let other = json!({ "errors": [{ "message": "Unauthorized" }] });
         assert!(matches!(parse(&other), Err(Failure::Other(_))));
-        assert!(matches!(parse(&json!({ "data": {} })), Err(Failure::Other(_))));
+        assert!(matches!(
+            parse(&json!({ "data": {} })),
+            Err(Failure::Other(_))
+        ));
         // раздела нет — None, как у Web API
-        let Ok(partial) = parse(&json!({ "data": { "searchV2": { "artists": { "items": [] } } } })) else { panic!() };
+        let Ok(partial) = parse(&json!({ "data": { "searchV2": { "artists": { "items": [] } } } }))
+        else {
+            panic!()
+        };
         assert!(partial.tracks.is_none());
         assert_eq!(partial.artists.map(|page| page.total), Some(0));
     }

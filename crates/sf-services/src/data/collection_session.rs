@@ -7,7 +7,9 @@ use std::time::Duration;
 use sf_api::models::{Artist, Page, SavedAlbum, SavedTrack, Track};
 use sf_api::{ApiError, ApiGateway, Operation};
 use sf_player::PlayerHandle;
-use sf_player::engine::session_collection::{self as collection, CollectionItem, SET_ARTIST, SET_COLLECTION};
+use sf_player::engine::session_collection::{
+    self as collection, CollectionItem, SET_ARTIST, SET_COLLECTION,
+};
 use sf_player::engine::session_reads::Failure;
 
 use super::route;
@@ -29,7 +31,11 @@ const WEB_DEADLINE: Duration = Duration::from_secs(12);
 async fn web<T>(call: impl Future<Output = Result<T, ApiError>>) -> Result<T, ApiError> {
     tokio::time::timeout(WEB_DEADLINE, call)
         .await
-        .unwrap_or_else(|_| Err(ApiError::Network("Spotify did not answer in time".to_owned())))
+        .unwrap_or_else(|_| {
+            Err(ApiError::Network(
+                "Spotify did not answer in time".to_owned(),
+            ))
+        })
 }
 
 // --- «Любимые треки» ---------------------------------------------------------------------------------
@@ -47,15 +53,31 @@ pub struct LikedFeed {
 
 impl LikedFeed {
     pub fn new(rows: Vec<CollectionItem>) -> Self {
-        let rows = rows.into_iter().filter(|row| row.uri.starts_with("spotify:track:")).collect();
-        Self { session: None, rows, starts: HashMap::from([(0, 0)]), skipped: 0 }
+        let rows = rows
+            .into_iter()
+            .filter(|row| row.uri.starts_with("spotify:track:"))
+            .collect();
+        Self {
+            session: None,
+            rows,
+            starts: HashMap::from([(0, 0)]),
+            skipped: 0,
+        }
     }
 
     /// Набор сессии того же аккаунта; None — сессии нет или она не ответила (спросить Web API).
     pub async fn open(api: &ApiGateway, player: &PlayerHandle) -> Option<Self> {
         let session = route::account_session(api, player)?;
-        match tokio::time::timeout(READ_TIMEOUT, collection::collection_all(&session, SET_COLLECTION)).await {
-            Ok(Ok(rows)) => Some(Self { session: Some(session), ..Self::new(rows) }),
+        match tokio::time::timeout(
+            READ_TIMEOUT,
+            collection::collection_all(&session, SET_COLLECTION),
+        )
+        .await
+        {
+            Ok(Ok(rows)) => Some(Self {
+                session: Some(session),
+                ..Self::new(rows)
+            }),
             Ok(Err(error)) => {
                 tracing::debug!("Liked Songs via session: {error:#}; asking Web API");
                 None
@@ -93,13 +115,23 @@ impl LikedFeed {
 
     /// Страница с `offset` не длиннее `limit`; `resolve` — подробности треков по URI (нет в ответе —
     /// Spotify трек больше не отдаёт).
-    pub async fn page<F, Fut>(&mut self, offset: u32, limit: u32, mut resolve: F) -> Result<Page<SavedTrack>, Failure>
+    pub async fn page<F, Fut>(
+        &mut self,
+        offset: u32,
+        limit: u32,
+        mut resolve: F,
+    ) -> Result<Page<SavedTrack>, Failure>
     where
         F: FnMut(Vec<String>) -> Fut,
         Fut: Future<Output = Result<HashMap<String, Track>, Failure>>,
     {
         let len = self.rows.len();
-        let mut cursor = self.starts.get(&offset).copied().unwrap_or(offset as usize).min(len);
+        let mut cursor = self
+            .starts
+            .get(&offset)
+            .copied()
+            .unwrap_or(offset as usize)
+            .min(len);
         let mut items = Vec::new();
         while items.len() < limit as usize && cursor < len {
             let end = (cursor + limit as usize - items.len()).min(len);
@@ -107,7 +139,10 @@ impl LikedFeed {
             let found = resolve(window.iter().map(|row| row.uri.clone()).collect()).await?;
             for row in window {
                 match found.get(&row.uri) {
-                    Some(track) => items.push(SavedTrack { added_at: row.added_at_iso(), track: track.clone() }),
+                    Some(track) => items.push(SavedTrack {
+                        added_at: row.added_at_iso(),
+                        track: track.clone(),
+                    }),
                     None => self.skipped += 1,
                 }
             }
@@ -118,7 +153,9 @@ impl LikedFeed {
             self.starts.insert(offset + limit, cursor);
         }
         let shown = offset as usize + items.len();
-        let total = len.saturating_sub(self.skipped).max(shown + usize::from(more));
+        let total = len
+            .saturating_sub(self.skipped)
+            .max(shown + usize::from(more));
         Ok(Page {
             items,
             total: u32::try_from(total).unwrap_or(u32::MAX),
@@ -142,7 +179,12 @@ pub async fn saved_albums(session: &sf_player::Session) -> anyhow::Result<Vec<Sa
     let mut albums = collection::albums(session, &uris).await?;
     Ok(rows
         .iter()
-        .filter_map(|row| Some(SavedAlbum { added_at: row.added_at_iso(), album: albums.remove(&row.uri)? }))
+        .filter_map(|row| {
+            Some(SavedAlbum {
+                added_at: row.added_at_iso(),
+                album: albums.remove(&row.uri)?,
+            })
+        })
         .collect())
 }
 
@@ -182,7 +224,12 @@ where
 
 /// Сохранить (`add`) или снять треки, альбомы, исполнителей, подкасты, выпуски: сначала сессия
 /// (каждый вид — в своём наборе), потом Web API /me/library не дольше WEB_DEADLINE.
-pub async fn write(api: &ApiGateway, player: &PlayerHandle, uris: &[String], add: bool) -> Result<(), ApiError> {
+pub async fn write(
+    api: &ApiGateway,
+    player: &PlayerHandle,
+    uris: &[String],
+    add: bool,
+) -> Result<(), ApiError> {
     if let Some(session) = route::account_session(api, player) {
         match tokio::time::timeout(SESSION_TIMEOUT, collection::write(&session, uris, add)).await {
             Ok(Ok(())) => {
@@ -190,27 +237,47 @@ pub async fn write(api: &ApiGateway, player: &PlayerHandle, uris: &[String], add
                 api.forget_cached();
                 return Ok(());
             }
-            Ok(Err(error)) => tracing::debug!("collection write via session: {error:#}; writing via Web API"),
-            Err(_) => tracing::debug!("collection write via session timed out; writing via Web API"),
+            Ok(Err(error)) => {
+                tracing::debug!("collection write via session: {error:#}; writing via Web API")
+            }
+            Err(_) => {
+                tracing::debug!("collection write via session timed out; writing via Web API")
+            }
         }
     }
     web(async {
         let client = api.client_for(Operation::UserData).await?;
-        if add { client.save(uris).await } else { client.unsave(uris).await }
+        if add {
+            client.save(uris).await
+        } else {
+            client.unsave(uris).await
+        }
     })
     .await
 }
 
 /// Как /me/library/contains — для каждого URI в том же порядке: сначала сессия, потом Web API.
-pub async fn contains(api: &ApiGateway, player: &PlayerHandle, uris: &[String]) -> Result<Vec<bool>, ApiError> {
+pub async fn contains(
+    api: &ApiGateway,
+    player: &PlayerHandle,
+    uris: &[String],
+) -> Result<Vec<bool>, ApiError> {
     if let Some(session) = route::account_session(api, player) {
         match tokio::time::timeout(SESSION_TIMEOUT, collection::contains(&session, uris)).await {
             Ok(Ok(found)) => return Ok(found),
-            Ok(Err(error)) => tracing::debug!("collection check via session: {error:#}; asking Web API"),
+            Ok(Err(error)) => {
+                tracing::debug!("collection check via session: {error:#}; asking Web API")
+            }
             Err(_) => tracing::debug!("collection check via session timed out; asking Web API"),
         }
     }
-    web(async { api.client_for(Operation::UserData).await?.contains(uris).await }).await
+    web(async {
+        api.client_for(Operation::UserData)
+            .await?
+            .contains(uris)
+            .await
+    })
+    .await
 }
 
 #[cfg(test)]
@@ -219,19 +286,36 @@ mod tests {
 
     fn rows(count: usize) -> Vec<CollectionItem> {
         let mut rows: Vec<CollectionItem> = (0..count)
-            .map(|n| CollectionItem { uri: format!("spotify:track:{n}"), added_at: 1_700_000_000 - n as i64 })
+            .map(|n| CollectionItem {
+                uri: format!("spotify:track:{n}"),
+                added_at: 1_700_000_000 - n as i64,
+            })
             .collect();
-        rows.push(CollectionItem { uri: "spotify:album:x".into(), added_at: 1_800_000_000 });
+        rows.push(CollectionItem {
+            uri: "spotify:album:x".into(),
+            added_at: 1_800_000_000,
+        });
         rows
     }
 
     /// Подробности всех URI, кроме `gone`.
-    fn resolver(gone: &'static [&'static str]) -> impl FnMut(Vec<String>) -> std::future::Ready<Result<HashMap<String, Track>, Failure>> {
+    fn resolver(
+        gone: &'static [&'static str],
+    ) -> impl FnMut(Vec<String>) -> std::future::Ready<Result<HashMap<String, Track>, Failure>>
+    {
         move |uris| {
             std::future::ready(Ok(uris
                 .into_iter()
                 .filter(|uri| !gone.contains(&uri.as_str()))
-                .map(|uri| (uri.clone(), Track { uri, ..Default::default() }))
+                .map(|uri| {
+                    (
+                        uri.clone(),
+                        Track {
+                            uri,
+                            ..Default::default()
+                        },
+                    )
+                })
                 .collect()))
         }
     }
@@ -240,10 +324,20 @@ mod tests {
     async fn pages_follow_the_collection_and_skip_albums() {
         let mut feed = LikedFeed::new(rows(5));
         let first = feed.page(0, 2, resolver(&[])).await.unwrap();
-        assert_eq!(first.items.iter().map(|i| i.track.uri.as_str()).collect::<Vec<_>>(), ["spotify:track:0", "spotify:track:1"]);
+        assert_eq!(
+            first
+                .items
+                .iter()
+                .map(|i| i.track.uri.as_str())
+                .collect::<Vec<_>>(),
+            ["spotify:track:0", "spotify:track:1"]
+        );
         assert_eq!(first.total, 5);
         assert_eq!(first.next_offset(), Some(2));
-        assert_eq!(first.items[0].added_at.as_deref(), Some("2023-11-14T22:13:20Z"));
+        assert_eq!(
+            first.items[0].added_at.as_deref(),
+            Some("2023-11-14T22:13:20Z")
+        );
         let second = feed.page(2, 2, resolver(&[])).await.unwrap();
         let last = feed.page(4, 2, resolver(&[])).await.unwrap();
         assert_eq!(second.items[0].track.uri, "spotify:track:2");
@@ -254,22 +348,42 @@ mod tests {
     #[tokio::test]
     async fn gone_tracks_are_skipped_and_the_page_is_topped_up() {
         let mut feed = LikedFeed::new(rows(6));
-        let first = feed.page(0, 3, resolver(&["spotify:track:1"])).await.unwrap();
+        let first = feed
+            .page(0, 3, resolver(&["spotify:track:1"]))
+            .await
+            .unwrap();
         assert_eq!(
-            first.items.iter().map(|i| i.track.uri.as_str()).collect::<Vec<_>>(),
+            first
+                .items
+                .iter()
+                .map(|i| i.track.uri.as_str())
+                .collect::<Vec<_>>(),
             ["spotify:track:0", "spotify:track:2", "spotify:track:3"]
         );
         assert_eq!(first.total, 5);
-        let rest = feed.page(3, 3, resolver(&["spotify:track:1"])).await.unwrap();
-        assert_eq!(rest.items.iter().map(|i| i.track.uri.as_str()).collect::<Vec<_>>(), ["spotify:track:4", "spotify:track:5"]);
-        assert_eq!(rest.total, 5, "the last page's total matches the rows shown");
+        let rest = feed
+            .page(3, 3, resolver(&["spotify:track:1"]))
+            .await
+            .unwrap();
+        assert_eq!(
+            rest.items
+                .iter()
+                .map(|i| i.track.uri.as_str())
+                .collect::<Vec<_>>(),
+            ["spotify:track:4", "spotify:track:5"]
+        );
+        assert_eq!(
+            rest.total, 5,
+            "the last page's total matches the rows shown"
+        );
         assert_eq!(rest.next_offset(), None);
     }
 
     #[tokio::test]
     async fn a_long_collection_pages_in_batches_of_fifty_and_skips_gone_rows_across_pages() {
         // 130 треков, пропавшие — на границах пакетов (49, 50) и в конце (129)
-        let gone: &'static [&'static str] = &["spotify:track:49", "spotify:track:50", "spotify:track:129"];
+        let gone: &'static [&'static str] =
+            &["spotify:track:49", "spotify:track:50", "spotify:track:129"];
         let mut feed = LikedFeed::new(rows(130));
         let batches = std::cell::RefCell::new(Vec::new());
         let mut shown = Vec::new();
@@ -289,7 +403,11 @@ mod tests {
             assert!(page.items.len() <= LIKED_PAGE as usize);
             shown.extend(page.items.iter().map(|item| item.track.uri.clone()));
             // пропавшие строки вычитаются из общего числа, как только встретились
-            assert!(page.total >= 127 && page.total <= last_total, "{}", page.total);
+            assert!(
+                page.total >= 127 && page.total <= last_total,
+                "{}",
+                page.total
+            );
             last_total = page.total;
             match page.next_offset() {
                 Some(next) => {
@@ -316,7 +434,9 @@ mod tests {
         let first = feed.page(0, 50, resolver(&[])).await.unwrap();
         assert_eq!(first.next_offset(), Some(50));
         let failed = feed
-            .page(50, 50, |_| std::future::ready(Err(Failure::Retry(anyhow::anyhow!("network")))))
+            .page(50, 50, |_| {
+                std::future::ready(Err(Failure::Retry(anyhow::anyhow!("network"))))
+            })
             .await;
         assert!(matches!(failed, Err(Failure::Retry(_))));
         let again = feed.page(50, 50, resolver(&[])).await.unwrap();

@@ -8,12 +8,12 @@ use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
 
 use md3_model::DeviceItem;
+use mf_platform::{SettingKey, SettingsStore};
 use sf_api::Operation;
 use sf_player::engine::zeroconf::{self, Receiver};
 use sf_player::{PlayerEvent, PlayerHandle};
 use tokio::runtime::Handle;
 use tokio::sync::{broadcast, watch};
-use mf_platform::{SettingKey, SettingsStore};
 
 use crate::ServiceError;
 use crate::auth::{AuthEvent, AuthService};
@@ -33,7 +33,8 @@ const VOLUME_DEBOUNCE: Duration = Duration::from_millis(150);
 const VOLUME_HOLD: Duration = Duration::from_millis(2500);
 /// Имя, которым мы представляемся приёмнику при addUser.
 const CLIENT_NAME: &str = "Materialfy";
-const NEED_PLAYBACK: &str = "Turn on playback on this computer first — the receiver needs something to connect to";
+const NEED_PLAYBACK: &str =
+    "Turn on playback on this computer first — the receiver needs something to connect to";
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct DevicesSnapshot {
@@ -86,7 +87,12 @@ pub struct DevicesService {
 }
 
 impl DevicesService {
-    pub fn new(rt: Handle, auth: Arc<AuthService>, player: PlayerHandle, settings: Arc<SettingsStore>) -> Arc<Self> {
+    pub fn new(
+        rt: Handle,
+        auth: Arc<AuthService>,
+        player: PlayerHandle,
+        settings: Arc<SettingsStore>,
+    ) -> Arc<Self> {
         let service = Arc::new_cyclic(|me| Self {
             rt: rt.clone(),
             auth,
@@ -136,7 +142,9 @@ impl DevicesService {
                             st.fetched_at = Some(Instant::now());
                         }
                         // прежний список остаётся, ошибка видна в меню
-                        Err(e) => st.error_text = mf_i18n::tf("Couldn’t get the device list: {0}", &[&e]),
+                        Err(e) => {
+                            st.error_text = mf_i18n::tf("Couldn’t get the device list: {0}", &[&e])
+                        }
                     }
                 }
                 me.recompute();
@@ -176,7 +184,12 @@ impl DevicesService {
 
     /// Перенести воспроизведение на устройство (id этого ПК → transfer_here).
     pub fn transfer(&self, device_id: String, play: bool) {
-        let row = self.snapshot().devices.iter().find(|d| d.id == device_id).cloned();
+        let row = self
+            .snapshot()
+            .devices
+            .iter()
+            .find(|d| d.id == device_id)
+            .cloned();
         if let Some(row) = row.filter(|d| d.source == SOURCE_ZEROCONF) {
             self.activate_receiver(row.name);
             return;
@@ -206,11 +219,17 @@ impl DevicesService {
     /// Громкость устройства 0..100 (с задержкой 150 мс при перетягивании).
     pub fn set_volume(&self, device_id: String, percent: u8) {
         let percent = percent.min(100);
-        let active = self.player.snapshot().device.map(|d| d.id).unwrap_or_default();
+        let active = self
+            .player
+            .snapshot()
+            .device
+            .map(|d| d.id)
+            .unwrap_or_default();
         let this = self.player.this_device_id().unwrap_or_default();
         let seq = {
             let mut st = lock(&self.state);
-            st.volumes.insert(device_id.clone(), (i32::from(percent), Instant::now()));
+            st.volumes
+                .insert(device_id.clone(), (i32::from(percent), Instant::now()));
             let seq = st.volume_seq.entry(device_id.clone()).or_default();
             *seq += 1;
             *seq
@@ -242,7 +261,13 @@ impl DevicesService {
                 .map_err(ServiceError::from),
             };
             if let Err(e) = result {
-                let name = me.snapshot().devices.iter().find(|d| d.id == device_id).map(|d| d.name.clone()).unwrap_or_default();
+                let name = me
+                    .snapshot()
+                    .devices
+                    .iter()
+                    .find(|d| d.id == device_id)
+                    .map(|d| d.name.clone())
+                    .unwrap_or_default();
                 {
                     let mut st = lock(&me.state);
                     if st.volume_seq.get(&device_id) == Some(&seq) {
@@ -250,16 +275,26 @@ impl DevicesService {
                     }
                 }
                 me.recompute();
-                me.notice(mf_i18n::tf("Couldn’t change the volume of “{0}”: {1}", &[&name, &e]));
+                me.notice(mf_i18n::tf(
+                    "Couldn’t change the volume of “{0}”: {1}",
+                    &[&name, &e],
+                ));
             }
         });
     }
 
     /// Подключить приёмник из локальной сети по имени (zeroconf addUser), затем перенести.
     pub fn activate_receiver(&self, name: String) {
-        let receiver = lock(&self.state).receivers.iter().find(|r| r.name == name).cloned();
+        let receiver = lock(&self.state)
+            .receivers
+            .iter()
+            .find(|r| r.name == name)
+            .cloned();
         let Some(receiver) = receiver else {
-            self.notice(mf_i18n::tf("“{0}” is no longer visible on the network", &[&name]));
+            self.notice(mf_i18n::tf(
+                "“{0}” is no longer visible on the network",
+                &[&name],
+            ));
             return;
         };
         let Some(session) = self.player.session() else {
@@ -309,8 +344,14 @@ impl DevicesService {
 
     /// Имя этого устройства по умолчанию: «Materialfy · <имя ПК>».
     pub fn default_device_name() -> String {
-        let host = std::env::var("COMPUTERNAME").or_else(|_| std::env::var("HOSTNAME")).unwrap_or_default();
-        if host.is_empty() { "Materialfy".to_owned() } else { format!("Materialfy · {host}") }
+        let host = std::env::var("COMPUTERNAME")
+            .or_else(|_| std::env::var("HOSTNAME"))
+            .unwrap_or_default();
+        if host.is_empty() {
+            "Materialfy".to_owned()
+        } else {
+            format!("Materialfy · {host}")
+        }
     }
 
     pub fn snapshot(&self) -> DevicesSnapshot {
@@ -333,7 +374,11 @@ impl DevicesService {
 
     fn device_name(&self) -> String {
         let name = self.settings.get_str(SettingKey::DeviceName);
-        if name.trim().is_empty() { Self::default_device_name() } else { name }
+        if name.trim().is_empty() {
+            Self::default_device_name()
+        } else {
+            name
+        }
     }
 
     /// Список из кластера connect-state сессии; Web API — только без движка или при отказе сессии.
@@ -341,9 +386,19 @@ impl DevicesService {
         let this = self.player.this_device_id();
         let devices = match self.player.connect_devices().await {
             Some(devices) => devices,
-            None => self.auth.api().client_for(Operation::Playback).await?.devices().await?,
+            None => {
+                self.auth
+                    .api()
+                    .client_for(Operation::Playback)
+                    .await?
+                    .devices()
+                    .await?
+            }
         };
-        Ok(devices.iter().map(|d| sf_api::map::device_item(d, this.as_deref())).collect())
+        Ok(devices
+            .iter()
+            .map(|d| sf_api::map::device_item(d, this.as_deref()))
+            .collect())
     }
 
     /// Кластер изменился (пуш сессии): перечитать список из него — без сети, пока кластер свежий.
@@ -351,14 +406,19 @@ impl DevicesService {
         let generation = lock(&self.state).account_generation;
         let Some(me) = self.me.upgrade() else { return };
         self.rt.spawn(async move {
-            let Some(devices) = me.player.connect_devices().await else { return };
+            let Some(devices) = me.player.connect_devices().await else {
+                return;
+            };
             let this = me.player.this_device_id();
             {
                 let mut st = lock(&me.state);
                 if st.account_generation != generation {
                     return;
                 }
-                st.api = devices.iter().map(|d| sf_api::map::device_item(d, this.as_deref())).collect();
+                st.api = devices
+                    .iter()
+                    .map(|d| sf_api::map::device_item(d, this.as_deref()))
+                    .collect();
                 st.error_text.clear();
                 st.fetched_at = Some(Instant::now());
             }
@@ -367,7 +427,12 @@ impl DevicesService {
     }
 
     /// addUser на приёмнике, затем ждём, пока Spotify покажет его в списке устройств; Ok — id устройства.
-    async fn activate(&self, receiver: Receiver, credentials: zeroconf::Credentials, generation: u64) -> Result<String, String> {
+    async fn activate(
+        &self,
+        receiver: Receiver,
+        credentials: zeroconf::Credentials,
+        generation: u64,
+    ) -> Result<String, String> {
         let name = receiver.name.clone();
         let our_name = CLIENT_NAME.to_owned();
         let handed = tokio::task::spawn_blocking({
@@ -380,7 +445,8 @@ impl DevicesService {
                     .build()
                     .map_err(|e| e.to_string())?;
                 let info = zeroconf::get_info(&http, &receiver).map_err(|e| format!("{e:#}"))?;
-                zeroconf::add_user(&http, &receiver, &info, &credentials, &our_name).map_err(|e| format!("{e:#}"))?;
+                zeroconf::add_user(&http, &receiver, &info, &credentials, &our_name)
+                    .map_err(|e| format!("{e:#}"))?;
                 Ok(info)
             }
         })
@@ -388,10 +454,14 @@ impl DevicesService {
         .map_err(|e| e.to_string())
         .and_then(|r| r)
         .map_err(|e| mf_i18n::tf("Couldn’t connect “{0}”: {1}", &[&name, &e]))?;
-        let wanted_id = receiver.device_id.clone().filter(|id| !id.is_empty()).or_else(|| {
-            let id = handed.device_id.clone();
-            (!id.is_empty()).then_some(id)
-        });
+        let wanted_id = receiver
+            .device_id
+            .clone()
+            .filter(|id| !id.is_empty())
+            .or_else(|| {
+                let id = handed.device_id.clone();
+                (!id.is_empty()).then_some(id)
+            });
         let deadline = Instant::now() + RECEIVER_WAIT;
         loop {
             if lock(&self.state).account_generation != generation {
@@ -416,7 +486,10 @@ impl DevicesService {
                 }
             }
             if Instant::now() >= deadline {
-                return Err(mf_i18n::tf("“{0}” didn’t show up in Spotify Connect — try again", &[&name]));
+                return Err(mf_i18n::tf(
+                    "“{0}” didn’t show up in Spotify Connect — try again",
+                    &[&name],
+                ));
             }
             tokio::time::sleep(RECEIVER_POLL).await;
         }
@@ -426,7 +499,11 @@ impl DevicesService {
     fn recompute(&self) {
         let p = self.player.snapshot();
         let this_id = self.player.this_device_id().unwrap_or_default();
-        let this_name = if this_id.is_empty() { String::new() } else { self.device_name() };
+        let this_name = if this_id.is_empty() {
+            String::new()
+        } else {
+            self.device_name()
+        };
         let mut st = lock(&self.state);
         st.volumes.retain(|_, (_, at)| at.elapsed() < VOLUME_HOLD);
         let active_id = match &p.device {
@@ -437,7 +514,11 @@ impl DevicesService {
         let this = (!this_id.is_empty()).then(|| ThisDevice {
             id: this_id.clone(),
             name: this_name.clone(),
-            volume: if p.is_local { (p.volume * 100.0).round() as i32 } else { -1 },
+            volume: if p.is_local {
+                (p.volume * 100.0).round() as i32
+            } else {
+                -1
+            },
         });
         let mut devices = connect::merge(&st.api, &st.receivers, this.as_ref(), &active_id);
         for d in &mut devices {
@@ -448,7 +529,11 @@ impl DevicesService {
                 d.volume = *volume;
             }
         }
-        let active = devices.iter().find(|d| d.is_active).cloned().or_else(|| p.device.clone());
+        let active = devices
+            .iter()
+            .find(|d| d.is_active)
+            .cloned()
+            .or_else(|| p.device.clone());
         let transferring_to = match &st.activating {
             Some(row) => row.clone(),
             None if p.transferring => st.transfer_target.clone(),
@@ -477,7 +562,10 @@ impl DevicesService {
         {
             let mut st = lock(&self.state);
             let generation = st.account_generation + 1;
-            *st = State { account_generation: generation, ..State::default() };
+            *st = State {
+                account_generation: generation,
+                ..State::default()
+            };
         }
         self.recompute();
     }

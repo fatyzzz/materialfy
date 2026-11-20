@@ -69,15 +69,26 @@ pub fn fake_version_set() -> bool {
 
 /// How this copy was installed (MATERIALFY_UPDATE_INSTALL_KIND overrides).
 pub fn install_kind() -> InstallKind {
-    if let Some(kind) = std::env::var(INSTALL_KIND_ENV).ok().and_then(|k| InstallKind::from_code(&k)) {
+    if let Some(kind) = std::env::var(INSTALL_KIND_ENV)
+        .ok()
+        .and_then(|k| InstallKind::from_code(&k))
+    {
         return kind;
     }
-    let exe = std::env::current_exe().ok().map(|p| std::fs::canonicalize(&p).unwrap_or(p)).unwrap_or_default();
+    let exe = std::env::current_exe()
+        .ok()
+        .map(|p| std::fs::canonicalize(&p).unwrap_or(p))
+        .unwrap_or_default();
     let exe = PathBuf::from(exe.to_string_lossy().trim_start_matches(r"\\?\"));
     let appimage = std::env::var("APPIMAGE").ok();
-    let has_uninstaller = exe.parent().is_some_and(|dir| dir.join("unins000.exe").is_file());
-    let mut roots: Vec<PathBuf> =
-        ["ProgramFiles", "ProgramFiles(x86)", "ProgramW6432"].into_iter().filter_map(std::env::var_os).map(PathBuf::from).collect();
+    let has_uninstaller = exe
+        .parent()
+        .is_some_and(|dir| dir.join("unins000.exe").is_file());
+    let mut roots: Vec<PathBuf> = ["ProgramFiles", "ProgramFiles(x86)", "ProgramW6432"]
+        .into_iter()
+        .filter_map(std::env::var_os)
+        .map(PathBuf::from)
+        .collect();
     // per-user Inno installs: %LOCALAPPDATA%\Programs
     roots.extend(std::env::var_os("LOCALAPPDATA").map(|p| PathBuf::from(p).join("Programs")));
     let roots: Vec<&Path> = roots.iter().map(PathBuf::as_path).collect();
@@ -91,7 +102,9 @@ pub fn install_kind() -> InstallKind {
 }
 
 fn now_unix() -> i64 {
-    SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs() as i64)
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs() as i64)
 }
 
 fn updates_dir() -> PathBuf {
@@ -136,11 +149,17 @@ impl CheckError {
         } else {
             error.without_url().to_string()
         };
-        CheckError { text, retryable: true }
+        CheckError {
+            text,
+            retryable: true,
+        }
     }
 
     fn fatal(text: String) -> CheckError {
-        CheckError { text, retryable: false }
+        CheckError {
+            text,
+            retryable: false,
+        }
     }
 }
 
@@ -240,10 +259,18 @@ impl UpdateService {
         let task = self.rt.spawn(async move {
             match this.fetch_offer().await {
                 Ok((offer, skipped)) => {
-                    this.apply(Event::CheckFinished { offer, skipped, at: now_unix() });
+                    this.apply(Event::CheckFinished {
+                        offer,
+                        skipped,
+                        at: now_unix(),
+                    });
                 }
                 Err(error) if manual => {
-                    this.apply(Event::Failed { stage: Stage::Check, text: error.text, retryable: error.retryable });
+                    this.apply(Event::Failed {
+                        stage: Stage::Check,
+                        text: error.text,
+                        retryable: error.retryable,
+                    });
                 }
                 Err(error) => {
                     tracing::warn!("update check: {}", error.text);
@@ -252,7 +279,10 @@ impl UpdateService {
                             return false;
                         }
                         let last_checked = s.last_checked;
-                        *s = UpdateSnapshot { last_checked, ..before };
+                        *s = UpdateSnapshot {
+                            last_checked,
+                            ..before
+                        };
                         true
                     });
                 }
@@ -261,7 +291,11 @@ impl UpdateService {
         lock(&self.inner).task = Some(task);
     }
 
-    async fn get_json(&self, client: &reqwest::Client, url: &str) -> Result<Option<String>, CheckError> {
+    async fn get_json(
+        &self,
+        client: &reqwest::Client,
+        url: &str,
+    ) -> Result<Option<String>, CheckError> {
         let cached = lock(&self.inner).etags.get(url).cloned();
         let mut request = client
             .get(url)
@@ -282,26 +316,49 @@ impl UpdateService {
             return Ok(None);
         }
         if status == StatusCode::FORBIDDEN || status == StatusCode::TOO_MANY_REQUESTS {
-            let header = |name: &str| response.headers().get(name).and_then(|v| v.to_str().ok()).map(str::to_owned);
-            let limited = header("x-ratelimit-remaining").as_deref() == Some("0") || status == StatusCode::TOO_MANY_REQUESTS;
+            let header = |name: &str| {
+                response
+                    .headers()
+                    .get(name)
+                    .and_then(|v| v.to_str().ok())
+                    .map(str::to_owned)
+            };
+            let limited = header("x-ratelimit-remaining").as_deref() == Some("0")
+                || status == StatusCode::TOO_MANY_REQUESTS;
             if limited {
-                let reset = header("x-ratelimit-reset").and_then(|v| v.parse::<i64>().ok()).unwrap_or(now_unix() + 3600);
-                let retry_after = header("retry-after").and_then(|v| v.parse::<i64>().ok()).map(|s| now_unix() + s);
+                let reset = header("x-ratelimit-reset")
+                    .and_then(|v| v.parse::<i64>().ok())
+                    .unwrap_or(now_unix() + 3600);
+                let retry_after = header("retry-after")
+                    .and_then(|v| v.parse::<i64>().ok())
+                    .map(|s| now_unix() + s);
                 let until = retry_after.unwrap_or(reset);
                 lock(&self.inner).blocked_until = until;
                 return Err(CheckError {
-                    text: mf_i18n::tr!("GitHub is limiting update checks. Try again after {0}", clock_time(until)),
+                    text: mf_i18n::tr!(
+                        "GitHub is limiting update checks. Try again after {0}",
+                        clock_time(until)
+                    ),
                     retryable: true,
                 });
             }
         }
         if !status.is_success() {
-            return Err(CheckError { text: mf_i18n::tr!("GitHub answered {0}", status.as_u16()), retryable: true });
+            return Err(CheckError {
+                text: mf_i18n::tr!("GitHub answered {0}", status.as_u16()),
+                retryable: true,
+            });
         }
-        let etag = response.headers().get(ETAG).and_then(|v| v.to_str().ok()).map(str::to_owned);
+        let etag = response
+            .headers()
+            .get(ETAG)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_owned);
         let body = response.text().await.map_err(CheckError::net)?;
         if let Some(etag) = etag {
-            lock(&self.inner).etags.insert(url.to_owned(), (etag, body.clone()));
+            lock(&self.inner)
+                .etags
+                .insert(url.to_owned(), (etag, body.clone()));
         }
         Ok(Some(body))
     }
@@ -309,7 +366,8 @@ impl UpdateService {
     async fn fetch_offer(&self) -> Result<(Option<Offer>, bool), CheckError> {
         let client = self.http.client().map_err(CheckError::fatal)?;
         let channel = Channel::from_setting(&self.settings.get_str(SettingKey::UpdateChannel));
-        let current = Version::parse(&current_version()).unwrap_or(Version::parse("0.0.0").expect("version"));
+        let current =
+            Version::parse(&current_version()).unwrap_or(Version::parse("0.0.0").expect("version"));
         let (url, list) = match channel {
             Channel::Stable => (format!("{API}/releases/latest"), false),
             Channel::Beta => (format!("{API}/releases?per_page=20"), true),
@@ -322,7 +380,10 @@ impl UpdateService {
         } else {
             serde_json::from_str(&body).map(|r| vec![r])
         }
-        .map_err(|e| CheckError { text: format!("GitHub: {e}"), retryable: true })?;
+        .map_err(|e| CheckError {
+            text: format!("GitHub: {e}"),
+            retryable: true,
+        })?;
         let Some((found, version)) = release::pick_release(&releases, channel, &current) else {
             return Ok((None, false));
         };
@@ -332,7 +393,11 @@ impl UpdateService {
         } else {
             None
         };
-        let sums = found.assets.iter().find(|a| a.name == SUMS_NAME).map(|a| a.browser_download_url.clone());
+        let sums = found
+            .assets
+            .iter()
+            .find(|a| a.name == SUMS_NAME)
+            .map(|a| a.browser_download_url.clone());
         {
             let mut inner = lock(&self.inner);
             inner.sums_url = sums;
@@ -343,10 +408,16 @@ impl UpdateService {
             version: version.clone(),
             notes: found.body.clone().unwrap_or_default().trim().to_owned(),
             published_at: found.published_at.clone().unwrap_or_default(),
-            release_url: if found.html_url.is_empty() { RELEASES_PAGE.to_owned() } else { found.html_url.clone() },
+            release_url: if found.html_url.is_empty() {
+                RELEASES_PAGE.to_owned()
+            } else {
+                found.html_url.clone()
+            },
             prerelease: found.prerelease,
             asset_name: asset.map(|a| a.name.clone()).unwrap_or_default(),
-            asset_url: asset.map(|a| a.browser_download_url.clone()).unwrap_or_default(),
+            asset_url: asset
+                .map(|a| a.browser_download_url.clone())
+                .unwrap_or_default(),
             size: asset.map_or(0, |a| a.size),
         };
         let skipped = self.settings.get_str(SettingKey::SkippedVersion) == version;
@@ -356,51 +427,86 @@ impl UpdateService {
     /// Download (or resume) the offered asset, then verify it.
     pub fn download(self: &Arc<Self>) {
         let snapshot = self.snapshot();
-        let Some(offer) = snapshot.offer.clone().filter(|o| !o.asset_url.is_empty()) else { return };
+        let Some(offer) = snapshot.offer.clone().filter(|o| !o.asset_url.is_empty()) else {
+            return;
+        };
         let dir = updates_dir();
         let part = dir.join(format!("{}.part", offer.asset_name));
         let resumed_from = std::fs::metadata(&part).map_or(0, |m| m.len());
-        if !self.apply(Event::DownloadStarted { resumed_from, total: offer.size }) {
+        if !self.apply(Event::DownloadStarted {
+            resumed_from,
+            total: offer.size,
+        }) {
             return;
         }
         let this = self.clone();
         let task = self.rt.spawn(async move {
             if let Err(error) = this.download_and_verify(&offer, &dir).await {
-                this.apply(Event::Failed { stage: Stage::Download, text: error.text, retryable: error.retryable });
+                this.apply(Event::Failed {
+                    stage: Stage::Download,
+                    text: error.text,
+                    retryable: error.retryable,
+                });
             }
         });
         lock(&self.inner).task = Some(task);
     }
 
-    async fn expected_hash(&self, client: &reqwest::Client, offer: &Offer) -> Result<String, CheckError> {
+    async fn expected_hash(
+        &self,
+        client: &reqwest::Client,
+        offer: &Offer,
+    ) -> Result<String, CheckError> {
         let (sums_url, digest) = {
             let inner = lock(&self.inner);
             (inner.sums_url.clone(), inner.asset_digest.clone())
         };
         let mut sums = HashMap::new();
         if let Some(url) = sums_url {
-            let response = client.get(&url).timeout(CHECK_TIMEOUT).send().await.map_err(CheckError::net)?;
+            let response = client
+                .get(&url)
+                .timeout(CHECK_TIMEOUT)
+                .send()
+                .await
+                .map_err(CheckError::net)?;
             if response.status().is_success() {
                 sums = release::parse_sha256sums(&response.text().await.map_err(CheckError::net)?);
             }
         }
-        let asset = release::GhAsset { name: offer.asset_name.clone(), digest, ..release::GhAsset::default() };
+        let asset = release::GhAsset {
+            name: offer.asset_name.clone(),
+            digest,
+            ..release::GhAsset::default()
+        };
         release::expected_sha256(&sums, &asset).ok_or_else(|| {
             CheckError::fatal(mf_i18n::t("This release has no checksums, so it can't be installed safely. Download it from the release page"))
         })
     }
 
-    async fn download_and_verify(self: &Arc<Self>, offer: &Offer, dir: &Path) -> Result<(), CheckError> {
+    async fn download_and_verify(
+        self: &Arc<Self>,
+        offer: &Offer,
+        dir: &Path,
+    ) -> Result<(), CheckError> {
         let client = self.http.client().map_err(CheckError::fatal)?;
-        tokio::fs::create_dir_all(dir).await.map_err(|e| CheckError::fatal(e.to_string()))?;
+        tokio::fs::create_dir_all(dir)
+            .await
+            .map_err(|e| CheckError::fatal(e.to_string()))?;
         remove_stale(dir, &offer.asset_name).await;
         let expected = self.expected_hash(&client, offer).await?;
         let file = dir.join(&offer.asset_name);
         let part = dir.join(format!("{}.part", offer.asset_name));
 
         // already downloaded and intact (an earlier session, or Retry after an install error)
-        if tokio::fs::metadata(&file).await.is_ok() && sha256_file(file.clone()).await.ok().as_deref() == Some(expected.as_str()) {
-            self.apply(Event::Progress { downloaded: offer.size, total: offer.size, speed: None, eta: None });
+        if tokio::fs::metadata(&file).await.is_ok()
+            && sha256_file(file.clone()).await.ok().as_deref() == Some(expected.as_str())
+        {
+            self.apply(Event::Progress {
+                downloaded: offer.size,
+                total: offer.size,
+                speed: None,
+                eta: None,
+            });
             self.apply(Event::Downloaded);
             self.apply(Event::Verified);
             return Ok(());
@@ -417,7 +523,10 @@ impl UpdateService {
                     let _ = tokio::fs::remove_file(&part).await;
                 }
                 Err(FetchError::RangeRejected) => {
-                    return Err(CheckError { text: mf_i18n::t("The download failed. Try again"), retryable: true });
+                    return Err(CheckError {
+                        text: mf_i18n::t("The download failed. Try again"),
+                        retryable: true,
+                    });
                 }
                 Err(FetchError::Check(error)) => return Err(error),
             }
@@ -426,21 +535,33 @@ impl UpdateService {
         if !self.apply(Event::Downloaded) {
             return Ok(());
         }
-        let actual = sha256_file(part.clone()).await.map_err(|e| CheckError::fatal(e.to_string()))?;
+        let actual = sha256_file(part.clone())
+            .await
+            .map_err(|e| CheckError::fatal(e.to_string()))?;
         if actual != expected {
             let _ = tokio::fs::remove_file(&part).await;
-            tracing::warn!("update {}: sha256 {actual}, expected {expected}", offer.asset_name);
+            tracing::warn!(
+                "update {}: sha256 {actual}, expected {expected}",
+                offer.asset_name
+            );
             return Err(CheckError {
                 text: mf_i18n::t("The downloaded file is damaged (checksum mismatch). Try again"),
                 retryable: true,
             });
         }
-        tokio::fs::rename(&part, &file).await.map_err(|e| CheckError::fatal(e.to_string()))?;
+        tokio::fs::rename(&part, &file)
+            .await
+            .map_err(|e| CheckError::fatal(e.to_string()))?;
         self.apply(Event::Verified);
         Ok(())
     }
 
-    async fn fetch_to(&self, client: &reqwest::Client, offer: &Offer, part: &Path) -> Result<(), FetchError> {
+    async fn fetch_to(
+        &self,
+        client: &reqwest::Client,
+        offer: &Offer,
+        part: &Path,
+    ) -> Result<(), FetchError> {
         let mut have = tokio::fs::metadata(part).await.map_or(0, |m| m.len());
         if offer.size > 0 && have == offer.size {
             return Ok(());
@@ -453,14 +574,20 @@ impl UpdateService {
         if have > 0 {
             request = request.header(RANGE, format!("bytes={have}-"));
         }
-        let mut response = request.send().await.map_err(|e| FetchError::Check(CheckError::net(e)))?;
+        let mut response = request
+            .send()
+            .await
+            .map_err(|e| FetchError::Check(CheckError::net(e)))?;
         let status = response.status();
         if status == StatusCode::RANGE_NOT_SATISFIABLE {
             return Err(FetchError::RangeRejected);
         }
         if !status.is_success() {
             return Err(FetchError::Check(CheckError {
-                text: mf_i18n::tr!("The download failed: the server answered {0}", status.as_u16()),
+                text: mf_i18n::tr!(
+                    "The download failed: the server answered {0}",
+                    status.as_u16()
+                ),
                 retryable: true,
             }));
         }
@@ -488,12 +615,19 @@ impl UpdateService {
         let mut done = have;
         let mut last_emit = Instant::now() - PROGRESS_EVERY;
         meter.sample(0.0, done);
-        self.apply(Event::Progress { downloaded: done, total, speed: None, eta: None });
+        self.apply(Event::Progress {
+            downloaded: done,
+            total,
+            speed: None,
+            eta: None,
+        });
         loop {
             let chunk = match tokio::time::timeout(STALL_TIMEOUT, response.chunk()).await {
                 Err(_) => {
                     return Err(FetchError::Check(CheckError {
-                        text: mf_i18n::t("The download stalled. Check your connection and try again"),
+                        text: mf_i18n::t(
+                            "The download stalled. Check your connection and try again",
+                        ),
                         retryable: true,
                     }));
                 }
@@ -501,19 +635,33 @@ impl UpdateService {
                 Ok(Ok(None)) => break,
                 Ok(Ok(Some(chunk))) => chunk,
             };
-            file.write_all(&chunk).await.map_err(|e| FetchError::Check(CheckError::fatal(e.to_string())))?;
+            file.write_all(&chunk)
+                .await
+                .map_err(|e| FetchError::Check(CheckError::fatal(e.to_string())))?;
             done += chunk.len() as u64;
             let rate = meter.sample(started.elapsed().as_secs_f64(), done);
             if last_emit.elapsed() >= PROGRESS_EVERY {
                 last_emit = Instant::now();
                 let eta = progress::eta_secs(done, total, rate);
-                self.apply(Event::Progress { downloaded: done, total, speed: rate, eta });
+                self.apply(Event::Progress {
+                    downloaded: done,
+                    total,
+                    speed: rate,
+                    eta,
+                });
             }
         }
-        file.flush().await.map_err(|e| FetchError::Check(CheckError::fatal(e.to_string())))?;
+        file.flush()
+            .await
+            .map_err(|e| FetchError::Check(CheckError::fatal(e.to_string())))?;
         let _ = file.sync_all().await;
         drop(file);
-        self.apply(Event::Progress { downloaded: done, total, speed: meter.rate(), eta: Some(0) });
+        self.apply(Event::Progress {
+            downloaded: done,
+            total,
+            speed: meter.rate(),
+            eta: Some(0),
+        });
         if total > 0 && done != total {
             return Err(FetchError::Check(CheckError {
                 text: mf_i18n::t("The download was interrupted. Try again to continue"),
@@ -532,7 +680,11 @@ impl UpdateService {
         let checking = self.snapshot.borrow().state == UpdateState::Checking;
         if checking {
             self.snapshot.send_if_modified(|s| {
-                s.state = if s.offer.is_some() { UpdateState::Available } else { UpdateState::Idle };
+                s.state = if s.offer.is_some() {
+                    UpdateState::Available
+                } else {
+                    UpdateState::Idle
+                };
                 true
             });
         } else {
@@ -556,7 +708,9 @@ impl UpdateService {
     /// disk image opens and the app keeps running.
     pub fn install(self: &Arc<Self>) {
         let snapshot = self.snapshot();
-        let Some(offer) = snapshot.offer.clone().filter(|o| !o.asset_name.is_empty()) else { return };
+        let Some(offer) = snapshot.offer.clone().filter(|o| !o.asset_name.is_empty()) else {
+            return;
+        };
         if !self.apply(Event::InstallStarted) {
             return;
         }
@@ -606,13 +760,26 @@ impl UpdateService {
 
     /// Don't offer this version again (a newer one is offered as usual).
     pub fn skip(&self) {
-        let Some(version) = self.snapshot.borrow().offer.as_ref().map(|o| o.version.clone()) else { return };
-        self.settings.set(SettingKey::SkippedVersion, SettingValue::Str(version));
+        let Some(version) = self
+            .snapshot
+            .borrow()
+            .offer
+            .as_ref()
+            .map(|o| o.version.clone())
+        else {
+            return;
+        };
+        self.settings
+            .set(SettingKey::SkippedVersion, SettingValue::Str(version));
         self.apply(Event::Skipped);
     }
 
     pub fn release_url(&self) -> String {
-        self.snapshot.borrow().offer.as_ref().map_or_else(|| RELEASES_PAGE.to_owned(), |o| o.release_url.clone())
+        self.snapshot
+            .borrow()
+            .offer
+            .as_ref()
+            .map_or_else(|| RELEASES_PAGE.to_owned(), |o| o.release_url.clone())
     }
 
     pub fn open_release_page(&self) {
@@ -630,14 +797,20 @@ enum FetchError {
 /// Old downloads (other versions) and leftovers of earlier installs.
 async fn remove_stale(dir: &Path, keep: &str) {
     let keep_part = format!("{keep}.part");
-    let Ok(mut entries) = tokio::fs::read_dir(dir).await else { return };
+    let Ok(mut entries) = tokio::fs::read_dir(dir).await else {
+        return;
+    };
     while let Ok(Some(entry)) = entries.next_entry().await {
         let name = entry.file_name().to_string_lossy().into_owned();
         if name == keep || name == keep_part || name == "update.log" {
             continue;
         }
         let path = entry.path();
-        let _ = if path.is_dir() { tokio::fs::remove_dir_all(&path).await } else { tokio::fs::remove_file(&path).await };
+        let _ = if path.is_dir() {
+            tokio::fs::remove_dir_all(&path).await
+        } else {
+            tokio::fs::remove_file(&path).await
+        };
     }
 }
 
@@ -675,7 +848,11 @@ fn hex(bytes: &[u8]) -> String {
 /// "14:05" in local time.
 fn clock_time(unix: i64) -> String {
     jiff::Timestamp::from_second(unix)
-        .map(|t| t.to_zoned(jiff::tz::TimeZone::system()).strftime("%H:%M").to_string())
+        .map(|t| {
+            t.to_zoned(jiff::tz::TimeZone::system())
+                .strftime("%H:%M")
+                .to_string()
+        })
         .unwrap_or_default()
 }
 
@@ -712,14 +889,29 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("mf-update-stale-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("portable")).unwrap();
-        for name in ["Materialfy-0.1.0-Setup.exe", "Materialfy-0.2.0-Setup.exe", "Materialfy-0.2.0-Setup.exe.part", "update.log"] {
+        for name in [
+            "Materialfy-0.1.0-Setup.exe",
+            "Materialfy-0.2.0-Setup.exe",
+            "Materialfy-0.2.0-Setup.exe.part",
+            "update.log",
+        ] {
             std::fs::write(dir.join(name), b"x").unwrap();
         }
         remove_stale(&dir, "Materialfy-0.2.0-Setup.exe").await;
-        let mut left: Vec<String> =
-            std::fs::read_dir(&dir).unwrap().flatten().map(|e| e.file_name().to_string_lossy().into_owned()).collect();
+        let mut left: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
         left.sort();
-        assert_eq!(left, ["Materialfy-0.2.0-Setup.exe", "Materialfy-0.2.0-Setup.exe.part", "update.log"]);
+        assert_eq!(
+            left,
+            [
+                "Materialfy-0.2.0-Setup.exe",
+                "Materialfy-0.2.0-Setup.exe.part",
+                "update.log"
+            ]
+        );
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

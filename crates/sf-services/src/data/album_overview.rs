@@ -14,9 +14,11 @@ use super::persisted;
 use crate::catalog::AlbumPage;
 
 /// Хэши getAlbum (тот же документ, что queryAlbumTracks; свежий — из бандла веб-плеера).
-const ALBUM_HASHES: [&str; 1] = ["11c9cad9cb24c4f9e25ef9456f68621cfd6006a90f679e729c1d2f2fd70dfe16"];
+const ALBUM_HASHES: [&str; 1] =
+    ["11c9cad9cb24c4f9e25ef9456f68621cfd6006a90f679e729c1d2f2fd70dfe16"];
 /// Хэши getTrack.
-const TRACK_HASHES: [&str; 1] = ["a8ef9e9f02b836feb0da3003c31dbb30decc6f4b473ef89ca88c882386d668de"];
+const TRACK_HASHES: [&str; 1] =
+    ["a8ef9e9f02b836feb0da3003c31dbb30decc6f4b473ef89ca88c882386d668de"];
 /// Треков на страницу getAlbum (как у веб-плеера).
 const PAGE: u64 = 50;
 /// Сборники по тысяче треков — не дальше.
@@ -55,12 +57,24 @@ pub struct TrackOverview {
 }
 
 /// Альбом целиком: первая страница, затем остальные разом (у длинных альбомов).
-pub async fn album(http: &Http, session: &sf_player::Session, album_id: &str) -> anyhow::Result<AlbumOverview> {
+pub async fn album(
+    http: &Http,
+    session: &sf_player::Session,
+    album_id: &str,
+) -> anyhow::Result<AlbumOverview> {
     let first = album_page(http, session, album_id, 0).await?;
     let mut overview = parse_album(&first)?;
     let total = overview.total_tracks.min(PAGE * MAX_PAGES);
-    let offsets: Vec<u64> = (1..MAX_PAGES).map(|page| page * PAGE).take_while(|offset| *offset < total).collect();
-    let rest = futures::future::join_all(offsets.iter().map(|offset| album_page(http, session, album_id, *offset))).await;
+    let offsets: Vec<u64> = (1..MAX_PAGES)
+        .map(|page| page * PAGE)
+        .take_while(|offset| *offset < total)
+        .collect();
+    let rest = futures::future::join_all(
+        offsets
+            .iter()
+            .map(|offset| album_page(http, session, album_id, *offset)),
+    )
+    .await;
     for (offset, body) in offsets.iter().zip(rest) {
         // страница, что не пришла, обрывает список: дальше совпадения ищутся только по URI
         match body.and_then(|body| parse_album(&body)) {
@@ -74,14 +88,22 @@ pub async fn album(http: &Http, session: &sf_player::Session, album_id: &str) ->
     Ok(overview)
 }
 
-async fn album_page(http: &Http, session: &sf_player::Session, album_id: &str, offset: u64) -> anyhow::Result<Value> {
-    let variables =
-        json!({ "uri": format!("spotify:album:{album_id}"), "locale": "", "offset": offset, "limit": PAGE });
+async fn album_page(
+    http: &Http,
+    session: &sf_player::Session,
+    album_id: &str,
+    offset: u64,
+) -> anyhow::Result<Value> {
+    let variables = json!({ "uri": format!("spotify:album:{album_id}"), "locale": "", "offset": offset, "limit": PAGE });
     persisted::query(http, session, "getAlbum", &ALBUM_HASHES, &variables).await
 }
 
 /// Трек: прослушивания и сведения о его альбоме (без лейбла — его знает только getAlbum).
-pub async fn track(http: &Http, session: &sf_player::Session, track_id: &str) -> anyhow::Result<TrackOverview> {
+pub async fn track(
+    http: &Http,
+    session: &sf_player::Session,
+    track_id: &str,
+) -> anyhow::Result<TrackOverview> {
     let variables = json!({ "uri": format!("spotify:track:{track_id}") });
     let body = persisted::query(http, session, "getTrack", &TRACK_HASHES, &variables).await?;
     parse_track(&body)
@@ -98,11 +120,26 @@ fn play_count(value: Option<&Value>) -> i64 {
 
 /// Дата с её точностью, как release_date Web API: DAY → "2001-03-12", MONTH → "2001-03", YEAR → "2001".
 fn release_date(date: Option<&Value>) -> String {
-    let Some(date) = date else { return String::new() };
-    let iso = date.get("isoString").and_then(Value::as_str).unwrap_or_default();
-    let year = date.get("year").and_then(Value::as_i64).filter(|year| *year > 0);
-    let day = iso.get(..10).filter(|day| day.as_bytes().get(4) == Some(&b'-'));
-    match (date.get("precision").and_then(Value::as_str).unwrap_or("DAY"), day) {
+    let Some(date) = date else {
+        return String::new();
+    };
+    let iso = date
+        .get("isoString")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let year = date
+        .get("year")
+        .and_then(Value::as_i64)
+        .filter(|year| *year > 0);
+    let day = iso
+        .get(..10)
+        .filter(|day| day.as_bytes().get(4) == Some(&b'-'));
+    match (
+        date.get("precision")
+            .and_then(Value::as_str)
+            .unwrap_or("DAY"),
+        day,
+    ) {
         ("YEAR", Some(day)) => day.get(..4).unwrap_or(day).to_owned(),
         ("MONTH", Some(day)) => day.get(..7).unwrap_or(day).to_owned(),
         (_, Some(day)) => day.to_owned(),
@@ -111,7 +148,9 @@ fn release_date(date: Option<&Value>) -> String {
 }
 
 fn copyrights(copyright: Option<&Value>) -> Vec<String> {
-    let items = copyright.and_then(|copyright| copyright.get("items")).and_then(Value::as_array);
+    let items = copyright
+        .and_then(|copyright| copyright.get("items"))
+        .and_then(Value::as_array);
     map::copyright_lines(items.into_iter().flatten().map(|item| {
         let field = |name: &str| item.get(name).and_then(Value::as_str).unwrap_or_default();
         (field("type"), field("text"))
@@ -119,7 +158,12 @@ fn copyrights(copyright: Option<&Value>) -> Vec<String> {
 }
 
 fn text(value: &Value, pointer: &str) -> String {
-    value.pointer(pointer).and_then(Value::as_str).unwrap_or_default().trim().to_owned()
+    value
+        .pointer(pointer)
+        .and_then(Value::as_str)
+        .unwrap_or_default()
+        .trim()
+        .to_owned()
 }
 
 fn number(value: &Value, key: &str) -> i64 {
@@ -127,21 +171,35 @@ fn number(value: &Value, key: &str) -> i64 {
 }
 
 fn parse_album(body: &Value) -> anyhow::Result<AlbumOverview> {
-    let Some(album) = body.pointer("/data/albumUnion").filter(|album| album.is_object()) else {
-        bail!("no data.albumUnion: {}", body.get("errors").unwrap_or(&Value::Null));
+    let Some(album) = body
+        .pointer("/data/albumUnion")
+        .filter(|album| album.is_object())
+    else {
+        bail!(
+            "no data.albumUnion: {}",
+            body.get("errors").unwrap_or(&Value::Null)
+        );
     };
-    let kind = album.get("__typename").and_then(Value::as_str).unwrap_or("Album");
+    let kind = album
+        .get("__typename")
+        .and_then(Value::as_str)
+        .unwrap_or("Album");
     if kind != "Album" {
         return Err(anyhow!("albumUnion: {kind}"));
     }
     let tracks = album.get("tracksV2").or_else(|| album.get("tracks"));
-    let items = tracks.and_then(|tracks| tracks.get("items")).and_then(Value::as_array);
+    let items = tracks
+        .and_then(|tracks| tracks.get("items"))
+        .and_then(Value::as_array);
     Ok(AlbumOverview {
         label: text(album, "/label"),
         copyrights: copyrights(album.get("copyright")),
         release_date: release_date(album.get("date")),
         courtesy_line: text(album, "/courtesyLine"),
-        total_tracks: tracks.and_then(|tracks| tracks.get("totalCount")).and_then(Value::as_u64).unwrap_or(0),
+        total_tracks: tracks
+            .and_then(|tracks| tracks.get("totalCount"))
+            .and_then(Value::as_u64)
+            .unwrap_or(0),
         tracks: items
             .into_iter()
             .flatten()
@@ -157,10 +215,19 @@ fn parse_album(body: &Value) -> anyhow::Result<AlbumOverview> {
 }
 
 fn parse_track(body: &Value) -> anyhow::Result<TrackOverview> {
-    let Some(track) = body.pointer("/data/trackUnion").filter(|track| track.is_object()) else {
-        bail!("no data.trackUnion: {}", body.get("errors").unwrap_or(&Value::Null));
+    let Some(track) = body
+        .pointer("/data/trackUnion")
+        .filter(|track| track.is_object())
+    else {
+        bail!(
+            "no data.trackUnion: {}",
+            body.get("errors").unwrap_or(&Value::Null)
+        );
     };
-    let kind = track.get("__typename").and_then(Value::as_str).unwrap_or("Track");
+    let kind = track
+        .get("__typename")
+        .and_then(Value::as_str)
+        .unwrap_or("Track");
     if kind != "Track" {
         return Err(anyhow!("trackUnion: {kind}"));
     }
@@ -178,8 +245,11 @@ fn parse_track(body: &Value) -> anyhow::Result<TrackOverview> {
 /// по длине — и по месту, для подменённых треков), лейбл и дата — если их нет или шлюз знает точнее,
 /// правообладатели — как их показывает Spotify.
 pub fn apply(page: &mut AlbumPage, overview: &AlbumOverview) {
-    let by_uri: HashMap<&str, i64> =
-        overview.tracks.iter().map(|track| (track.uri.as_str(), track.play_count)).collect();
+    let by_uri: HashMap<&str, i64> = overview
+        .tracks
+        .iter()
+        .map(|track| (track.uri.as_str(), track.play_count))
+        .collect();
     let in_order = overview.tracks.len() == page.tracks.len();
     for (index, track) in page.tracks.iter_mut().enumerate() {
         let uri = track.play_uri();
@@ -230,14 +300,21 @@ mod tests {
     }
 
     fn row(id: &str) -> TrackItem {
-        TrackItem { track_id: id.into(), uri: format!("spotify:track:{id}"), ..Default::default() }
+        TrackItem {
+            track_id: id.into(),
+            uri: format!("spotify:track:{id}"),
+            ..Default::default()
+        }
     }
 
     #[test]
     fn get_album_reads_plays_label_copyrights_and_date() {
         let overview = parse_album(&fixture()).unwrap();
         assert_eq!(overview.label, "Daft Life Ltd./ADA France");
-        assert_eq!(overview.copyrights, ["© 2001 Daft Life Limited", "℗ 2001 Daft Life Limited"]);
+        assert_eq!(
+            overview.copyrights,
+            ["© 2001 Daft Life Limited", "℗ 2001 Daft Life Limited"]
+        );
         assert_eq!(overview.release_date, "2001-03-12");
         assert_eq!(overview.courtesy_line, "");
         assert_eq!(overview.total_tracks, 14);
@@ -251,7 +328,9 @@ mod tests {
 
     #[test]
     fn dates_keep_their_precision() {
-        let date = |iso: &str, precision: &str| release_date(Some(&json!({ "isoString": iso, "precision": precision })));
+        let date = |iso: &str, precision: &str| {
+            release_date(Some(&json!({ "isoString": iso, "precision": precision })))
+        };
         assert_eq!(date("2013-05-20T00:00:00Z", "DAY"), "2013-05-20");
         assert_eq!(date("1975-04-01T00:00:00Z", "MONTH"), "1975-04");
         assert_eq!(date("1969-01-01T00:00:00Z", "YEAR"), "1969");
@@ -269,7 +348,10 @@ mod tests {
 
     #[test]
     fn a_missing_album_is_an_error() {
-        assert!(parse_album(&json!({ "data": { "albumUnion": { "__typename": "NotFound" } } })).is_err());
+        assert!(
+            parse_album(&json!({ "data": { "albumUnion": { "__typename": "NotFound" } } }))
+                .is_err()
+        );
         assert!(parse_album(&json!({ "errors": [{ "message": "Unauthorized" }] })).is_err());
     }
 
@@ -277,8 +359,16 @@ mod tests {
     fn the_overview_fills_the_session_page() {
         let overview = parse_album(&fixture()).unwrap();
         let mut page = AlbumPage {
-            info: AlbumInfo { release_date: "2001".into(), copyright: "own".into(), ..Default::default() },
-            tracks: vec![row("2VEZx7NWsZ1D0eJ4uv5Fym"), row("nothing"), row("0DiWol3AO6WpXZgp0goxAV")],
+            info: AlbumInfo {
+                release_date: "2001".into(),
+                copyright: "own".into(),
+                ..Default::default()
+            },
+            tracks: vec![
+                row("2VEZx7NWsZ1D0eJ4uv5Fym"),
+                row("nothing"),
+                row("0DiWol3AO6WpXZgp0goxAV"),
+            ],
         };
         apply(&mut page, &overview);
         assert!(page.tracks[0].play_count > 0, "matched by URI out of order");
@@ -286,13 +376,22 @@ mod tests {
         // три строки против трёх треков шлюза — неизвестный по URI берётся по месту
         assert_eq!(page.tracks[1].play_count, overview.tracks[1].play_count);
         assert_eq!(page.info.label, "Daft Life Ltd./ADA France");
-        assert_eq!(page.info.release_date, "2001-03-12", "the more precise date wins");
+        assert_eq!(
+            page.info.release_date, "2001-03-12",
+            "the more precise date wins"
+        );
         assert_eq!(page.info.copyrights.len(), 2);
         assert_eq!(page.info.copyright, "own", "the session's copyright stays");
-        assert_eq!(plays_on(&page, "0DiWol3AO6WpXZgp0goxAV"), page.tracks[2].play_count);
+        assert_eq!(
+            plays_on(&page, "0DiWol3AO6WpXZgp0goxAV"),
+            page.tracks[2].play_count
+        );
 
         // списки разной длины — только по URI
-        let mut short = AlbumPage { tracks: vec![row("nothing"), row("0DiWol3AO6WpXZgp0goxAV")], ..Default::default() };
+        let mut short = AlbumPage {
+            tracks: vec![row("nothing"), row("0DiWol3AO6WpXZgp0goxAV")],
+            ..Default::default()
+        };
         apply(&mut short, &overview);
         assert_eq!(short.tracks[0].play_count, 0);
         assert!(short.tracks[1].play_count > 0);
@@ -314,7 +413,13 @@ mod tests {
         assert_eq!(track.play_count, 1_189_454_447);
         assert_eq!(track.track_number, 1);
         assert_eq!(track.release_date, "1987-11-12");
-        assert_eq!(track.copyrights, ["℗ 1987 Sony Music Entertainment UK Limited"]);
-        assert!(parse_track(&json!({ "data": { "trackUnion": { "__typename": "NotFound" } } })).is_err());
+        assert_eq!(
+            track.copyrights,
+            ["℗ 1987 Sony Music Entertainment UK Limited"]
+        );
+        assert!(
+            parse_track(&json!({ "data": { "trackUnion": { "__typename": "NotFound" } } }))
+                .is_err()
+        );
     }
 }
