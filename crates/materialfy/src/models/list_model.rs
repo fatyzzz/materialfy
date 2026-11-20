@@ -150,7 +150,7 @@ pub const TRACK_KEYS: &[&str] = &[
 ];
 pub const PLAYLIST_KEYS: &[&str] = &[
     "playlistId", "uri", "title", "description", "trackCount", "cover", "owner", "ownerId", "canEdit", "collaborative",
-    "public", "snapshotId", "pinned",
+    "blend", "public", "snapshotId", "pinned",
 ];
 pub const ALBUM_KEYS: &[&str] = &[
     "albumId", "uri", "title", "version", "artists", "artistRefs", "year", "kind", "trackCount", "cover", "coverLarge",

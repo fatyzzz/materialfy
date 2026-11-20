@@ -103,6 +103,7 @@ Page {
     }
     property var _menuEntry: null
     function showMenu(e, point) {
+        if ((e.kind ?? "") === "upcoming") return   // анонс: ни играть, ни закреплять нечего
         _menuEntry = e
         const k = e.kind ?? ""
         const items = [{ id: "play", text: I18n.t("Play"), icon: "play_arrow" }]
@@ -452,8 +453,8 @@ Page {
                         shape: e.kind === "radio" ? "flower8" : e.kind === "dj" ? "cookie12" : e.kind === "artist" ? "circle" : "softSquare"
                         badge: e.kind === "radio" ? I18n.t("RADIO") : ""
                         placeholderIcon: ({ playlist: "queue_music", album: "album", artist: "person", show: "podcasts", radio: "radio", dj: "graphic_eq" })[e.kind] ?? "album"
-                        showPlay: true
-                        playing: page.isPlaying(e)
+                        showPlay: e.kind !== "upcoming"   // анонс ещё не вышел: играть нечего
+                        playing: e.kind !== "upcoming" && page.isPlaying(e)
                         onClicked: page.openEntry(e)
                         onPlayClicked: page.playEntry(e)
                         onMenuRequested: p => page.showMenu(e, p)

@@ -3,7 +3,9 @@
 //! похожие исполнители, биография и широкая шапка. Без квоты Web API. Проверено вживую (2026-10):
 //! data.artistUnion { stats { followers, monthlyListeners }, saved, relatedContent.relatedArtists,
 //! profile.biography.text, headerImage.data.sources[{url, maxWidth}], visuals.avatarImage,
-//! discography.topTracks.items[{ track { uri, playcount ("984913127") } }] }.
+//! discography.topTracks.items[{ track { uri, playcount ("984913127") } }],
+//! preRelease { uri: "spotify:prerelease:…", releaseDate.isoString, preReleaseContent { name, type, coverArt } } }
+//! (preRelease приходит только с includePrerelease: true; у кого ничего не анонсировано — null).
 use anyhow::{anyhow, bail};
 use serde_json::{Value, json};
 use sf_api::models::{Artist, Image};
@@ -31,10 +33,28 @@ pub struct ArtistOverview {
     pub header_image: Option<String>,
     /// популярные треки: URI → прослушивания (> 0)
     pub top_plays: Vec<(String, i64)>,
+    /// анонсированный релиз (обратный отсчёт в телефоне)
+    pub pre_release: Option<PreRelease>,
+}
+
+/// Анонс: альбом или сингл, который ещё не вышел.
+#[derive(Clone, Debug, Default, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase", default)]
+pub struct PreRelease {
+    /// spotify:prerelease:… (не альбом: до выхода его не открыть и не сыграть)
+    pub uri: String,
+    pub name: String,
+    /// ALBUM | SINGLE | EP
+    pub kind: String,
+    pub cover: String,
+    /// момент выхода, ISO 8601 UTC
+    pub release_at: String,
+    pub artist_id: String,
+    pub artist: String,
 }
 
 pub async fn artist(http: &Http, session: &sf_player::Session, artist_id: &str) -> anyhow::Result<ArtistOverview> {
-    let variables = json!({ "uri": format!("spotify:artist:{artist_id}"), "locale": "", "includePrerelease": false });
+    let variables = json!({ "uri": format!("spotify:artist:{artist_id}"), "locale": "", "includePrerelease": true });
     let body = persisted::query(http, session, "queryArtistOverview", &HASHES, &variables).await?;
     parse(&body)
 }
@@ -65,6 +85,26 @@ fn parse(body: &Value) -> anyhow::Result<ArtistOverview> {
         biography: util::strip_html(&text(artist, "/profile/biography/text")).trim().to_owned(),
         header_image: header(artist),
         top_plays: top_plays(artist),
+        pre_release: pre_release(artist),
+    })
+}
+
+fn pre_release(artist: &Value) -> Option<PreRelease> {
+    let pre = artist.get("preRelease").filter(|pre| pre.is_object())?;
+    let content = pre.get("preReleaseContent")?;
+    let release_at = text(pre, "/releaseDate/isoString");
+    let name = text(content, "/name");
+    if name.is_empty() || release_at.is_empty() {
+        return None;
+    }
+    Some(PreRelease {
+        uri: text(pre, "/uri"),
+        name,
+        kind: text(content, "/type"),
+        cover: map::cover(&images(content.get("coverArt")), 300),
+        release_at,
+        artist_id: id_of(&text(artist, "/uri")),
+        artist: text(artist, "/profile/name"),
     })
 }
 
@@ -180,7 +220,14 @@ mod tests {
                 { "id": "r1", "uri": "spotify:artist:r1", "profile": { "name": "Franz Ferdinand" },
                   "visuals": { "avatarImage": { "sources": [{ "height": 640, "width": 640, "url": "ff" }] } } },
                 { "id": "x", "uri": "", "profile": { "name": "Broken" } }
-            ] } }
+            ] } },
+            "preRelease": {
+                "preReleaseContent": { "name": "Castelos & Ruínas (Remix 10 Anos)", "type": "ALBUM", "coverArt": { "sources": [
+                    { "height": 64, "width": 64, "url": "c64" }, { "height": 300, "width": 300, "url": "c300" }, { "height": 640, "width": 640, "url": "c640" }
+                ] } },
+                "releaseDate": { "isoString": "2026-11-17T03:00:00Z" },
+                "uri": "spotify:prerelease:43AOJotQ2jR7y76VSqwiXH"
+            }
         } } })
     }
 
@@ -204,6 +251,10 @@ mod tests {
             ],
             "a track without plays is passed over"
         );
+        let pre = overview.pre_release.unwrap();
+        assert_eq!((pre.name.as_str(), pre.kind.as_str(), pre.release_at.as_str()), ("Castelos & Ruínas (Remix 10 Anos)", "ALBUM", "2026-11-17T03:00:00Z"));
+        assert_eq!((pre.artist_id.as_str(), pre.artist.as_str(), pre.uri.as_str()), ("a1", "Muse", "spotify:prerelease:43AOJotQ2jR7y76VSqwiXH"));
+        assert!(!pre.cover.is_empty());
     }
 
     #[test]
@@ -213,6 +264,7 @@ mod tests {
         // пустой профиль — не ошибка: страница возьмёт то, что есть
         let bare = parse(&json!({ "data": { "artistUnion": { "__typename": "Artist" } } })).unwrap();
         assert_eq!((bare.followers, bare.followed, bare.header_image), (None, None, None));
+        assert_eq!(bare.pre_release, None);
     }
 
     #[test]

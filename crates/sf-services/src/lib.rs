@@ -209,7 +209,10 @@ impl Services {
     /// При выходе (из GUI-потока после exec): сохранить сессию и историю, остановить движок и медиаклавиши.
     /// Блокирует ≤ 2 с.
     pub fn shutdown(&self) {
-        self.player.shutdown();
+        // последний трек сессии: его конец приходит только отсюда
+        if let Some(ended) = self.player.shutdown().filter(|ended| ended.local) {
+            self.history.note_played(ended.track, ended.context, ended.played);
+        }
         self.history.flush();
         if let Some(stop) = lock(&self.media).take() {
             stop.stop(Duration::from_millis(500));
