@@ -87,6 +87,11 @@ mkdir -p "$APPDIR/usr/plugins"
 for d in iconengines multimedia wayland-graphics-integration-client wayland-decoration-client wayland-shell-integration; do
     [ -d "$QTDIR/plugins/$d" ] && cp -r "$QTDIR/plugins/$d" "$APPDIR/usr/plugins/"
 done
+# Canvas video: the FFmpeg backend only (GStreamer would need the system's gst libraries); the plugin dlopens
+# FFmpeg, so linuxdeploy never sees those libraries as dependencies
+rm -f "$APPDIR"/usr/plugins/multimedia/libgstreamermediaplugin.so
+mkdir -p "$APPDIR/usr/lib"
+cp -P "$QTDIR"/lib/lib{avcodec,avformat,avutil,swresample,swscale}.so* "$APPDIR/usr/lib/"
 
 "linuxdeploy-$ARCH.AppImage" --appdir "$APPDIR" \
     --executable "$APPDIR/usr/bin/materialfy" \
