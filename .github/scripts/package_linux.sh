@@ -93,7 +93,8 @@ rm -f "$QTDIR"/plugins/multimedia/libgstreamermediaplugin.so "$APPDIR"/usr/plugi
 # linuxdeploy does not walk usr/plugins, so the FFmpeg plugin's libraries (Qt's FFmpeg and its X11 bits) go in by hand
 media_libs=()
 for lib in "$QTDIR"/lib/lib{avcodec,avformat,avutil,swresample,swscale}.so.[0-9]*; do
-    [ -L "$lib" ] || media_libs+=(--library "$lib")
+    # the soname link (libavcodec.so.63): that is the name the plugin asks the loader for
+    [[ "$lib" =~ \.so\.[0-9]+$ ]] && media_libs+=(--library "$lib")
 done
 for soname in libXrandr.so.2 libXext.so.6; do
     lib="$(ldconfig -p | awk -v n="$soname" '$1 == n { print $NF; exit }')"
