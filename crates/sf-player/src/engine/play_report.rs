@@ -145,7 +145,8 @@ async fn played_file(session: &Session, uri: &str, bitrate_kbps: u16) -> Option<
         96 => [F::OGG_VORBIS_96, F::MP3_96, F::OGG_VORBIS_160, F::MP3_160, F::MP3_256, F::OGG_VORBIS_320, F::MP3_320],
         160 => [F::OGG_VORBIS_160, F::MP3_160, F::OGG_VORBIS_96, F::MP3_96, F::MP3_256, F::OGG_VORBIS_320, F::MP3_320],
         320 => [F::OGG_VORBIS_320, F::MP3_320, F::MP3_256, F::OGG_VORBIS_160, F::MP3_160, F::OGG_VORBIS_96, F::MP3_96],
-        _ => return None,
+        // после остановки или перехвата другим устройством кодек уже пуст: умолчание librespot (160)
+        _ => [F::OGG_VORBIS_160, F::MP3_160, F::OGG_VORBIS_96, F::MP3_96, F::MP3_256, F::OGG_VORBIS_320, F::MP3_320],
     };
     let uri = librespot_core::SpotifyUri::from_uri(uri).ok()?;
     let item = AudioItem::get_file(session, uri.clone()).await.ok()?;
@@ -475,7 +476,10 @@ pub async fn report(session: &Session, http: &reqwest::Client, play: &Play) -> a
     if !errors.is_empty() {
         anyhow::bail!("rejected (index, transient, reason): {errors:?}");
     }
-    post(session, http, HISTORY_ENDPOINT, play_history_revision(&play.uri, play.started_ms)).await?;
+    // в «Недавно прослушанное» — не пропуски за пару секунд (порог как у журнала: 30 с или до конца)
+    if play.ms_played >= 30_000 || play.reason_end == "trackdone" {
+        post(session, http, HISTORY_ENDPOINT, play_history_revision(&play.uri, play.started_ms)).await?;
+    }
     Ok(())
 }
 

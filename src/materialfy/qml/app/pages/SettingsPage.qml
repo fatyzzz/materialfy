@@ -1521,7 +1521,7 @@ Page {
         }
         SettingRow {
             title: I18n.t("Report plays to Spotify")
-            description: I18n.t("Songs played on this computer count in Recently played, your stats and Wrapped, like in the official app. Sends Spotify one event per song")
+            description: I18n.t("Songs played on this computer count in Recently played, your stats and Wrapped, like in the official app. Sends Spotify one event per song. Unofficial: Spotify may ignore it")
             Switch { checked: Settings.reportPlays; onToggled: c => Settings.reportPlays = c }
         }
         SettingRow {
