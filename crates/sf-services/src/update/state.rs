@@ -40,7 +40,10 @@ impl UpdateState {
 
     /// A download, verification or install is running — a new check must not interrupt it.
     pub fn busy(self) -> bool {
-        matches!(self, UpdateState::Downloading | UpdateState::Verifying | UpdateState::Installing)
+        matches!(
+            self,
+            UpdateState::Downloading | UpdateState::Verifying | UpdateState::Installing
+        )
     }
 }
 
@@ -96,18 +99,38 @@ pub struct UpdateSnapshot {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Event {
-    CheckStarted { manual: bool },
+    CheckStarted {
+        manual: bool,
+    },
     /// None — up to date
-    CheckFinished { offer: Option<Offer>, skipped: bool, at: i64 },
-    DownloadStarted { resumed_from: u64, total: u64 },
-    Progress { downloaded: u64, total: u64, speed: Option<f64>, eta: Option<u64> },
+    CheckFinished {
+        offer: Option<Offer>,
+        skipped: bool,
+        at: i64,
+    },
+    DownloadStarted {
+        resumed_from: u64,
+        total: u64,
+    },
+    Progress {
+        downloaded: u64,
+        total: u64,
+        speed: Option<f64>,
+        eta: Option<u64>,
+    },
     Downloaded,
     Verified,
     Cancelled,
     InstallStarted,
     /// installer opened, the app keeps running (macOS dmg)
-    InstallHandedOff { note: String },
-    Failed { stage: Stage, text: String, retryable: bool },
+    InstallHandedOff {
+        note: String,
+    },
+    Failed {
+        stage: Stage,
+        text: String,
+        retryable: bool,
+    },
     /// the user skipped the offered version
     Skipped,
 }
@@ -139,8 +162,13 @@ pub fn reduce(s: &mut UpdateSnapshot, event: Event) -> bool {
             s.skipped = offer.is_some() && skipped;
             s.offer = offer;
         }
-        Event::DownloadStarted { resumed_from, total } => {
-            if !matches!(s.state, Available | Error) || s.offer.as_ref().is_none_or(|o| o.asset_url.is_empty()) {
+        Event::DownloadStarted {
+            resumed_from,
+            total,
+        } => {
+            if !matches!(s.state, Available | Error)
+                || s.offer.as_ref().is_none_or(|o| o.asset_url.is_empty())
+            {
                 return false;
             }
             s.state = Downloading;
@@ -151,7 +179,12 @@ pub fn reduce(s: &mut UpdateSnapshot, event: Event) -> bool {
             s.error_text.clear();
             s.retryable = false;
         }
-        Event::Progress { downloaded, total, speed, eta } => {
+        Event::Progress {
+            downloaded,
+            total,
+            speed,
+            eta,
+        } => {
             if s.state != Downloading {
                 return false;
             }
@@ -197,7 +230,11 @@ pub fn reduce(s: &mut UpdateSnapshot, event: Event) -> bool {
             s.state = ReadyToInstall;
             s.note = note;
         }
-        Event::Failed { stage, text, retryable } => {
+        Event::Failed {
+            stage,
+            text,
+            retryable,
+        } => {
             s.state = Error;
             s.error_stage = stage;
             s.error_text = text;
@@ -236,7 +273,14 @@ mod tests {
     fn checked(version: Option<&str>) -> UpdateSnapshot {
         let mut s = UpdateSnapshot::default();
         assert!(reduce(&mut s, Event::CheckStarted { manual: false }));
-        assert!(reduce(&mut s, Event::CheckFinished { offer: version.map(offer), skipped: false, at: 5 }));
+        assert!(reduce(
+            &mut s,
+            Event::CheckFinished {
+                offer: version.map(offer),
+                skipped: false,
+                at: 5
+            }
+        ));
         s
     }
 
@@ -250,20 +294,49 @@ mod tests {
         assert_eq!(s.offer.as_ref().unwrap().version, "0.2.0");
         // a finished check outside Checking is ignored
         let mut s = checked(None);
-        assert!(!reduce(&mut s, Event::CheckFinished { offer: Some(offer("9.0.0")), skipped: false, at: 6 }));
+        assert!(!reduce(
+            &mut s,
+            Event::CheckFinished {
+                offer: Some(offer("9.0.0")),
+                skipped: false,
+                at: 6
+            }
+        ));
         assert_eq!(s.state, UpdateState::UpToDate);
     }
 
     #[test]
     fn full_download_path() {
         let mut s = checked(Some("0.2.0"));
-        assert!(reduce(&mut s, Event::DownloadStarted { resumed_from: 0, total: 100 }));
+        assert!(reduce(
+            &mut s,
+            Event::DownloadStarted {
+                resumed_from: 0,
+                total: 100
+            }
+        ));
         assert_eq!(s.state, UpdateState::Downloading);
         // a check can't interrupt a download
         assert!(!reduce(&mut s, Event::CheckStarted { manual: true }));
-        assert!(reduce(&mut s, Event::Progress { downloaded: 40, total: 100, speed: Some(10.0), eta: Some(6) }));
+        assert!(reduce(
+            &mut s,
+            Event::Progress {
+                downloaded: 40,
+                total: 100,
+                speed: Some(10.0),
+                eta: Some(6)
+            }
+        ));
         assert_eq!((s.downloaded, s.speed, s.eta), (40, 10.0, 6));
-        assert!(reduce(&mut s, Event::Progress { downloaded: 50, total: 100, speed: None, eta: None }));
+        assert!(reduce(
+            &mut s,
+            Event::Progress {
+                downloaded: 50,
+                total: 100,
+                speed: None,
+                eta: None
+            }
+        ));
         assert_eq!((s.speed, s.eta), (0.0, -1));
         assert!(reduce(&mut s, Event::Downloaded));
         assert_eq!(s.state, UpdateState::Verifying);
@@ -275,46 +348,134 @@ mod tests {
         assert!(!reduce(&mut s, Event::CheckStarted { manual: false }));
         assert!(reduce(&mut s, Event::InstallStarted));
         assert_eq!(s.state, UpdateState::Installing);
-        assert!(reduce(&mut s, Event::InstallHandedOff { note: "open".into() }));
-        assert_eq!((s.state, s.note.as_str()), (UpdateState::ReadyToInstall, "open"));
+        assert!(reduce(
+            &mut s,
+            Event::InstallHandedOff {
+                note: "open".into()
+            }
+        ));
+        assert_eq!(
+            (s.state, s.note.as_str()),
+            (UpdateState::ReadyToInstall, "open")
+        );
     }
 
     #[test]
     fn cancel_and_resume() {
         let mut s = checked(Some("0.2.0"));
         assert!(!reduce(&mut s, Event::Cancelled));
-        assert!(reduce(&mut s, Event::DownloadStarted { resumed_from: 0, total: 100 }));
-        assert!(reduce(&mut s, Event::Progress { downloaded: 30, total: 100, speed: Some(1.0), eta: Some(70) }));
+        assert!(reduce(
+            &mut s,
+            Event::DownloadStarted {
+                resumed_from: 0,
+                total: 100
+            }
+        ));
+        assert!(reduce(
+            &mut s,
+            Event::Progress {
+                downloaded: 30,
+                total: 100,
+                speed: Some(1.0),
+                eta: Some(70)
+            }
+        ));
         assert!(reduce(&mut s, Event::Cancelled));
         assert_eq!(s.state, UpdateState::Available);
         assert_eq!(s.downloaded, 30, "the partial size is kept to show resume");
-        assert!(!reduce(&mut s, Event::Progress { downloaded: 31, total: 100, speed: None, eta: None }));
-        assert!(reduce(&mut s, Event::DownloadStarted { resumed_from: 30, total: 100 }));
+        assert!(!reduce(
+            &mut s,
+            Event::Progress {
+                downloaded: 31,
+                total: 100,
+                speed: None,
+                eta: None
+            }
+        ));
+        assert!(reduce(
+            &mut s,
+            Event::DownloadStarted {
+                resumed_from: 30,
+                total: 100
+            }
+        ));
         assert_eq!(s.downloaded, 30);
         // the same version found again keeps the progress, a new one resets it
         let mut s2 = s.clone();
         s2.state = UpdateState::Available;
         assert!(reduce(&mut s2, Event::CheckStarted { manual: true }));
-        assert!(reduce(&mut s2, Event::CheckFinished { offer: Some(offer("0.2.0")), skipped: false, at: 9 }));
+        assert!(reduce(
+            &mut s2,
+            Event::CheckFinished {
+                offer: Some(offer("0.2.0")),
+                skipped: false,
+                at: 9
+            }
+        ));
         assert_eq!(s2.downloaded, 30);
         assert!(reduce(&mut s2, Event::CheckStarted { manual: true }));
-        assert!(reduce(&mut s2, Event::CheckFinished { offer: Some(offer("0.3.0")), skipped: false, at: 10 }));
+        assert!(reduce(
+            &mut s2,
+            Event::CheckFinished {
+                offer: Some(offer("0.3.0")),
+                skipped: false,
+                at: 10
+            }
+        ));
         assert_eq!(s2.downloaded, 0);
     }
 
     #[test]
     fn errors_and_retry() {
         let mut s = checked(Some("0.2.0"));
-        assert!(reduce(&mut s, Event::DownloadStarted { resumed_from: 0, total: 100 }));
-        assert!(reduce(&mut s, Event::Failed { stage: Stage::Download, text: "net".into(), retryable: true }));
-        assert_eq!((s.state, s.error_stage, s.retryable), (UpdateState::Error, Stage::Download, true));
-        assert!(s.offer.is_some(), "a download error keeps the offer for Retry");
-        assert!(reduce(&mut s, Event::DownloadStarted { resumed_from: 10, total: 100 }));
+        assert!(reduce(
+            &mut s,
+            Event::DownloadStarted {
+                resumed_from: 0,
+                total: 100
+            }
+        ));
+        assert!(reduce(
+            &mut s,
+            Event::Failed {
+                stage: Stage::Download,
+                text: "net".into(),
+                retryable: true
+            }
+        ));
+        assert_eq!(
+            (s.state, s.error_stage, s.retryable),
+            (UpdateState::Error, Stage::Download, true)
+        );
+        assert!(
+            s.offer.is_some(),
+            "a download error keeps the offer for Retry"
+        );
+        assert!(reduce(
+            &mut s,
+            Event::DownloadStarted {
+                resumed_from: 10,
+                total: 100
+            }
+        ));
         assert!(s.error_text.is_empty());
-        assert!(reduce(&mut s, Event::Failed { stage: Stage::Check, text: "rate".into(), retryable: true }));
+        assert!(reduce(
+            &mut s,
+            Event::Failed {
+                stage: Stage::Check,
+                text: "rate".into(),
+                retryable: true
+            }
+        ));
         assert!(s.offer.is_none());
         // without an offer there is nothing to download
-        assert!(!reduce(&mut s, Event::DownloadStarted { resumed_from: 0, total: 1 }));
+        assert!(!reduce(
+            &mut s,
+            Event::DownloadStarted {
+                resumed_from: 0,
+                total: 1
+            }
+        ));
         assert!(reduce(&mut s, Event::CheckStarted { manual: true }));
         assert!(s.manual && s.error_text.is_empty());
     }
@@ -323,10 +484,26 @@ mod tests {
     fn manual_offer_cant_download_and_skip() {
         let mut s = UpdateSnapshot::default();
         reduce(&mut s, Event::CheckStarted { manual: false });
-        let manual = Offer { version: "0.2.0".into(), ..Offer::default() };
-        reduce(&mut s, Event::CheckFinished { offer: Some(manual), skipped: true, at: 1 });
+        let manual = Offer {
+            version: "0.2.0".into(),
+            ..Offer::default()
+        };
+        reduce(
+            &mut s,
+            Event::CheckFinished {
+                offer: Some(manual),
+                skipped: true,
+                at: 1,
+            },
+        );
         assert!(s.skipped);
-        assert!(!reduce(&mut s, Event::DownloadStarted { resumed_from: 0, total: 1 }));
+        assert!(!reduce(
+            &mut s,
+            Event::DownloadStarted {
+                resumed_from: 0,
+                total: 1
+            }
+        ));
         let mut s = checked(Some("0.2.0"));
         assert!(!s.skipped);
         assert!(reduce(&mut s, Event::Skipped));

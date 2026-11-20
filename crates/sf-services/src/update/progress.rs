@@ -56,7 +56,11 @@ pub fn eta_secs(done: u64, total: u64, rate: Option<f64>) -> Option<u64> {
 
 /// 0..1; 0 when the size is unknown.
 pub fn fraction(done: u64, total: u64) -> f64 {
-    if total == 0 { 0.0 } else { (done as f64 / total as f64).clamp(0.0, 1.0) }
+    if total == 0 {
+        0.0
+    } else {
+        (done as f64 / total as f64).clamp(0.0, 1.0)
+    }
 }
 
 #[cfg(test)]
@@ -84,7 +88,10 @@ mod tests {
         meter.sample(1.0, 1_000_000);
         // one 0.1 s burst at 10 MB/s barely moves the rate
         let after_spike = meter.sample(1.1, 2_000_000).unwrap();
-        assert!(after_spike < 6_000_000.0 && after_spike > 1_000_000.0, "{after_spike}");
+        assert!(
+            after_spike < 6_000_000.0 && after_spike > 1_000_000.0,
+            "{after_spike}"
+        );
         // a stalled connection drives it towards zero within seconds
         let mut t = 1.1;
         while t < 12.0 {

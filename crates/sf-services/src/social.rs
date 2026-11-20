@@ -154,7 +154,11 @@ impl SocialService {
     pub fn refresh_friends(&self, force: bool) {
         {
             let mut state = lock(&self.state);
-            if !force && state.friends_at.is_some_and(|at| at.elapsed() < FRIENDS_FRESH) {
+            if !force
+                && state
+                    .friends_at
+                    .is_some_and(|at| at.elapsed() < FRIENDS_FRESH)
+            {
                 return;
             }
             state.friends_at = Some(Instant::now());
@@ -238,13 +242,18 @@ impl SocialService {
 
     /// Leave the Jam; the host ends it for everyone.
     pub fn leave_jam(&self) {
-        let Some(jam) = self.snapshot.borrow().jam.clone() else { return };
+        let Some(jam) = self.snapshot.borrow().jam.clone() else {
+            return;
+        };
         self.jam_request(move |me, session| async move {
             let reply = if jam.is_host {
                 let path = format!("/social-connect/v3/sessions/{}", encode(&jam.session_id));
                 me.request(&session, Method::DELETE, &path, None).await?
             } else {
-                let path = format!("/social-connect/v3/sessions/{}/leave", encode(&jam.session_id));
+                let path = format!(
+                    "/social-connect/v3/sessions/{}/leave",
+                    encode(&jam.session_id)
+                );
                 me.request(&session, Method::POST, &path, None).await?
             };
             // 404 — it is already over
@@ -308,7 +317,10 @@ impl SocialService {
             }
             jam
         });
-        let token = jam.as_ref().filter(|jam| !jam.share_url.starts_with("https://spotify.link")).map(|jam| jam.join_token.clone());
+        let token = jam
+            .as_ref()
+            .filter(|jam| !jam.share_url.starts_with("https://spotify.link"))
+            .map(|jam| jam.join_token.clone());
         self.snapshot.send_if_modified(|s| {
             if s.jam == jam {
                 return false;
@@ -325,13 +337,23 @@ impl SocialService {
         if lock(&self.state).links.contains_key(&token) {
             return;
         }
-        let Some(session) = self.session() else { return };
+        let Some(session) = self.session() else {
+            return;
+        };
         let body = json!({
             "spotify_uri": format!("spotify:socialsession:{token}"),
             "custom_data": [{ "key": "ssp", "value": "1" }, { "key": "app_destination", "value": "socialsession" }],
             "utm_parameters": { "utm_medium": "share-link", "utm_source": "share-options-sheet" },
         });
-        let link = match self.request(&session, Method::POST, "/url-dispenser/v1/generate-url", Some(body)).await {
+        let link = match self
+            .request(
+                &session,
+                Method::POST,
+                "/url-dispenser/v1/generate-url",
+                Some(body),
+            )
+            .await
+        {
             Ok(reply) if reply.ok() => short_link(&reply.json()),
             Ok(reply) => {
                 tracing::debug!("jam link not made: {}", reply.describe());
@@ -354,7 +376,14 @@ impl SocialService {
     }
 
     async fn current(&self, session: &Session) -> Result<Option<Jam>, String> {
-        let reply = self.request(session, Method::GET, "/social-connect/v3/sessions/current", None).await?;
+        let reply = self
+            .request(
+                session,
+                Method::GET,
+                "/social-connect/v3/sessions/current",
+                None,
+            )
+            .await?;
         if reply.status == 404 {
             return Ok(None);
         }
@@ -366,7 +395,9 @@ impl SocialService {
     }
 
     async fn friends(&self, session: &Session) -> Result<Vec<FriendActivity>, String> {
-        let reply = self.request(session, Method::GET, "/presence-view/v1/buddylist", None).await?;
+        let reply = self
+            .request(session, Method::GET, "/presence-view/v1/buddylist", None)
+            .await?;
         if !reply.ok() {
             tracing::warn!("friend activity not read: {}", reply.describe());
             return Err(mf_i18n::t("Couldn't load friend activity"));
@@ -376,7 +407,11 @@ impl SocialService {
 
     /// The Jam code behind a spotify.link short link (its landing page names open.spotify.com/socialsession/…).
     async fn resolve(&self, link: &str) -> Option<String> {
-        let url = if link.starts_with("http") { link.to_owned() } else { format!("https://{link}") };
+        let url = if link.starts_with("http") {
+            link.to_owned()
+        } else {
+            format!("https://{link}")
+        };
         let client = self.auth.api().http().client().ok()?;
         let response = client
             .get(&url)
@@ -392,10 +427,24 @@ impl SocialService {
     }
 
     /// A spclient request with the session's token; the status and body come back as they are.
-    async fn request(&self, session: &Session, method: Method, path: &str, body: Option<Value>) -> Result<Reply, String> {
+    async fn request(
+        &self,
+        session: &Session,
+        method: Method,
+        path: &str,
+        body: Option<Value>,
+    ) -> Result<Reply, String> {
         let attempt = async {
-            let token = session.login5().auth_token().await.map_err(|error| format!("login5: {error}"))?;
-            let base = session.spclient().base_url().await.map_err(|error| format!("spclient: {error}"))?;
+            let token = session
+                .login5()
+                .auth_token()
+                .await
+                .map_err(|error| format!("login5: {error}"))?;
+            let base = session
+                .spclient()
+                .base_url()
+                .await
+                .map_err(|error| format!("spclient: {error}"))?;
             let client = self.auth.api().http().client()?;
             let mut request = client
                 .request(method.clone(), format!("{base}{path}"))
@@ -410,9 +459,16 @@ impl SocialService {
             } else if method == Method::POST {
                 request = request.header(reqwest::header::CONTENT_LENGTH, "0");
             }
-            let response = request.send().await.map_err(|error| error.without_url().to_string())?;
+            let response = request
+                .send()
+                .await
+                .map_err(|error| error.without_url().to_string())?;
             let status = response.status().as_u16();
-            let body = response.bytes().await.map_err(|error| error.without_url().to_string())?.to_vec();
+            let body = response
+                .bytes()
+                .await
+                .map_err(|error| error.without_url().to_string())?
+                .to_vec();
             Ok::<_, String>(Reply { status, body })
         };
         attempt.await.map_err(|error| {
@@ -431,7 +487,10 @@ impl SocialService {
             if let Some(session) = self.session() {
                 return Some(session);
             }
-            let coming = matches!(self.player.local_playback(), sf_player::LocalPlayback::Connecting);
+            let coming = matches!(
+                self.player.local_playback(),
+                sf_player::LocalPlayback::Connecting
+            );
             if !coming || started.elapsed() >= SESSION_WAIT {
                 return None;
             }
@@ -441,7 +500,9 @@ impl SocialService {
 
     /// Listen to Jam pushes of the current session (once per session).
     fn subscribe_pushes(&self) {
-        let Some(session) = self.session() else { return };
+        let Some(session) = self.session() else {
+            return;
+        };
         let key = format!("{}/{}", session.username(), session.device_id());
         {
             let mut state = lock(&self.state);
@@ -471,8 +532,15 @@ impl SocialService {
         self.rt.spawn(async move {
             while let Some(text) = pushes.next().await {
                 let Some(me) = weak.upgrade() else { return };
-                let Ok(value) = serde_json::from_str::<Value>(&text) else { continue };
-                let current = me.snapshot.borrow().jam.as_ref().map(|jam| jam.session_id.clone());
+                let Ok(value) = serde_json::from_str::<Value>(&text) else {
+                    continue;
+                };
+                let current = me
+                    .snapshot
+                    .borrow()
+                    .jam
+                    .as_ref()
+                    .map(|jam| jam.session_id.clone());
                 match parse_update(&value, current.as_deref()) {
                     Update::Jam(jam) => me.set_jam(Some(jam)),
                     Update::Over => me.set_jam(None),
@@ -531,7 +599,11 @@ impl Reply {
 
     fn describe(&self) -> String {
         let body = String::from_utf8_lossy(&self.body);
-        format!("{} {}", self.status, body.chars().take(200).collect::<String>())
+        format!(
+            "{} {}",
+            self.status,
+            body.chars().take(200).collect::<String>()
+        )
     }
 }
 
@@ -539,7 +611,9 @@ impl Reply {
 fn encode(text: &str) -> String {
     text.bytes()
         .map(|byte| match byte {
-            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'.' | b'_' | b'-' | b'~' => char::from(byte).to_string(),
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'.' | b'_' | b'-' | b'~' => {
+                char::from(byte).to_string()
+            }
             other => format!("%{other:02X}"),
         })
         .collect()
@@ -548,7 +622,12 @@ fn encode(text: &str) -> String {
 // --- parsing ----------------------------------------------------------------------------------------
 
 fn text(value: &Value, pointer: &str) -> String {
-    value.pointer(pointer).and_then(Value::as_str).map(str::trim).unwrap_or_default().to_owned()
+    value
+        .pointer(pointer)
+        .and_then(Value::as_str)
+        .map(str::trim)
+        .unwrap_or_default()
+        .to_owned()
 }
 
 /// i.scdn.co answers over https too; the buddylist gives plain http covers.
@@ -620,15 +699,26 @@ fn parse_jam(value: &Value) -> Option<Jam> {
         .map(|member| {
             let id = text(member, "/id");
             let username = text(member, "/username");
-            let name = Some(text(member, "/display_name")).filter(|name| !name.is_empty()).unwrap_or_else(|| username.clone());
+            let name = Some(text(member, "/display_name"))
+                .filter(|name| !name.is_empty())
+                .unwrap_or_else(|| username.clone());
             let avatar = Some(text(member, "/image_url"))
                 .filter(|url| !url.is_empty())
                 .unwrap_or_else(|| text(member, "/large_image_url"));
             JamMember {
                 is_host: !owner.is_empty() && id == owner,
-                is_you: member.get("is_current_user").and_then(Value::as_bool).unwrap_or(false),
-                listening: member.get("is_listening").and_then(Value::as_bool).unwrap_or(true),
-                controlling: member.get("is_controlling").and_then(Value::as_bool).unwrap_or(false),
+                is_you: member
+                    .get("is_current_user")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
+                listening: member
+                    .get("is_listening")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(true),
+                controlling: member
+                    .get("is_controlling")
+                    .and_then(Value::as_bool)
+                    .unwrap_or(false),
                 id,
                 username,
                 name,
@@ -637,15 +727,29 @@ fn parse_jam(value: &Value) -> Option<Jam> {
         })
         .collect();
     let join_token = text(value, "/join_session_token");
-    let host_name = members.iter().find(|member| member.is_host).map(|member| member.name.clone()).unwrap_or_default();
+    let host_name = members
+        .iter()
+        .find(|member| member.is_host)
+        .map(|member| member.name.clone())
+        .unwrap_or_default();
     Some(Jam {
-        share_url: if join_token.is_empty() { String::new() } else { format!("{SHARE_BASE}{join_token}") },
-        is_host: value.get("is_session_owner").and_then(Value::as_bool).unwrap_or(false),
+        share_url: if join_token.is_empty() {
+            String::new()
+        } else {
+            format!("{SHARE_BASE}{join_token}")
+        },
+        is_host: value
+            .get("is_session_owner")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
         host_name,
         members,
         host_device_id: text(value, "/hostActiveDeviceId"),
         max_members: u32::try_from(number(value, "maxMemberCount")).unwrap_or_default(),
-        queue_only: value.get("queue_only_mode").and_then(Value::as_bool).unwrap_or(false),
+        queue_only: value
+            .get("queue_only_mode")
+            .and_then(Value::as_bool)
+            .unwrap_or(false),
         join_token,
         session_id,
     })
@@ -662,8 +766,13 @@ enum Update {
 /// A `social-connect/v2/session_update` push: `{"reason": "...", "session": {...}}`. A push about another session
 /// than the current one only matters when it starts or joins one.
 fn parse_update(value: &Value, current: Option<&str>) -> Update {
-    let reason = value.get("reason").and_then(Value::as_str).unwrap_or_default();
-    let Some(session) = value.get("session") else { return Update::Ignore };
+    let reason = value
+        .get("reason")
+        .and_then(Value::as_str)
+        .unwrap_or_default();
+    let Some(session) = value.get("session") else {
+        return Update::Ignore;
+    };
     let id = text(session, "/session_id");
     let ours = current.is_none_or(|current| current == id);
     match reason {
@@ -695,13 +804,19 @@ fn join_token(text: &str) -> Option<String> {
     let after = ["socialsession/", "socialsession:", "sessions/join/"]
         .iter()
         .find_map(|marker| text.find(marker).map(|at| &text[at + marker.len()..]))?;
-    let code: String = after.chars().take_while(char::is_ascii_alphanumeric).collect();
+    let code: String = after
+        .chars()
+        .take_while(char::is_ascii_alphanumeric)
+        .collect();
     is_code(&code).then_some(code)
 }
 
 /// spotify.link / spotify.app.link short link.
 fn is_short_link(text: &str) -> bool {
-    let rest = text.trim().trim_start_matches("https://").trim_start_matches("http://");
+    let rest = text
+        .trim()
+        .trim_start_matches("https://")
+        .trim_start_matches("http://");
     rest.starts_with("spotify.link/") || rest.starts_with("spotify.app.link/")
 }
 
@@ -746,17 +861,33 @@ mod tests {
         let friends = parse_buddylist(BUDDYLIST.as_bytes()).unwrap();
         assert_eq!(friends.len(), 2, "an entry without a track is skipped");
         let bob = &friends[0];
-        assert_eq!((bob.name.as_str(), bob.timestamp), ("bob", 1_791_791_000_000), "no name — the username");
+        assert_eq!(
+            (bob.name.as_str(), bob.timestamp),
+            ("bob", 1_791_791_000_000),
+            "no name — the username"
+        );
         assert!(bob.is_episode);
         assert_eq!(bob.context, "");
         let alice = &friends[1];
         assert_eq!(alice.name, "Alice");
         assert_eq!(alice.avatar, "https://i.scdn.co/image/ab6775700000ee85a1");
-        assert_eq!(alice.cover, "https://i.scdn.co/image/ab67616d00001e02b1", "covers go over https");
-        assert_eq!((alice.track.as_str(), alice.artist.as_str()), ("Never Gonna Give You Up", "Rick Astley"));
+        assert_eq!(
+            alice.cover, "https://i.scdn.co/image/ab67616d00001e02b1",
+            "covers go over https"
+        );
+        assert_eq!(
+            (alice.track.as_str(), alice.artist.as_str()),
+            ("Never Gonna Give You Up", "Rick Astley")
+        );
         assert_eq!(alice.artist_uri, "spotify:artist:0gxyHStUsqpMadRV0Di1Qt");
         assert_eq!(alice.album_uri, "spotify:album:6N9PS4QXF1D0OWPk0Sxtb4");
-        assert_eq!((alice.context.as_str(), alice.context_uri.as_str()), ("Today's Top Hits", "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M"));
+        assert_eq!(
+            (alice.context.as_str(), alice.context_uri.as_str()),
+            (
+                "Today's Top Hits",
+                "spotify:playlist:37i9dQZF1DXcBWIGoYBM5M"
+            )
+        );
         assert!(!alice.is_episode);
         // the live answer of an account that follows nobody
         assert_eq!(parse_buddylist(br#"{"friends":[]}"#), Some(Vec::new()));
@@ -768,17 +899,30 @@ mod tests {
         let jam = parse_jam(&serde_json::from_str(CURRENT).unwrap()).unwrap();
         assert_eq!(jam.session_id, "f663581b3295b23868bcc730ee180097");
         assert_eq!(jam.join_token, "7uVvNohpFt5ZsOdgfYewlh");
-        assert_eq!(jam.share_url, "https://open.spotify.com/socialsession/7uVvNohpFt5ZsOdgfYewlh");
+        assert_eq!(
+            jam.share_url,
+            "https://open.spotify.com/socialsession/7uVvNohpFt5ZsOdgfYewlh"
+        );
         assert!(jam.is_host);
         assert_eq!(jam.host_name, "fatyzzz");
         assert_eq!(jam.max_members, 32);
         assert_eq!(jam.members.len(), 2);
         assert!(jam.members[0].is_host && jam.members[0].is_you && jam.members[0].controlling);
         let guest = &jam.members[1];
-        assert_eq!((guest.name.as_str(), guest.avatar.as_str()), ("guest", "https://i.scdn.co/image/guest"));
+        assert_eq!(
+            (guest.name.as_str(), guest.avatar.as_str()),
+            ("guest", "https://i.scdn.co/image/guest")
+        );
         assert!(!guest.is_host && !guest.is_you && !guest.controlling);
-        assert_eq!(parse_jam(&json!({ "session_id": "x", "active": false })), None, "an inactive session is no Jam");
-        assert_eq!(parse_jam(&json!({ "code": 5, "message": "No active session" })), None);
+        assert_eq!(
+            parse_jam(&json!({ "session_id": "x", "active": false })),
+            None,
+            "an inactive session is no Jam"
+        );
+        assert_eq!(
+            parse_jam(&json!({ "code": 5, "message": "No active session" })),
+            None
+        );
     }
 
     #[test]
@@ -786,31 +930,66 @@ mod tests {
         let session: Value = serde_json::from_str(CURRENT).unwrap();
         // trimmed live pushes (2026-10)
         let started = json!({ "reason": "NEW_SESSION", "session": session.clone(), "update_session_members": [] });
-        assert!(matches!(parse_update(&started, None), Update::Jam(jam) if jam.session_id == "f663581b3295b23868bcc730ee180097"));
+        assert!(
+            matches!(parse_update(&started, None), Update::Jam(jam) if jam.session_id == "f663581b3295b23868bcc730ee180097")
+        );
         let deleted = json!({ "reason": "SESSION_DELETED", "session": session.clone() });
-        assert_eq!(parse_update(&deleted, Some("f663581b3295b23868bcc730ee180097")), Update::Over);
-        assert_eq!(parse_update(&deleted, Some("another")), Update::Ignore, "another Jam ending is not ours");
+        assert_eq!(
+            parse_update(&deleted, Some("f663581b3295b23868bcc730ee180097")),
+            Update::Over
+        );
+        assert_eq!(
+            parse_update(&deleted, Some("another")),
+            Update::Ignore,
+            "another Jam ending is not ours"
+        );
         let joined = json!({ "reason": "USER_JOINED", "session": session.clone() });
-        assert!(matches!(parse_update(&joined, Some("f663581b3295b23868bcc730ee180097")), Update::Jam(_)));
+        assert!(matches!(
+            parse_update(&joined, Some("f663581b3295b23868bcc730ee180097")),
+            Update::Jam(_)
+        ));
         assert_eq!(parse_update(&joined, Some("another")), Update::Ignore);
         let kicked = json!({ "reason": "YOU_WERE_KICKED", "session": session });
         assert_eq!(parse_update(&kicked, None), Update::Over);
-        assert_eq!(parse_update(&json!({ "reason": "NEW_SESSION" }), None), Update::Ignore);
+        assert_eq!(
+            parse_update(&json!({ "reason": "NEW_SESSION" }), None),
+            Update::Ignore
+        );
     }
 
     #[test]
     fn invites_give_their_code() {
         let code = Some("3fPe4JtyWSuP4mEYTBwpF7".to_owned());
         assert_eq!(join_token("3fPe4JtyWSuP4mEYTBwpF7"), code);
-        assert_eq!(join_token(" https://open.spotify.com/socialsession/3fPe4JtyWSuP4mEYTBwpF7?si=uAyp&ssp=1 "), code);
-        assert_eq!(join_token("spotify:socialsession:3fPe4JtyWSuP4mEYTBwpF7"), code);
-        assert_eq!(join_token("hm://social-connect/v2/sessions/join/3fPe4JtyWSuP4mEYTBwpF7"), code);
-        assert_eq!(join_token("https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC"), None);
+        assert_eq!(
+            join_token(
+                " https://open.spotify.com/socialsession/3fPe4JtyWSuP4mEYTBwpF7?si=uAyp&ssp=1 "
+            ),
+            code
+        );
+        assert_eq!(
+            join_token("spotify:socialsession:3fPe4JtyWSuP4mEYTBwpF7"),
+            code
+        );
+        assert_eq!(
+            join_token("hm://social-connect/v2/sessions/join/3fPe4JtyWSuP4mEYTBwpF7"),
+            code
+        );
+        assert_eq!(
+            join_token("https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC"),
+            None
+        );
         assert_eq!(join_token("hello"), None);
-        assert_eq!(join_token("https://spotify.link/jmnklg1Ga7b"), None, "a short link is resolved first");
+        assert_eq!(
+            join_token("https://spotify.link/jmnklg1Ga7b"),
+            None,
+            "a short link is resolved first"
+        );
         assert!(is_short_link("https://spotify.link/jmnklg1Ga7b"));
         assert!(is_short_link("spotify.app.link/jmnklg1Ga7b?_p=c5"));
-        assert!(!is_short_link("https://open.spotify.com/socialsession/3fPe4JtyWSuP4mEYTBwpF7"));
+        assert!(!is_short_link(
+            "https://open.spotify.com/socialsession/3fPe4JtyWSuP4mEYTBwpF7"
+        ));
         // trimmed landing page of the live short link
         let page = r#"<meta property="og:url" content="https://open.spotify.com/socialsession/3fPe4JtyWSuP4mEYTBwpF7?si=uAyp">"#;
         assert_eq!(token_in_page(page), code);
@@ -822,7 +1001,10 @@ mod tests {
         // trimmed live 201 answer
         let answer = json!({ "spotify_uri": "spotify:socialsession:3fPe4JtyWSuP4mEYTBwpF7",
             "shareable_url": "https://spotify.link/jmnklg1Ga7b", "share_id": "uAypvUByR8KoZUJhy3SoTQ" });
-        assert_eq!(short_link(&answer).as_deref(), Some("https://spotify.link/jmnklg1Ga7b"));
+        assert_eq!(
+            short_link(&answer).as_deref(),
+            Some("https://spotify.link/jmnklg1Ga7b")
+        );
         assert_eq!(short_link(&json!({})), None);
     }
 

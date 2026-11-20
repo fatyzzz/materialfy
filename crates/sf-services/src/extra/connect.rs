@@ -19,7 +19,10 @@ pub fn receiver_is_listed(receiver: &Receiver, devices: &[DeviceItem]) -> bool {
 /// Имя из mDNS точнее, чем у Web API (там часто модель вместо имени, данного пользователем).
 pub fn name_devices(devices: &mut [DeviceItem], receivers: &[Receiver]) {
     for device in devices.iter_mut().filter(|d| !d.id.is_empty()) {
-        if let Some(receiver) = receivers.iter().find(|r| r.device_id.as_deref() == Some(device.id.as_str())) {
+        if let Some(receiver) = receivers
+            .iter()
+            .find(|r| r.device_id.as_deref() == Some(device.id.as_str()))
+        {
             device.name.clone_from(&receiver.name);
         }
     }
@@ -93,11 +96,17 @@ pub fn merge(
     }
     // стабильная сортировка: активное, этот ПК, остальные
     devices.sort_by_key(|d| (!d.is_active, !d.is_this_computer));
-    devices.extend(receivers.iter().filter(|r| !receiver_is_listed(r, api)).map(receiver_item).filter(|r| {
-        let fresh = !seen.contains(&r.id);
-        seen.insert(r.id.clone());
-        fresh
-    }));
+    devices.extend(
+        receivers
+            .iter()
+            .filter(|r| !receiver_is_listed(r, api))
+            .map(receiver_item)
+            .filter(|r| {
+                let fresh = !seen.contains(&r.id);
+                seen.insert(r.id.clone());
+                fresh
+            }),
+    );
     devices
 }
 
@@ -108,7 +117,13 @@ mod tests {
     use super::*;
 
     fn device(id: &str, name: &str) -> DeviceItem {
-        DeviceItem { id: id.into(), name: name.into(), kind: "speaker".into(), volume: 50, ..Default::default() }
+        DeviceItem {
+            id: id.into(),
+            name: name.into(),
+            kind: "speaker".into(),
+            volume: 50,
+            ..Default::default()
+        }
     }
 
     fn receiver(name: &str, id: Option<&str>) -> Receiver {
@@ -134,7 +149,10 @@ mod tests {
         let api = [device("b", "Model X")];
         let receivers = [receiver("Спальня", Some("b")), receiver("Гостиная", None)];
         let list = merge(&api, &receivers, None, "");
-        let names: Vec<_> = list.iter().map(|d| (d.name.as_str(), d.source.as_str())).collect();
+        let names: Vec<_> = list
+            .iter()
+            .map(|d| (d.name.as_str(), d.source.as_str()))
+            .collect();
         assert_eq!(names, [("Спальня", "api"), ("Гостиная", "zeroconf")]);
         assert_eq!(list[1].id, "zeroconf:Гостиная");
         assert_eq!(list[1].volume, -1);
@@ -143,7 +161,11 @@ mod tests {
     #[test]
     fn order_is_active_this_computer_then_others() {
         let api = [device("x", "X"), device("y", "Y"), device("z", "Z")];
-        let this = ThisDevice { id: "me".into(), name: "Materialfy · PC".into(), volume: 40 };
+        let this = ThisDevice {
+            id: "me".into(),
+            name: "Materialfy · PC".into(),
+            volume: 40,
+        };
         let list = merge(&api, &[], Some(&this), "z");
         let ids: Vec<_> = list.iter().map(|d| d.id.as_str()).collect();
         assert_eq!(ids, ["z", "me", "x", "y"]);
@@ -154,8 +176,16 @@ mod tests {
 
     #[test]
     fn this_computer_listed_by_web_api_is_marked_not_duplicated() {
-        let api = [device("x", "X"), device("me", "Materialfy · PC"), device("x", "X dup")];
-        let this = ThisDevice { id: "me".into(), name: "ignored".into(), volume: 10 };
+        let api = [
+            device("x", "X"),
+            device("me", "Materialfy · PC"),
+            device("x", "X dup"),
+        ];
+        let this = ThisDevice {
+            id: "me".into(),
+            name: "ignored".into(),
+            volume: 10,
+        };
         let list = merge(&api, &[], Some(&this), "me");
         let ids: Vec<_> = list.iter().map(|d| d.id.as_str()).collect();
         assert_eq!(ids, ["me", "x"]);

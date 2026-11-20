@@ -67,7 +67,11 @@ pub fn recording(uri: &str) -> Option<String> {
 
 /// URI трека по id или URI.
 pub fn track_uri(id_or_uri: &str) -> String {
-    if id_or_uri.starts_with("spotify:") { id_or_uri.to_owned() } else { format!("spotify:track:{id_or_uri}") }
+    if id_or_uri.starts_with("spotify:") {
+        id_or_uri.to_owned()
+    } else {
+        format!("spotify:track:{id_or_uri}")
+    }
 }
 
 /// Строка QML → модель Web API (для кэша «Любимых треков»).
@@ -75,7 +79,11 @@ pub fn track_from_item(item: &TrackItem) -> Track {
     let images = [(&item.cover_large, 640), (&item.cover, 300)]
         .into_iter()
         .filter(|(url, _)| !url.is_empty())
-        .map(|(url, px)| Image { url: url.clone(), width: Some(px), height: Some(px) })
+        .map(|(url, px)| Image {
+            url: url.clone(),
+            width: Some(px),
+            height: Some(px),
+        })
         .collect();
     Track {
         id: (!item.track_id.is_empty()).then(|| item.track_id.clone()),
@@ -95,7 +103,11 @@ pub fn track_from_item(item: &TrackItem) -> Track {
         album: Some(Album {
             id: item.album_id.clone(),
             name: item.album.clone(),
-            uri: if item.album_id.is_empty() { String::new() } else { format!("spotify:album:{}", item.album_id) },
+            uri: if item.album_id.is_empty() {
+                String::new()
+            } else {
+                format!("spotify:album:{}", item.album_id)
+            },
             images,
             ..Default::default()
         }),
@@ -110,12 +122,21 @@ mod tests {
 
     #[test]
     fn market_specific_uris_share_one_recording() {
-        let mut first = Track { uri: "spotify:track:known-a".into(), ..Default::default() };
+        let mut first = Track {
+            uri: "spotify:track:known-a".into(),
+            ..Default::default()
+        };
         first.external_ids.isrc = Some("GB0001".into());
-        let mut second = Track { uri: "spotify:track:known-b".into(), ..Default::default() };
+        let mut second = Track {
+            uri: "spotify:track:known-b".into(),
+            ..Default::default()
+        };
         second.external_ids.isrc = Some("GB0001".into());
         remember_recordings([&first, &second]);
-        assert_eq!(recording("spotify:track:known-a"), recording("spotify:track:known-b"));
+        assert_eq!(
+            recording("spotify:track:known-a"),
+            recording("spotify:track:known-b")
+        );
         assert!(recording("spotify:track:known-c").is_none());
     }
 

@@ -14,7 +14,14 @@ pub enum Outcome {
 }
 
 /// Inno Setup flags of a silent update; /RELAUNCH starts the app again (materialfy.iss, [Run]).
-pub const SETUP_ARGS: [&str; 6] = ["/SILENT", "/SP-", "/NOCANCEL", "/NORESTART", "/CLOSEAPPLICATIONS", "/RELAUNCH"];
+pub const SETUP_ARGS: [&str; 6] = [
+    "/SILENT",
+    "/SP-",
+    "/NOCANCEL",
+    "/NORESTART",
+    "/CLOSEAPPLICATIONS",
+    "/RELAUNCH",
+];
 
 pub fn install(kind: InstallKind, file: &Path, work_dir: &Path) -> Result<Outcome, String> {
     match kind {
@@ -22,7 +29,9 @@ pub fn install(kind: InstallKind, file: &Path, work_dir: &Path) -> Result<Outcom
         InstallKind::WindowsPortable => replace_portable(file, work_dir),
         InstallKind::AppImage => replace_appimage(file),
         InstallKind::MacApp => open_dmg(file),
-        InstallKind::Manual | InstallKind::Dev => Err(mf_i18n::t("This copy of Materialfy can't update itself")),
+        InstallKind::Manual | InstallKind::Dev => {
+            Err(mf_i18n::t("This copy of Materialfy can't update itself"))
+        }
     }
 }
 
@@ -47,7 +56,11 @@ fn detached(command: &mut Command) -> &mut Command {
 
 fn run_setup(file: &Path) -> Result<Outcome, String> {
     let mut command = Command::new(file);
-    command.args(SETUP_ARGS).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+    command
+        .args(SETUP_ARGS)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
     // the setup window (progress of a /SILENT install) must stay visible: no CREATE_NO_WINDOW here
     #[cfg(windows)]
     {
@@ -63,7 +76,12 @@ pub fn app_root(extracted: &Path, exe_name: &str) -> Option<PathBuf> {
     if extracted.join(exe_name).is_file() {
         return Some(extracted.to_path_buf());
     }
-    let dirs: Vec<PathBuf> = std::fs::read_dir(extracted).ok()?.flatten().map(|e| e.path()).filter(|p| p.is_dir()).collect();
+    let dirs: Vec<PathBuf> = std::fs::read_dir(extracted)
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_dir())
+        .collect();
     match dirs.as_slice() {
         [only] if only.join(exe_name).is_file() => Some(only.clone()),
         _ => None,
@@ -102,24 +120,40 @@ if ($ok) { Remove-Item -LiteralPath $Source -Recurse -Force -ErrorAction Silentl
 fn replace_portable(file: &Path, work_dir: &Path) -> Result<Outcome, String> {
     let exe = std::env::current_exe().map_err(io_text)?;
     let target = exe.parent().ok_or("no exe directory")?.to_path_buf();
-    let exe_name = exe.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "materialfy.exe".into());
+    let exe_name = exe
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "materialfy.exe".into());
     // the app directory must be writable, or the helper would fail after the app is gone
     let probe = target.join(".materialfy-update-probe");
-    std::fs::write(&probe, b"").map_err(|e| mf_i18n::tr!("Can't write to {0}: {1}", target.display(), e))?;
+    std::fs::write(&probe, b"")
+        .map_err(|e| mf_i18n::tr!("Can't write to {0}: {1}", target.display(), e))?;
     let _ = std::fs::remove_file(&probe);
 
     let extract = work_dir.join("portable");
     let _ = std::fs::remove_dir_all(&extract);
     std::fs::create_dir_all(&extract).map_err(io_text)?;
     unzip(file, &extract)?;
-    let source = app_root(&extract, &exe_name).ok_or_else(|| mf_i18n::t("The archive doesn't contain Materialfy"))?;
+    let source = app_root(&extract, &exe_name)
+        .ok_or_else(|| mf_i18n::t("The archive doesn't contain Materialfy"))?;
 
     let script = work_dir.join("apply-portable-update.ps1");
     std::fs::write(&script, PORTABLE_HELPER).map_err(io_text)?;
     let log = work_dir.join("update.log");
-    let mut command = Command::new(system_tool("WindowsPowerShell\\v1.0\\powershell.exe", "powershell.exe"));
+    let mut command = Command::new(system_tool(
+        "WindowsPowerShell\\v1.0\\powershell.exe",
+        "powershell.exe",
+    ));
     command
-        .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File"])
+        .args([
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-WindowStyle",
+            "Hidden",
+            "-File",
+        ])
         .arg(&script)
         .arg("-ProcId")
         .arg(std::process::id().to_string())
@@ -149,7 +183,10 @@ fn system_tool(relative: &str, fallback: &str) -> PathBuf {
 /// Unpacks a zip with the tools Windows ships: tar.exe (bsdtar, Windows 10 1803+), else Expand-Archive.
 fn unzip(file: &Path, into: &Path) -> Result<(), String> {
     let quiet = |command: &mut Command| {
-        command.stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped());
+        command
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped());
         #[cfg(windows)]
         {
             use std::os::windows::process::CommandExt;
@@ -162,10 +199,18 @@ fn unzip(file: &Path, into: &Path) -> Result<(), String> {
     if tar.output().is_ok_and(|out| out.status.success()) {
         return Ok(());
     }
-    let mut ps = Command::new(system_tool("WindowsPowerShell\\v1.0\\powershell.exe", "powershell.exe"));
-    ps.args(["-NoProfile", "-NonInteractive", "-Command", "Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force"])
-        .arg(file)
-        .arg(into);
+    let mut ps = Command::new(system_tool(
+        "WindowsPowerShell\\v1.0\\powershell.exe",
+        "powershell.exe",
+    ));
+    ps.args([
+        "-NoProfile",
+        "-NonInteractive",
+        "-Command",
+        "Expand-Archive -LiteralPath $args[0] -DestinationPath $args[1] -Force",
+    ])
+    .arg(file)
+    .arg(into);
     quiet(&mut ps);
     let out = ps.output().map_err(io_text)?;
     if out.status.success() {
@@ -179,15 +224,22 @@ fn unzip(file: &Path, into: &Path) -> Result<(), String> {
 /// New AppImage next to the old one, made executable, renamed over it (atomic on one file system);
 /// a shell waits for this process to exit and starts it.
 fn replace_appimage(file: &Path) -> Result<Outcome, String> {
-    let current = std::env::var_os("APPIMAGE").map(PathBuf::from).ok_or("APPIMAGE is not set")?;
+    let current = std::env::var_os("APPIMAGE")
+        .map(PathBuf::from)
+        .ok_or("APPIMAGE is not set")?;
     let dir = current.parent().ok_or("no AppImage directory")?;
-    let name = current.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
+    let name = current
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
     let staged = dir.join(format!(".{name}.update"));
-    std::fs::copy(file, &staged).map_err(|e| mf_i18n::tr!("Can't write to {0}: {1}", dir.display(), e))?;
+    std::fs::copy(file, &staged)
+        .map_err(|e| mf_i18n::tr!("Can't write to {0}: {1}", dir.display(), e))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&staged, std::fs::Permissions::from_mode(0o755)).map_err(io_text)?;
+        std::fs::set_permissions(&staged, std::fs::Permissions::from_mode(0o755))
+            .map_err(io_text)?;
     }
     if let Err(error) = std::fs::rename(&staged, &current) {
         let _ = std::fs::remove_file(&staged);
@@ -211,7 +263,11 @@ fn replace_appimage(file: &Path) -> Result<Outcome, String> {
 
 fn open_dmg(file: &Path) -> Result<Outcome, String> {
     let status = Command::new("open").arg(file).status().map_err(io_text)?;
-    if status.success() { Ok(Outcome::HandedOff) } else { Err(format!("open: {status}")) }
+    if status.success() {
+        Ok(Outcome::HandedOff)
+    } else {
+        Err(format!("open: {status}"))
+    }
 }
 
 #[cfg(test)]
@@ -230,7 +286,10 @@ mod tests {
         let nested = base.join("nested");
         std::fs::create_dir_all(nested.join("Materialfy")).unwrap();
         std::fs::write(nested.join("Materialfy").join("materialfy.exe"), b"").unwrap();
-        assert_eq!(app_root(&nested, "materialfy.exe"), Some(nested.join("Materialfy")));
+        assert_eq!(
+            app_root(&nested, "materialfy.exe"),
+            Some(nested.join("Materialfy"))
+        );
 
         let empty = base.join("empty");
         std::fs::create_dir_all(empty.join("a")).unwrap();
@@ -272,15 +331,39 @@ mod tests {
         std::fs::write(&script, PORTABLE_HELPER).unwrap();
         let log = base.join("update.log");
 
-        let mut app = Command::new("cmd").args(["/c", "ping -n 2 127.0.0.1 >nul"]).spawn().unwrap();
-        let mut command = Command::new(system_tool("WindowsPowerShell\\v1.0\\powershell.exe", "powershell.exe"));
+        let mut app = Command::new("cmd")
+            .args(["/c", "ping -n 2 127.0.0.1 >nul"])
+            .spawn()
+            .unwrap();
+        let mut command = Command::new(system_tool(
+            "WindowsPowerShell\\v1.0\\powershell.exe",
+            "powershell.exe",
+        ));
         command
-            .args(["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-WindowStyle", "Hidden", "-File"])
+            .args([
+                "-NoProfile",
+                "-NonInteractive",
+                "-ExecutionPolicy",
+                "Bypass",
+                "-WindowStyle",
+                "Hidden",
+                "-File",
+            ])
             .arg(&script)
             .arg("-ProcId")
             .arg(app.id().to_string())
-            .args(["-Source".as_ref(), source.as_os_str(), "-Target".as_ref(), target.as_os_str()])
-            .args(["-Exe".as_ref(), exe.as_os_str(), "-Log".as_ref(), log.as_os_str()])
+            .args([
+                "-Source".as_ref(),
+                source.as_os_str(),
+                "-Target".as_ref(),
+                target.as_os_str(),
+            ])
+            .args([
+                "-Exe".as_ref(),
+                exe.as_os_str(),
+                "-Log".as_ref(),
+                log.as_os_str(),
+            ])
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());

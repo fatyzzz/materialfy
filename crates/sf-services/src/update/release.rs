@@ -40,7 +40,11 @@ pub enum Channel {
 
 impl Channel {
     pub fn from_setting(value: &str) -> Channel {
-        if value.trim().eq_ignore_ascii_case("beta") { Channel::Beta } else { Channel::Stable }
+        if value.trim().eq_ignore_ascii_case("beta") {
+            Channel::Beta
+        } else {
+            Channel::Stable
+        }
     }
 }
 
@@ -90,7 +94,10 @@ impl InstallKind {
     pub fn automatic(self) -> bool {
         matches!(
             self,
-            InstallKind::WindowsInstaller | InstallKind::WindowsPortable | InstallKind::AppImage | InstallKind::MacApp
+            InstallKind::WindowsInstaller
+                | InstallKind::WindowsPortable
+                | InstallKind::AppImage
+                | InstallKind::MacApp
         )
     }
 }
@@ -115,13 +122,24 @@ fn is_dev_build(exe: &Path) -> bool {
         .filter(|part| !part.is_empty())
         .map(str::to_ascii_lowercase)
         .collect();
-    parts.windows(2).any(|w| w[0] == "target" && matches!(w[1].as_str(), "release" | "debug"))
-        || parts.windows(3).any(|w| w[0] == "target" && matches!(w[2].as_str(), "release" | "debug"))
+    parts
+        .windows(2)
+        .any(|w| w[0] == "target" && matches!(w[1].as_str(), "release" | "debug"))
+        || parts
+            .windows(3)
+            .any(|w| w[0] == "target" && matches!(w[2].as_str(), "release" | "debug"))
 }
 
 fn starts_with_ci(path: &Path, root: &Path) -> bool {
-    let path = path.to_string_lossy().replace('/', "\\").to_ascii_lowercase();
-    let root = root.to_string_lossy().replace('/', "\\").trim_end_matches('\\').to_ascii_lowercase();
+    let path = path
+        .to_string_lossy()
+        .replace('/', "\\")
+        .to_ascii_lowercase();
+    let root = root
+        .to_string_lossy()
+        .replace('/', "\\")
+        .trim_end_matches('\\')
+        .to_ascii_lowercase();
     !root.is_empty() && path.starts_with(&format!("{root}\\"))
 }
 
@@ -130,7 +148,12 @@ pub fn detect_install_kind(probe: &Probe) -> InstallKind {
         "linux" if probe.appimage.is_some_and(|p| !p.trim().is_empty()) => InstallKind::AppImage,
         _ if is_dev_build(probe.exe) => InstallKind::Dev,
         "windows" => {
-            if probe.has_uninstaller || probe.install_roots.iter().any(|root| starts_with_ci(probe.exe, root)) {
+            if probe.has_uninstaller
+                || probe
+                    .install_roots
+                    .iter()
+                    .any(|root| starts_with_ci(probe.exe, root))
+            {
                 InstallKind::WindowsInstaller
             } else {
                 InstallKind::WindowsPortable
@@ -143,7 +166,11 @@ pub fn detect_install_kind(probe: &Probe) -> InstallKind {
 
 /// Asset for this OS/arch/install kind: …-Setup.exe, …-windows-x64-portable.zip, …-<arch>.AppImage,
 /// …-macos-<arm64|x86_64>.dmg. Windows builds are x64 only (they run on Windows on Arm through emulation).
-pub fn select_asset<'a>(assets: &'a [GhAsset], kind: InstallKind, arch: &str) -> Option<&'a GhAsset> {
+pub fn select_asset<'a>(
+    assets: &'a [GhAsset],
+    kind: InstallKind,
+    arch: &str,
+) -> Option<&'a GhAsset> {
     let suffix = match kind {
         InstallKind::WindowsInstaller => "-setup.exe".to_owned(),
         InstallKind::WindowsPortable => "-windows-x64-portable.zip".to_owned(),
@@ -158,14 +185,18 @@ pub fn select_asset<'a>(assets: &'a [GhAsset], kind: InstallKind, arch: &str) ->
         },
         InstallKind::Manual | InstallKind::Dev => return None,
     };
-    assets
-        .iter()
-        .find(|a| a.name.to_ascii_lowercase().ends_with(&suffix) && !a.browser_download_url.is_empty())
+    assets.iter().find(|a| {
+        a.name.to_ascii_lowercase().ends_with(&suffix) && !a.browser_download_url.is_empty()
+    })
 }
 
 /// Newest release of the channel that is newer than `current` (drafts never count; Stable skips
 /// pre-releases, even ones whose tag is a plain version).
-pub fn pick_release<'a>(releases: &'a [GhRelease], channel: Channel, current: &Version) -> Option<(&'a GhRelease, Version)> {
+pub fn pick_release<'a>(
+    releases: &'a [GhRelease],
+    channel: Channel,
+    current: &Version,
+) -> Option<(&'a GhRelease, Version)> {
     releases
         .iter()
         .filter(|r| !r.draft)
@@ -181,7 +212,9 @@ pub fn parse_sha256sums(text: &str) -> HashMap<String, String> {
     let mut sums = HashMap::new();
     for line in text.lines() {
         let line = line.trim_start_matches('\u{feff}').trim();
-        let Some((hash, rest)) = line.split_once(char::is_whitespace) else { continue };
+        let Some((hash, rest)) = line.split_once(char::is_whitespace) else {
+            continue;
+        };
         if hash.len() != 64 || !hash.bytes().all(|b| b.is_ascii_hexdigit()) {
             continue;
         }
@@ -251,18 +284,42 @@ mod tests {
     fn asset_per_platform() {
         let assets = release_assets();
         let pick = |kind, arch| select_asset(&assets, kind, arch).map(|a| a.name.as_str());
-        assert_eq!(pick(InstallKind::WindowsInstaller, "x86_64"), Some("Materialfy-0.2.0-Setup.exe"));
-        assert_eq!(pick(InstallKind::WindowsInstaller, "aarch64"), Some("Materialfy-0.2.0-Setup.exe"));
-        assert_eq!(pick(InstallKind::WindowsPortable, "x86_64"), Some("Materialfy-0.2.0-windows-x64-portable.zip"));
-        assert_eq!(pick(InstallKind::AppImage, "x86_64"), Some("Materialfy-0.2.0-x86_64.AppImage"));
-        assert_eq!(pick(InstallKind::AppImage, "aarch64"), Some("Materialfy-0.2.0-aarch64.AppImage"));
+        assert_eq!(
+            pick(InstallKind::WindowsInstaller, "x86_64"),
+            Some("Materialfy-0.2.0-Setup.exe")
+        );
+        assert_eq!(
+            pick(InstallKind::WindowsInstaller, "aarch64"),
+            Some("Materialfy-0.2.0-Setup.exe")
+        );
+        assert_eq!(
+            pick(InstallKind::WindowsPortable, "x86_64"),
+            Some("Materialfy-0.2.0-windows-x64-portable.zip")
+        );
+        assert_eq!(
+            pick(InstallKind::AppImage, "x86_64"),
+            Some("Materialfy-0.2.0-x86_64.AppImage")
+        );
+        assert_eq!(
+            pick(InstallKind::AppImage, "aarch64"),
+            Some("Materialfy-0.2.0-aarch64.AppImage")
+        );
         assert_eq!(pick(InstallKind::AppImage, "riscv64"), None);
-        assert_eq!(pick(InstallKind::MacApp, "aarch64"), Some("Materialfy-0.2.0-macos-arm64.dmg"));
-        assert_eq!(pick(InstallKind::MacApp, "x86_64"), Some("Materialfy-0.2.0-macos-x86_64.dmg"));
+        assert_eq!(
+            pick(InstallKind::MacApp, "aarch64"),
+            Some("Materialfy-0.2.0-macos-arm64.dmg")
+        );
+        assert_eq!(
+            pick(InstallKind::MacApp, "x86_64"),
+            Some("Materialfy-0.2.0-macos-x86_64.dmg")
+        );
         assert_eq!(pick(InstallKind::Manual, "x86_64"), None);
         assert_eq!(pick(InstallKind::Dev, "x86_64"), None);
         // a release without the file
-        assert_eq!(select_asset(&assets[..2], InstallKind::WindowsInstaller, "x86_64"), None);
+        assert_eq!(
+            select_asset(&assets[..2], InstallKind::WindowsInstaller, "x86_64"),
+            None
+        );
     }
 
     #[test]
@@ -272,25 +329,121 @@ mod tests {
         let roots = [programs.as_path(), program_files.as_path()];
         let probe = |os, exe: &str, appimage, has_uninstaller| {
             let exe = PathBuf::from(exe);
-            detect_install_kind(&Probe { os, exe: &exe, appimage, has_uninstaller, install_roots: &roots })
+            detect_install_kind(&Probe {
+                os,
+                exe: &exe,
+                appimage,
+                has_uninstaller,
+                install_roots: &roots,
+            })
         };
-        assert_eq!(probe("windows", r"C:\Users\me\AppData\Local\Programs\Materialfy\materialfy.exe", None, true), InstallKind::WindowsInstaller);
-        assert_eq!(probe("windows", r"C:\Users\me\AppData\Local\Programs\Materialfy\materialfy.exe", None, false), InstallKind::WindowsInstaller);
-        assert_eq!(probe("windows", r"c:\program files\Materialfy\materialfy.exe", None, false), InstallKind::WindowsInstaller);
-        assert_eq!(probe("windows", r"D:\Apps\Materialfy\materialfy.exe", None, false), InstallKind::WindowsPortable);
-        assert_eq!(probe("windows", r"D:\Apps\Materialfy\materialfy.exe", None, true), InstallKind::WindowsInstaller);
+        assert_eq!(
+            probe(
+                "windows",
+                r"C:\Users\me\AppData\Local\Programs\Materialfy\materialfy.exe",
+                None,
+                true
+            ),
+            InstallKind::WindowsInstaller
+        );
+        assert_eq!(
+            probe(
+                "windows",
+                r"C:\Users\me\AppData\Local\Programs\Materialfy\materialfy.exe",
+                None,
+                false
+            ),
+            InstallKind::WindowsInstaller
+        );
+        assert_eq!(
+            probe(
+                "windows",
+                r"c:\program files\Materialfy\materialfy.exe",
+                None,
+                false
+            ),
+            InstallKind::WindowsInstaller
+        );
+        assert_eq!(
+            probe("windows", r"D:\Apps\Materialfy\materialfy.exe", None, false),
+            InstallKind::WindowsPortable
+        );
+        assert_eq!(
+            probe("windows", r"D:\Apps\Materialfy\materialfy.exe", None, true),
+            InstallKind::WindowsInstaller
+        );
         // "C:\Program Files Extra" is not under "C:\Program Files"
-        assert_eq!(probe("windows", r"C:\Program Files Extra\m\materialfy.exe", None, false), InstallKind::WindowsPortable);
-        assert_eq!(probe("windows", r"C:\src\materialfy\target\release\materialfy.exe", None, false), InstallKind::Dev);
-        assert_eq!(probe("windows", r"C:\src\m\target\x86_64-pc-windows-msvc\debug\materialfy.exe", None, false), InstallKind::Dev);
-        assert_eq!(probe("linux", "/tmp/.mount_Materi/usr/bin/materialfy", Some("/home/me/Materialfy.AppImage"), false), InstallKind::AppImage);
-        assert_eq!(probe("linux", "/usr/bin/materialfy", None, false), InstallKind::Manual);
-        assert_eq!(probe("linux", "/usr/bin/materialfy", Some(""), false), InstallKind::Manual);
-        assert_eq!(probe("macos", "/Applications/Materialfy.app/Contents/MacOS/materialfy", None, false), InstallKind::MacApp);
-        assert_eq!(probe("macos", "/Users/me/src/materialfy/target/release/materialfy", None, false), InstallKind::Dev);
-        assert_eq!(probe("freebsd", "/usr/local/bin/materialfy", None, false), InstallKind::Manual);
+        assert_eq!(
+            probe(
+                "windows",
+                r"C:\Program Files Extra\m\materialfy.exe",
+                None,
+                false
+            ),
+            InstallKind::WindowsPortable
+        );
+        assert_eq!(
+            probe(
+                "windows",
+                r"C:\src\materialfy\target\release\materialfy.exe",
+                None,
+                false
+            ),
+            InstallKind::Dev
+        );
+        assert_eq!(
+            probe(
+                "windows",
+                r"C:\src\m\target\x86_64-pc-windows-msvc\debug\materialfy.exe",
+                None,
+                false
+            ),
+            InstallKind::Dev
+        );
+        assert_eq!(
+            probe(
+                "linux",
+                "/tmp/.mount_Materi/usr/bin/materialfy",
+                Some("/home/me/Materialfy.AppImage"),
+                false
+            ),
+            InstallKind::AppImage
+        );
+        assert_eq!(
+            probe("linux", "/usr/bin/materialfy", None, false),
+            InstallKind::Manual
+        );
+        assert_eq!(
+            probe("linux", "/usr/bin/materialfy", Some(""), false),
+            InstallKind::Manual
+        );
+        assert_eq!(
+            probe(
+                "macos",
+                "/Applications/Materialfy.app/Contents/MacOS/materialfy",
+                None,
+                false
+            ),
+            InstallKind::MacApp
+        );
+        assert_eq!(
+            probe(
+                "macos",
+                "/Users/me/src/materialfy/target/release/materialfy",
+                None,
+                false
+            ),
+            InstallKind::Dev
+        );
+        assert_eq!(
+            probe("freebsd", "/usr/local/bin/materialfy", None, false),
+            InstallKind::Manual
+        );
         for kind in ["installer", "portable", "appimage", "mac", "manual", "dev"] {
-            assert_eq!(InstallKind::from_code(kind).map(InstallKind::code), Some(kind));
+            assert_eq!(
+                InstallKind::from_code(kind).map(InstallKind::code),
+                Some(kind)
+            );
         }
         assert!(InstallKind::from_code("zip").is_none());
         assert!(InstallKind::WindowsPortable.automatic());
@@ -299,7 +452,12 @@ mod tests {
     }
 
     fn release(tag: &str, prerelease: bool, draft: bool) -> GhRelease {
-        GhRelease { tag_name: tag.into(), prerelease, draft, ..GhRelease::default() }
+        GhRelease {
+            tag_name: tag.into(),
+            prerelease,
+            draft,
+            ..GhRelease::default()
+        }
     }
 
     #[test]
@@ -312,12 +470,20 @@ mod tests {
             release("nightly", true, false),
         ];
         let current = Version::parse("0.1.0").unwrap();
-        let tag = |channel, current: &Version| pick_release(&releases, channel, current).map(|(r, _)| r.tag_name.clone());
+        let tag = |channel, current: &Version| {
+            pick_release(&releases, channel, current).map(|(r, _)| r.tag_name.clone())
+        };
         assert_eq!(tag(Channel::Stable, &current).as_deref(), Some("v0.2.0"));
-        assert_eq!(tag(Channel::Beta, &current).as_deref(), Some("v0.2.1-beta.1"));
+        assert_eq!(
+            tag(Channel::Beta, &current).as_deref(),
+            Some("v0.2.1-beta.1")
+        );
         let latest = Version::parse("0.2.0").unwrap();
         assert_eq!(tag(Channel::Stable, &latest), None);
-        assert_eq!(tag(Channel::Beta, &latest).as_deref(), Some("v0.2.1-beta.1"));
+        assert_eq!(
+            tag(Channel::Beta, &latest).as_deref(),
+            Some("v0.2.1-beta.1")
+        );
         let beta = Version::parse("0.2.1-beta.1").unwrap();
         assert_eq!(tag(Channel::Beta, &beta), None);
         // a pre-release flagged on GitHub but tagged like a release stays out of Stable
@@ -337,11 +503,15 @@ mod tests {
         let release: GhRelease = serde_json::from_str(json).unwrap();
         assert_eq!(release.tag_name, "v0.2.0");
         assert_eq!(release.assets[0].size, 29833778);
-        assert_eq!(release.published_at.as_deref(), Some("2026-10-20T10:00:00Z"));
+        assert_eq!(
+            release.published_at.as_deref(),
+            Some("2026-10-20T10:00:00Z")
+        );
         let list: Vec<GhRelease> = serde_json::from_str(&format!("[{json}]")).unwrap();
         assert_eq!(list.len(), 1);
         // null body and missing fields
-        let sparse: GhRelease = serde_json::from_str(r#"{"tag_name":"v1.0.0","body":null}"#).unwrap();
+        let sparse: GhRelease =
+            serde_json::from_str(r#"{"tag_name":"v1.0.0","body":null}"#).unwrap();
         assert!(sparse.body.is_none() && sparse.assets.is_empty());
     }
 
@@ -356,7 +526,10 @@ mod tests {
         let sums = parse_sha256sums(&text);
         assert_eq!(sums.len(), 3);
         assert_eq!(sums["Materialfy-0.1.0-Setup.exe"], a);
-        assert_eq!(sums["Materialfy-0.1.0-windows-x64-portable.zip"], b.to_ascii_lowercase());
+        assert_eq!(
+            sums["Materialfy-0.1.0-windows-x64-portable.zip"],
+            b.to_ascii_lowercase()
+        );
         assert_eq!(sums["name with spaces.AppImage"], a);
 
         let mut setup = asset("Materialfy-0.1.0-Setup.exe");
@@ -371,7 +544,10 @@ mod tests {
 
     #[test]
     fn file_names() {
-        assert_eq!(safe_file_name("Materialfy-0.2.0-Setup.exe"), Some("Materialfy-0.2.0-Setup.exe"));
+        assert_eq!(
+            safe_file_name("Materialfy-0.2.0-Setup.exe"),
+            Some("Materialfy-0.2.0-Setup.exe")
+        );
         for bad in ["", ".", "..", "../x", r"a\b", "C:x", "a\nb"] {
             assert!(safe_file_name(bad).is_none(), "{bad:?}");
         }
