@@ -7,10 +7,7 @@ pub fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
         std::fs::create_dir_all(parent)?;
     }
-    let mut name = path
-        .file_name()
-        .map(|n| n.to_os_string())
-        .unwrap_or_default();
+    let mut name = path.file_name().map(|n| n.to_os_string()).unwrap_or_default();
     name.push(".tmp");
     let temporary = path.with_file_name(name);
     let result = (|| {

@@ -22,26 +22,15 @@ pub fn list_change<T: Clone + PartialEq>(old: &[T], new: &[T]) -> Option<ListCha
     if new.len() > old.len() {
         let added = new.len() - old.len();
         if new[prefix + added..] == old[prefix..] {
-            return Some(ListChange::Insert {
-                at: prefix,
-                items: new[prefix..prefix + added].to_vec(),
-            });
+            return Some(ListChange::Insert { at: prefix, items: new[prefix..prefix + added].to_vec() });
         }
     } else if new.len() < old.len() {
         let removed = old.len() - new.len();
         if old[prefix + removed..] == new[prefix..] {
-            return Some(ListChange::Remove {
-                at: prefix,
-                count: removed,
-            });
+            return Some(ListChange::Remove { at: prefix, count: removed });
         }
     } else {
-        let suffix = old
-            .iter()
-            .rev()
-            .zip(new.iter().rev())
-            .take_while(|(a, b)| a == b)
-            .count();
+        let suffix = old.iter().rev().zip(new.iter().rev()).take_while(|(a, b)| a == b).count();
         let end = old.len() - suffix;
         if end > prefix + 1 {
             let (from, to) = (prefix, end - 1);
@@ -70,32 +59,11 @@ mod tests {
     #[test]
     fn small_edits_keep_rows() {
         assert_eq!(list_change(&[1, 2], &[1, 2]), None);
-        assert_eq!(
-            list_change(&[1, 2], &[1, 2, 3]),
-            Some(ListChange::Append(vec![3]))
-        );
-        assert_eq!(
-            list_change(&[1, 2], &[0, 1, 2]),
-            Some(ListChange::Insert {
-                at: 0,
-                items: vec![0]
-            })
-        );
-        assert_eq!(
-            list_change(&[1, 2, 3], &[1, 3]),
-            Some(ListChange::Remove { at: 1, count: 1 })
-        );
-        assert_eq!(
-            list_change(&[1, 2, 3, 4], &[2, 3, 1, 4]),
-            Some(ListChange::Move { from: 0, to: 2 })
-        );
-        assert_eq!(
-            list_change(&[1, 2, 3, 4], &[3, 1, 2, 4]),
-            Some(ListChange::Move { from: 2, to: 0 })
-        );
-        assert_eq!(
-            list_change(&[1, 2], &[3, 4]),
-            Some(ListChange::Reset(vec![3, 4]))
-        );
+        assert_eq!(list_change(&[1, 2], &[1, 2, 3]), Some(ListChange::Append(vec![3])));
+        assert_eq!(list_change(&[1, 2], &[0, 1, 2]), Some(ListChange::Insert { at: 0, items: vec![0] }));
+        assert_eq!(list_change(&[1, 2, 3], &[1, 3]), Some(ListChange::Remove { at: 1, count: 1 }));
+        assert_eq!(list_change(&[1, 2, 3, 4], &[2, 3, 1, 4]), Some(ListChange::Move { from: 0, to: 2 }));
+        assert_eq!(list_change(&[1, 2, 3, 4], &[3, 1, 2, 4]), Some(ListChange::Move { from: 2, to: 0 }));
+        assert_eq!(list_change(&[1, 2], &[3, 4]), Some(ListChange::Reset(vec![3, 4])));
     }
 }

@@ -47,9 +47,7 @@ impl Version {
         let mut parts = core.split('.');
         let mut number = |required: bool| -> Option<u64> {
             match parts.next() {
-                Some(part) if !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()) => {
-                    part.parse().ok()
-                }
+                Some(part) if !part.is_empty() && part.bytes().all(|b| b.is_ascii_digit()) => part.parse().ok(),
                 None if !required => Some(0),
                 _ => None,
             }
@@ -73,12 +71,7 @@ impl Version {
                 })
                 .collect::<Option<Vec<_>>>()?,
         };
-        Some(Version {
-            major,
-            minor,
-            patch,
-            pre,
-        })
+        Some(Version { major, minor, patch, pre })
     }
 
     pub fn is_prerelease(&self) -> bool {
@@ -144,17 +137,7 @@ mod tests {
         assert_eq!(v("1.0.0-beta.2+sha.abc").to_string(), "1.0.0-beta.2");
         assert!(v("1.0.0-rc.1").is_prerelease());
         assert!(!v("1.0.0").is_prerelease());
-        for bad in [
-            "",
-            "v",
-            "x.y.z",
-            "1.2.3.4",
-            "1..2",
-            "1.2.3-",
-            "1.2.3-a..b",
-            "-1.2.3",
-            "1.2.3-α",
-        ] {
+        for bad in ["", "v", "x.y.z", "1.2.3.4", "1..2", "1.2.3-", "1.2.3-a..b", "-1.2.3", "1.2.3-α"] {
             assert!(Version::parse(bad).is_none(), "{bad}");
         }
     }
@@ -163,18 +146,8 @@ mod tests {
     fn orders_like_semver() {
         // semver.org §11 example chain
         let chain = [
-            "1.0.0-alpha",
-            "1.0.0-alpha.1",
-            "1.0.0-alpha.beta",
-            "1.0.0-beta",
-            "1.0.0-beta.2",
-            "1.0.0-beta.11",
-            "1.0.0-rc.1",
-            "1.0.0",
-            "1.0.1",
-            "1.1.0",
-            "1.10.0",
-            "2.0.0",
+            "1.0.0-alpha", "1.0.0-alpha.1", "1.0.0-alpha.beta", "1.0.0-beta", "1.0.0-beta.2", "1.0.0-beta.11",
+            "1.0.0-rc.1", "1.0.0", "1.0.1", "1.1.0", "1.10.0", "2.0.0",
         ];
         for pair in chain.windows(2) {
             assert!(v(pair[0]) < v(pair[1]), "{} < {}", pair[0], pair[1]);

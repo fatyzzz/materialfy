@@ -31,8 +31,8 @@ use tokio::sync::{broadcast, watch};
 
 use crate::ServiceError;
 use crate::auth::{AuthEvent, AuthService};
-use crate::data::artist_overview::{self, PreRelease};
 use crate::data::home_feed::{self, FeedCard};
+use crate::data::artist_overview::{self, PreRelease};
 use crate::data::{fsio, route};
 use crate::history::HistoryService;
 use crate::library::{LibraryEvent, LibraryService};
@@ -193,9 +193,7 @@ impl ReleasesService {
         }
         {
             let mut state = lock(&self.state);
-            let fresh = state
-                .loaded_at
-                .is_some_and(|at| at.elapsed() < REFRESH_EVERY);
+            let fresh = state.loaded_at.is_some_and(|at| at.elapsed() < REFRESH_EVERY);
             if fresh && !force {
                 return;
             }
@@ -237,11 +235,7 @@ impl ReleasesService {
             )
         };
         self.snapshot.send_if_modified(|s| {
-            if s.radar == radar
-                && s.radar_checked == radar_checked
-                && *s.releases == releases
-                && *s.upcoming == upcoming
-            {
+            if s.radar == radar && s.radar_checked == radar_checked && *s.releases == releases && *s.upcoming == upcoming {
                 return false;
             }
             s.radar = radar;
@@ -335,8 +329,7 @@ impl ReleasesService {
         let loading = self.snapshot.borrow().loading;
         let again = {
             let mut state = lock(&self.state);
-            let again =
-                !state.account.is_empty() && state.loaded_at.is_some() && !state.via_session;
+            let again = !state.account.is_empty() && state.loaded_at.is_some() && !state.via_session;
             if again && loading {
                 state.session_pending = true;
             }
@@ -366,9 +359,7 @@ impl ReleasesService {
             match tokio::time::timeout(RADAR_TIMEOUT, browse_radar(&self.http, &session)).await {
                 Ok(Ok(Some(radar))) => return (Some(map(&radar)), true),
                 Ok(Ok(None)) => session_answered = true,
-                Ok(Err(error)) => {
-                    tracing::debug!("Release Radar on the “Made for you” page: {error:#}")
-                }
+                Ok(Err(error)) => tracing::debug!("Release Radar on the “Made for you” page: {error:#}"),
                 Err(_) => tracing::debug!("Release Radar on the “Made for you” page: timed out"),
             }
         }
@@ -379,10 +370,7 @@ impl ReleasesService {
                 Err(error) => tracing::debug!("Release Radar with the shared key: {error}"),
             }
         }
-        (
-            radar_in_library(&self.library.playlists()),
-            session_answered,
-        )
+        (radar_in_library(&self.library.playlists()), session_answered)
     }
 
     /// Только «Радар» (сессия стала готова позже входа).
@@ -418,15 +406,11 @@ impl ReleasesService {
     /// Чьи релизы смотреть: подписки (коллекция сессии → библиотека → Web API), потом часто слушаемые.
     /// Err — подписки не узнать ни одним путём, а истории нет: «ничего нового» было бы неправдой.
     /// Второй список — у кого спрашивать анонсы: часто слушаемые, потом подписки.
-    async fn artist_ids(
-        &self,
-        session: Option<&Session>,
-    ) -> Result<(Vec<String>, Vec<String>), String> {
+    async fn artist_ids(&self, session: Option<&Session>) -> Result<(Vec<String>, Vec<String>), String> {
         let mut followed = Vec::new();
         let mut answered = false;
         if let Some(session) = session {
-            match tokio::time::timeout(READ_TIMEOUT, new_releases::followed_artists(session)).await
-            {
+            match tokio::time::timeout(READ_TIMEOUT, new_releases::followed_artists(session)).await {
                 Ok(Ok(ids)) => {
                     answered = true;
                     followed = ids;
@@ -436,21 +420,11 @@ impl ReleasesService {
             }
         }
         if followed.is_empty() {
-            followed = self
-                .library
-                .artists()
-                .into_iter()
-                .map(|a| a.artist_id)
-                .collect();
+            followed = self.library.artists().into_iter().map(|a| a.artist_id).collect();
         }
         // сессия ответила «ни на кого не подписан» — Web API скажет то же
         if followed.is_empty() && !answered {
-            match sf_api::limits::background(within(
-                WEB_TIMEOUT,
-                followed_artists(&self.auth.api()),
-            ))
-            .await
-            {
+            match sf_api::limits::background(within(WEB_TIMEOUT, followed_artists(&self.auth.api()))).await {
                 Ok(ids) => {
                     answered = true;
                     followed = ids;
@@ -467,9 +441,7 @@ impl ReleasesService {
         let frequent = frequent_artists(&plays, FREQUENT_ARTISTS);
         let pool = artist_pool(&followed, &frequent, MAX_ARTISTS);
         if pool.is_empty() && !answered {
-            return Err(mf_i18n::t(
-                "Spotify didn’t return the artists you follow — new releases will update later",
-            ));
+            return Err(mf_i18n::t("Spotify didn’t return the artists you follow — new releases will update later"));
         }
         Ok((pool, artist_pool(&frequent, &followed, UPCOMING_ARTISTS)))
     }
@@ -510,9 +482,7 @@ impl ReleasesService {
                             via_session: false,
                         })
                         .map_err(|error| ServiceError::from(error).to_string()),
-                    Err(_) => Err(mf_i18n::t(
-                        "Spotify is taking too long to respond — new releases will update later",
-                    )),
+                    Err(_) => Err(mf_i18n::t("Spotify is taking too long to respond — new releases will update later")),
                 }
             }
         }
@@ -642,14 +612,9 @@ async fn listen(weak: Weak<ReleasesService>) {
 // --- сеть: сессия ----------------------------------------------------------------------------------
 
 /// Обход исполнителей `artists` через сессию без кэша дат (проверка на живом аккаунте, отладка).
-pub async fn crawl_session(
-    session: &Session,
-    artists: &[String],
-) -> Result<Vec<NewRelease>, String> {
+pub async fn crawl_session(session: &Session, artists: &[String]) -> Result<Vec<NewRelease>, String> {
     let today = jiff::Zoned::now().date();
-    session_crawl(session, artists, HashMap::new(), &[], today)
-        .await
-        .map(|crawl| crawl.releases)
+    session_crawl(session, artists, HashMap::new(), &[], today).await.map(|crawl| crawl.releases)
 }
 
 /// Анонсы исполнителей со страниц исполнителей (GraphQL через сессию).
@@ -658,12 +623,7 @@ async fn upcoming(http: &sf_api::Http, session: &Session, pool: &[String]) -> Ve
         .map(|artist_id| {
             let session = session.clone();
             async move {
-                match tokio::time::timeout(
-                    READ_TIMEOUT,
-                    artist_overview::artist(http, &session, &artist_id),
-                )
-                .await
-                {
+                match tokio::time::timeout(READ_TIMEOUT, artist_overview::artist(http, &session, &artist_id)).await {
                     Ok(Ok(overview)) => overview.pre_release,
                     Ok(Err(error)) => {
                         tracing::debug!("upcoming: artist {artist_id}: {error:#}");
@@ -682,11 +642,7 @@ async fn upcoming(http: &sf_api::Http, session: &Session, pool: &[String]) -> Ve
 
 /// Ещё не вышедшие, ближайшие первыми, один анонс — один раз (у совместного он есть у каждого исполнителя).
 fn upcoming_list(mut found: Vec<PreRelease>, now: jiff::Timestamp) -> Vec<PreRelease> {
-    found.retain(|pre| {
-        pre.release_at
-            .parse::<jiff::Timestamp>()
-            .is_ok_and(|at| at > now)
-    });
+    found.retain(|pre| pre.release_at.parse::<jiff::Timestamp>().is_ok_and(|at| at > now));
     found.sort_by(|a, b| a.release_at.cmp(&b.release_at));
     let mut seen = HashSet::new();
     found.retain(|pre| seen.insert(pre.uri.clone()));
@@ -702,59 +658,37 @@ async fn session_crawl(
     today: Date,
 ) -> Result<Crawl, String> {
     // будущие владеют своими данными (сессия — Arc внутри): иначе задача tokio не Send
-    let answers: Vec<(usize, Option<Vec<ReleaseRef>>)> =
-        futures::stream::iter(pool.iter().cloned().enumerate())
-            .map(|(rank, artist_id)| {
-                let session = session.clone();
-                async move {
-                    match tokio::time::timeout(
-                        READ_TIMEOUT,
-                        new_releases::artist_releases(&session, &artist_id),
-                    )
-                    .await
-                    {
-                        Ok(Ok(refs)) => (rank, Some(refs)),
-                        Ok(Err(error)) => {
-                            tracing::debug!("new releases: artist {artist_id}: {error:#}");
-                            (rank, None)
-                        }
-                        Err(_) => (rank, None),
+    let answers: Vec<(usize, Option<Vec<ReleaseRef>>)> = futures::stream::iter(pool.iter().cloned().enumerate())
+        .map(|(rank, artist_id)| {
+            let session = session.clone();
+            async move {
+                match tokio::time::timeout(READ_TIMEOUT, new_releases::artist_releases(&session, &artist_id)).await {
+                    Ok(Ok(refs)) => (rank, Some(refs)),
+                    Ok(Err(error)) => {
+                        tracing::debug!("new releases: artist {artist_id}: {error:#}");
+                        (rank, None)
                     }
+                    Err(_) => (rank, None),
                 }
-            })
-            .buffer_unordered(CONCURRENCY)
-            .collect()
-            .await;
+            }
+        })
+        .buffer_unordered(CONCURRENCY)
+        .collect()
+        .await;
     if answers.iter().all(|(_, refs)| refs.is_none()) {
-        return Err(mf_i18n::t(
-            "Spotify didn’t respond — new releases will update later",
-        ));
+        return Err(mf_i18n::t("Spotify didn’t respond — new releases will update later"));
     }
-    let refs = best_refs(
-        answers
-            .into_iter()
-            .filter_map(|(rank, refs)| Some((rank, refs?))),
-    );
+    let refs = best_refs(answers.into_iter().filter_map(|(rank, refs)| Some((rank, refs?))));
 
-    let mut details: HashMap<String, NewRelease> = previous
-        .iter()
-        .map(|r| (r.album.album_id.clone(), r.clone()))
-        .collect();
+    let mut details: HashMap<String, NewRelease> =
+        previous.iter().map(|r| (r.album.album_id.clone(), r.clone())).collect();
     let wanted = needs_details(&refs, &known, &details, today, WINDOW_DAYS);
-    let batches: Vec<Vec<ReleaseRef>> = wanted
-        .chunks(new_releases::RELEASE_BATCH)
-        .map(<[_]>::to_vec)
-        .collect();
+    let batches: Vec<Vec<ReleaseRef>> = wanted.chunks(new_releases::RELEASE_BATCH).map(<[_]>::to_vec).collect();
     let fetched: Vec<Vec<Album>> = futures::stream::iter(batches)
         .map(|batch| {
             let session = session.clone();
             async move {
-                match tokio::time::timeout(
-                    READ_TIMEOUT,
-                    new_releases::release_details(&session, &batch),
-                )
-                .await
-                {
+                match tokio::time::timeout(READ_TIMEOUT, new_releases::release_details(&session, &batch)).await {
                     Ok(Ok(albums)) => albums,
                     Ok(Err(error)) => {
                         tracing::debug!("new releases: release details: {error:#}");
@@ -786,15 +720,11 @@ async fn session_crawl(
 }
 
 /// Релизы всех исполнителей: id → (лучшее место исполнителя, группа).
-fn best_refs(
-    answers: impl Iterator<Item = (usize, Vec<ReleaseRef>)>,
-) -> HashMap<String, (usize, &'static str)> {
+fn best_refs(answers: impl Iterator<Item = (usize, Vec<ReleaseRef>)>) -> HashMap<String, (usize, &'static str)> {
     let mut best: HashMap<String, (usize, &'static str)> = HashMap::new();
     for (rank, refs) in answers {
         for release in refs {
-            let entry = best
-                .entry(release.album_id)
-                .or_insert((rank, release.group));
+            let entry = best.entry(release.album_id).or_insert((rank, release.group));
             if rank < entry.0 {
                 *entry = (rank, release.group);
             }
@@ -838,10 +768,7 @@ fn needs_details(
 // --- сеть: Web API (запасной путь) -----------------------------------------------------------------
 
 /// Запрос Web API, который не может держать страницу: дольше `limit` — как ошибка сети.
-async fn within<T>(
-    limit: Duration,
-    request: impl Future<Output = Result<T, ApiError>>,
-) -> Result<T, ApiError> {
+async fn within<T>(limit: Duration, request: impl Future<Output = Result<T, ApiError>>) -> Result<T, ApiError> {
     tokio::time::timeout(limit, request)
         .await
         .unwrap_or_else(|_| Err(ApiError::Network("Spotify didn’t respond in time".into())))
@@ -853,24 +780,18 @@ const PERSONAL_PLAYLIST: &str = "37i9dQZEVXb";
 /// «Радар» на странице «Для тебя» (GraphQL browsePage через сессию, без квоты Web API). Подписи миксов
 /// приходят не всегда — дочитываются только личные плейлисты без названия. Ok(None) — страница ответила,
 /// а «Радара» на ней нет.
-async fn browse_radar(
-    http: &sf_api::Http,
-    session: &Session,
-) -> anyhow::Result<Option<sf_api::models::Playlist>> {
+async fn browse_radar(http: &sf_api::Http, session: &Session) -> anyhow::Result<Option<sf_api::models::Playlist>> {
     let cards: Vec<FeedCard> = home_feed::made_for_you(http, session)
         .await?
         .into_iter()
         .flat_map(|section| section.cards)
         .filter(|card| card.kind() == "playlist")
         .collect();
-    let (unnamed, mut named): (Vec<FeedCard>, Vec<FeedCard>) = cards
-        .into_iter()
-        .partition(|card| card.title.is_empty() && card.id().starts_with(PERSONAL_PLAYLIST));
+    let (unnamed, mut named): (Vec<FeedCard>, Vec<FeedCard>) =
+        cards.into_iter().partition(|card| card.title.is_empty() && card.id().starts_with(PERSONAL_PLAYLIST));
     named.extend(home_feed::resolve_playlists(session, unnamed).await);
     let playlists: Vec<sf_api::models::Playlist> = named.iter().map(card_playlist).collect();
-    let Some(radar) = new_releases::pick_release_radar(&playlists) else {
-        return Ok(None);
-    };
+    let Some(radar) = new_releases::pick_release_radar(&playlists) else { return Ok(None) };
     // полная шапка (обложка, описание, число треков) — через сессию; не вышло — хватит карточки
     match session_reads::playlist(session, &radar.id).await {
         Ok(playlist) => Ok(Some(playlist)),
@@ -888,11 +809,7 @@ fn card_playlist(card: &FeedCard) -> sf_api::models::Playlist {
         ..Default::default()
     };
     if !card.cover.is_empty() {
-        playlist.images.push(sf_api::models::Image {
-            url: card.cover.clone(),
-            width: None,
-            height: None,
-        });
+        playlist.images.push(sf_api::models::Image { url: card.cover.clone(), width: None, height: None });
     }
     playlist.owner.id = (!card.owner_id.is_empty()).then(|| card.owner_id.clone());
     playlist.owner.display_name = (!card.owner.is_empty()).then(|| card.owner.clone());
@@ -902,11 +819,7 @@ fn card_playlist(card: &FeedCard) -> sf_api::models::Playlist {
 async fn shared_radar(api: &ApiGateway) -> Result<Option<sf_api::models::Playlist>, ApiError> {
     let client = api.client_for(Operation::PlaylistSearch).await?;
     let page = client
-        .category_playlists(
-            new_releases::MADE_FOR_YOU_CATEGORY,
-            0,
-            new_releases::CATEGORY_LIMIT,
-        )
+        .category_playlists(new_releases::MADE_FOR_YOU_CATEGORY, 0, new_releases::CATEGORY_LIMIT)
         .await?;
     Ok(new_releases::pick_release_radar(&page.items).cloned())
 }
@@ -928,11 +841,7 @@ async fn followed_artists(api: &ApiGateway) -> Result<Vec<String>, ApiError> {
 
 /// Без сессии: /artists/{id}/albums по первым WEB_MAX_ARTISTS исполнителям. 429 надолго, квота или вход
 /// останавливают обход; что успели — показываем.
-async fn web_crawl(
-    api: &ApiGateway,
-    pool: &[String],
-    today: Date,
-) -> Result<Vec<NewRelease>, ApiError> {
+async fn web_crawl(api: &ApiGateway, pool: &[String], today: Date) -> Result<Vec<NewRelease>, ApiError> {
     let client = api.client_for(Operation::Catalog).await?;
     let stop = Arc::new(AtomicBool::new(false));
     let answers: Vec<Result<Vec<(usize, NewRelease)>, ApiError>> =
@@ -945,10 +854,7 @@ async fn web_crawl(
                         return Ok(Vec::new());
                     }
                     match web_artist_releases(&client, &artist_id).await {
-                        Ok(albums) => Ok(albums
-                            .iter()
-                            .map(|album| (rank, release_of(album)))
-                            .collect()),
+                        Ok(albums) => Ok(albums.iter().map(|album| (rank, release_of(album))).collect()),
                         Err(error) => {
                             if stops_the_crawl(&error) {
                                 stop.store(true, Ordering::Relaxed);
@@ -993,10 +899,7 @@ async fn web_artist_releases(client: &ApiClient, artist_id: &str) -> Result<Vec<
     let more_singles = singles_cut_off(&page);
     let mut albums = page.items;
     if more_singles {
-        match client
-            .artist_albums(artist_id, "single", 0, SINGLES_PER_ARTIST)
-            .await
-        {
+        match client.artist_albums(artist_id, "single", 0, SINGLES_PER_ARTIST).await {
             Ok(singles) => albums.extend(singles.items),
             Err(error) => tracing::debug!("new releases: singles {artist_id}: {error}"),
         }
@@ -1008,10 +911,7 @@ async fn web_artist_releases(client: &ApiClient, artist_id: &str) -> Result<Vec<
 fn stops_the_crawl(error: &ApiError) -> bool {
     matches!(
         error,
-        ApiError::RateLimited
-            | ApiError::QuotaExhausted
-            | ApiError::NotSignedIn
-            | ApiError::SignInExpired { .. }
+        ApiError::RateLimited | ApiError::QuotaExhausted | ApiError::NotSignedIn | ApiError::SignInExpired { .. }
     )
 }
 
@@ -1036,11 +936,7 @@ pub fn frequent_artists(plays: &[Vec<String>], max: usize) -> Vec<String> {
     let mut ranked: Vec<(&str, (usize, usize))> = counts.into_iter().collect();
     // чаще — выше; поровну — кого слушали позже (история новые сверху)
     ranked.sort_by(|a, b| b.1.0.cmp(&a.1.0).then(a.1.1.cmp(&b.1.1)));
-    ranked
-        .into_iter()
-        .take(max)
-        .map(|(id, _)| id.to_owned())
-        .collect()
+    ranked.into_iter().take(max).map(|(id, _)| id.to_owned()).collect()
 }
 
 /// Чьи релизы смотреть: подписки в порядке коллекции, потом часто слушаемые; без повторов, ≤ max.
@@ -1162,17 +1058,10 @@ fn labelled(releases: &[NewRelease], today: Date) -> Vec<NewRelease> {
 
 /// Свежие релизы (rank — место исполнителя в подборке): без повторов (релиз двух исполнителей — у того, кто
 /// выше), новые сверху, при равной дате — по месту исполнителя; ≤ limit.
-pub fn select(
-    found: Vec<(usize, NewRelease)>,
-    today: Date,
-    window_days: i64,
-    limit: usize,
-) -> Vec<NewRelease> {
+pub fn select(found: Vec<(usize, NewRelease)>, today: Date, window_days: i64, limit: usize) -> Vec<NewRelease> {
     let mut best: HashMap<String, (Date, usize, NewRelease)> = HashMap::new();
     for (rank, release) in found {
-        if release.album.album_id.is_empty()
-            || !matches!(release.group.as_str(), "album" | "single")
-        {
+        if release.album.album_id.is_empty() || !matches!(release.group.as_str(), "album" | "single") {
             continue;
         }
         let Some(day) = release_day(&release.release_date) else {
@@ -1205,11 +1094,7 @@ mod tests {
 
     #[test]
     fn upcoming_keeps_the_unreleased_soonest_first_and_once() {
-        let pre = |uri: &str, at: &str| PreRelease {
-            uri: uri.into(),
-            release_at: at.into(),
-            ..Default::default()
-        };
+        let pre = |uri: &str, at: &str| PreRelease { uri: uri.into(), release_at: at.into(), ..Default::default() };
         let now: jiff::Timestamp = "2026-11-12T18:00:00Z".parse().unwrap();
         let found = vec![
             pre("spotify:prerelease:late", "2026-12-01T03:00:00Z"),
@@ -1218,10 +1103,7 @@ mod tests {
             pre("spotify:prerelease:soon", "2026-11-17T03:00:00Z"),
             pre("spotify:prerelease:bad", "soon"),
         ];
-        let uris: Vec<_> = upcoming_list(found, now)
-            .into_iter()
-            .map(|p| p.uri)
-            .collect();
+        let uris: Vec<_> = upcoming_list(found, now).into_iter().map(|p| p.uri).collect();
         assert_eq!(uris, ["spotify:prerelease:soon", "spotify:prerelease:late"]);
     }
 
@@ -1253,16 +1135,8 @@ mod tests {
     #[test]
     fn release_dates_read_with_their_precision() {
         assert_eq!(release_day("2026-10-03"), Some(date("2026-10-03")));
-        assert_eq!(
-            release_day("2026-10"),
-            Some(date("2026-10-01")),
-            "month: its first day"
-        );
-        assert_eq!(
-            release_day("2026"),
-            None,
-            "a year alone says nothing about freshness"
-        );
+        assert_eq!(release_day("2026-10"), Some(date("2026-10-01")), "month: its first day");
+        assert_eq!(release_day("2026"), None, "a year alone says nothing about freshness");
         assert_eq!(release_day("2026-13-01"), None);
         assert_eq!(release_day(""), None);
     }
@@ -1271,15 +1145,9 @@ mod tests {
     fn only_releases_inside_the_window_are_fresh() {
         let today = date("2026-10-11");
         assert!(is_fresh(today, today, 42));
-        assert!(
-            is_fresh(date("2026-08-30"), today, 42),
-            "the window's first day"
-        );
+        assert!(is_fresh(date("2026-08-30"), today, 42), "the window's first day");
         assert!(!is_fresh(date("2026-08-29"), today, 42));
-        assert!(
-            !is_fresh(date("2026-10-16"), today, 42),
-            "announced, not out yet"
-        );
+        assert!(!is_fresh(date("2026-10-16"), today, 42), "announced, not out yet");
     }
 
     #[test]
@@ -1289,10 +1157,7 @@ mod tests {
         assert_eq!(date_label(date("2026-10-10"), today), "Yesterday");
         assert_eq!(date_label(date("2026-10-03"), today), "October 3");
         assert_eq!(date_label(date("2026-05-01"), today), "May 1");
-        assert_eq!(
-            date_label(date("2025-12-28"), date("2026-01-05")),
-            "December 28, 2025"
-        );
+        assert_eq!(date_label(date("2025-12-28"), date("2026-01-05")), "December 28, 2025");
     }
 
     #[test]
@@ -1330,13 +1195,7 @@ mod tests {
 
     #[test]
     fn frequent_artists_are_counted_over_the_history() {
-        let plays = vec![
-            ids(&["x"]),
-            ids(&["y", "x"]),
-            ids(&["z"]),
-            ids(&["y"]),
-            ids(&["x", ""]),
-        ];
+        let plays = vec![ids(&["x"]), ids(&["y", "x"]), ids(&["z"]), ids(&["y"]), ids(&["x", ""])];
         assert_eq!(frequent_artists(&plays, 10), ["x", "y", "z"]);
         assert_eq!(frequent_artists(&plays, 1), ["x"]);
         // поровну — кого слушали позже (раньше в истории)
@@ -1402,11 +1261,10 @@ mod tests {
         .into_iter()
         .map(|(id, d)| (id.to_owned(), d.to_owned()))
         .collect();
-        let details: HashMap<String, NewRelease> =
-            [found(0, "fresh-shown", "album", "2026-10-02").1]
-                .into_iter()
-                .map(|r| (r.album.album_id.clone(), r))
-                .collect();
+        let details: HashMap<String, NewRelease> = [found(0, "fresh-shown", "album", "2026-10-02").1]
+            .into_iter()
+            .map(|r| (r.album.album_id.clone(), r))
+            .collect();
         let asked: Vec<String> = needs_details(&refs, &known, &details, today, 42)
             .into_iter()
             .map(|r| r.album_id)
@@ -1421,19 +1279,10 @@ mod tests {
             total,
             ..Default::default()
         };
-        let albums = vec![
-            album("a", "album", "2026-01-01"),
-            album("b", "album", "2025-01-01"),
-        ];
+        let albums = vec![album("a", "album", "2026-01-01"), album("b", "album", "2025-01-01")];
         assert!(singles_cut_off(&page(albums.clone(), 30)));
-        assert!(
-            !singles_cut_off(&page(albums.clone(), 2)),
-            "the whole list fit"
-        );
-        let mixed = vec![
-            album("a", "album", "2026-01-01"),
-            album("s", "single", "2026-02-01"),
-        ];
+        assert!(!singles_cut_off(&page(albums.clone(), 2)), "the whole list fit");
+        let mixed = vec![album("a", "album", "2026-01-01"), album("s", "single", "2026-02-01")];
         assert!(!singles_cut_off(&page(mixed, 30)));
     }
 
@@ -1451,26 +1300,13 @@ mod tests {
             owner_id: "spotify".into(),
             ..Default::default()
         };
-        assert_eq!(
-            radar_in_library(&[mine.clone(), radar.clone()]),
-            Some(radar)
-        );
-        assert_eq!(
-            radar_in_library(&[mine]),
-            None,
-            "a copy of one's own is not the radar"
-        );
+        assert_eq!(radar_in_library(&[mine.clone(), radar.clone()]), Some(radar));
+        assert_eq!(radar_in_library(&[mine]), None, "a copy of one's own is not the radar");
     }
 
     #[test]
     fn a_release_serializes_with_tile_keys_and_its_date() {
-        let release = select(
-            vec![found(0, "lp", "album", "2026-10-02")],
-            date("2026-10-11"),
-            42,
-            5,
-        )
-        .remove(0);
+        let release = select(vec![found(0, "lp", "album", "2026-10-02")], date("2026-10-11"), 42, 5).remove(0);
         let json = serde_json::to_value(&release).unwrap();
         assert_eq!(json["albumId"], "lp");
         assert_eq!(json["releaseDate"], "2026-10-02");

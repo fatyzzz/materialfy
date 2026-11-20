@@ -20,19 +20,13 @@ pub fn api_error_text(error: &ApiError) -> String {
 /// Ошибка страницы плейлиста (403/404 — Spotify не отдаёт его сторонним приложениям).
 pub fn playlist_error_text(error: &ApiError) -> String {
     match error.status() {
-        Some(403 | 404) => {
-            mf_i18n::t("Spotify doesn't share this playlist's tracks with third-party apps")
-        }
+        Some(403 | 404) => mf_i18n::t("Spotify doesn't share this playlist's tracks with third-party apps"),
         _ => api_error_text(error),
     }
 }
 
 /// Плейлисты — всегда сначала сессия (свои тоже: личное приложение Web API — лишь запасной путь).
-fn session_for(
-    api: &ApiGateway,
-    player: &PlayerHandle,
-    _operation: Operation,
-) -> Option<sf_player::Session> {
+fn session_for(api: &ApiGateway, player: &PlayerHandle, _operation: Operation) -> Option<sf_player::Session> {
     account_session(api, player)
 }
 
@@ -42,20 +36,13 @@ pub const STARTUP_SESSION_WAIT: Duration = Duration::from_secs(20);
 /// Сессия того же аккаунта; пока движок подключается (LocalPlayback::Connecting) — ждать её, не дольше `max`.
 /// На старте Web API готов сразу (сохранённый профиль), а сессия — через секунды: без ожидания библиотека
 /// и история ушли бы в Web API, а потом перечитались бы через сессию ещё раз.
-pub async fn wait_account_session(
-    api: &ApiGateway,
-    player: &PlayerHandle,
-    max: Duration,
-) -> Option<sf_player::Session> {
+pub async fn wait_account_session(api: &ApiGateway, player: &PlayerHandle, max: Duration) -> Option<sf_player::Session> {
     let started = std::time::Instant::now();
     loop {
         if let Some(session) = account_session(api, player) {
             return Some(session);
         }
-        let coming = matches!(
-            player.local_playback(),
-            sf_player::LocalPlayback::Connecting
-        );
+        let coming = matches!(player.local_playback(), sf_player::LocalPlayback::Connecting);
         if !coming || started.elapsed() >= max {
             return None;
         }
@@ -94,12 +81,9 @@ where
     SF: std::future::Future<Output = Result<T, Failure>>,
     WF: std::future::Future<Output = Result<T, ApiError>>,
 {
-    session_first(
-        account_session(api, player),
-        deadline,
-        session_read,
-        || async move { web_read(api.client_for(operation).await?).await },
-    )
+    session_first(account_session(api, player), deadline, session_read, || async move {
+        web_read(api.client_for(operation).await?).await
+    })
     .await
 }
 
@@ -122,9 +106,7 @@ where
 }
 
 /// Ответ сессии как ответ Web API; None — сессия не смогла, спросить Web API.
-fn settle<T>(
-    result: Result<Result<T, Failure>, tokio::time::error::Elapsed>,
-) -> Option<Result<T, ApiError>> {
+fn settle<T>(result: Result<Result<T, Failure>, tokio::time::error::Elapsed>) -> Option<Result<T, ApiError>> {
     match result {
         Ok(Ok(value)) => Some(Ok(value)),
         Ok(Err(Failure::Definitive(error))) => Some(Err(error)),
@@ -140,16 +122,11 @@ fn settle<T>(
 }
 
 /// Шапка плейлиста.
-pub async fn playlist(
-    api: &ApiGateway,
-    player: &PlayerHandle,
-    id: &str,
-) -> Result<Playlist, ApiError> {
+pub async fn playlist(api: &ApiGateway, player: &PlayerHandle, id: &str) -> Result<Playlist, ApiError> {
     let operation = Operation::PlaylistMetadata(api.playlist_access(id));
     if let Some(session) = session_for(api, player, operation)
-        && let Some(result) = settle(
-            tokio::time::timeout(SESSION_READ_TIMEOUT, session_reads::playlist(&session, id)).await,
-        )
+        && let Some(result) =
+            settle(tokio::time::timeout(SESSION_READ_TIMEOUT, session_reads::playlist(&session, id)).await)
     {
         if let Ok(playlist) = &result {
             api.observe_playlist(playlist);
@@ -171,27 +148,16 @@ pub async fn playlist_items(
     let operation = Operation::PlaylistItems(api.playlist_access(id));
     if let Some(session) = session_for(api, player, operation)
         && let Some(result) = settle(
-            tokio::time::timeout(
-                SESSION_READ_TIMEOUT,
-                session_reads::items(&session, id, offset, PLAYLIST_PAGE),
-            )
-            .await,
+            tokio::time::timeout(SESSION_READ_TIMEOUT, session_reads::items(&session, id, offset, PLAYLIST_PAGE)).await,
         )
     {
         return result;
     }
-    api.client_for(operation)
-        .await?
-        .playlist_items(id, offset, PLAYLIST_PAGE)
-        .await
+    api.client_for(operation).await?.playlist_items(id, offset, PLAYLIST_PAGE).await
 }
 
 /// Все страницы списка со смещением (`limit` за раз), с потолком `max_pages`.
-pub async fn all_pages<T, F, Fut>(
-    limit: u32,
-    max_pages: u32,
-    mut fetch: F,
-) -> Result<Vec<T>, ApiError>
+pub async fn all_pages<T, F, Fut>(limit: u32, max_pages: u32, mut fetch: F) -> Result<Vec<T>, ApiError>
 where
     F: FnMut(u32, u32) -> Fut,
     Fut: std::future::Future<Output = Result<Page<T>, ApiError>>,
@@ -216,15 +182,9 @@ mod tests {
 
     #[test]
     fn errors_read_as_user_text() {
-        assert_eq!(
-            api_error_text(&ApiError::NotSignedIn),
-            "Sign in to your account"
-        );
+        assert_eq!(api_error_text(&ApiError::NotSignedIn), "Sign in to your account");
         assert!(api_error_text(&ApiError::Network("x".into())).contains("proxy"));
-        let refused = ApiError::Status {
-            status: 404,
-            message: "Not found".into(),
-        };
+        let refused = ApiError::Status { status: 404, message: "Not found".into() };
         assert!(playlist_error_text(&refused).contains("third-party"));
     }
 
@@ -240,40 +200,20 @@ mod tests {
         let got = session_first(Some(()), short, |()| async { Ok("session") }, web).await;
         assert_eq!(got.unwrap(), "session");
         // окончательный ответ сессии (нет такого объекта) — тоже без Web API
-        let missing = ApiError::Status {
-            status: 404,
-            message: "нет".into(),
-        };
-        let got = session_first(
-            Some(()),
-            short,
-            |()| async { Err(Failure::Definitive(missing)) },
-            web,
-        )
-        .await;
+        let missing = ApiError::Status { status: 404, message: "нет".into() };
+        let got = session_first(Some(()), short, |()| async { Err(Failure::Definitive(missing)) }, web).await;
         assert_eq!(got.unwrap_err().status(), Some(404));
         assert_eq!(web_calls.load(std::sync::atomic::Ordering::SeqCst), 0);
         // сессии нет, она не смогла или не успела — Web API
         let none: Option<()> = None;
-        assert_eq!(
-            session_first(none, short, |()| async { Ok("session") }, web)
-                .await
-                .unwrap(),
-            "web"
-        );
+        assert_eq!(session_first(none, short, |()| async { Ok("session") }, web).await.unwrap(), "web");
         let failed = |()| async { Err(Failure::Retry(anyhow::anyhow!("сеть"))) };
-        assert_eq!(
-            session_first(Some(()), short, failed, web).await.unwrap(),
-            "web"
-        );
+        assert_eq!(session_first(Some(()), short, failed, web).await.unwrap(), "web");
         let slow = |()| async {
             tokio::time::sleep(Duration::from_secs(5)).await;
             Ok("session")
         };
-        assert_eq!(
-            session_first(Some(()), short, slow, web).await.unwrap(),
-            "web"
-        );
+        assert_eq!(session_first(Some(()), short, slow, web).await.unwrap(), "web");
         assert_eq!(web_calls.load(std::sync::atomic::Ordering::SeqCst), 3);
     }
 

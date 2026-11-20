@@ -29,15 +29,7 @@ impl CachedHome {
         top_artists: Vec<ArtistItem>,
         top_tracks: Vec<TrackItem>,
     ) -> Self {
-        Self {
-            version: VERSION,
-            made_for_you,
-            feed,
-            favorite_artists,
-            podcasts,
-            top_artists,
-            top_tracks,
-        }
+        Self { version: VERSION, made_for_you, feed, favorite_artists, podcasts, top_artists, top_tracks }
     }
 
     /// Пустой выпуск кэш не заменяет: пустая главная на экране хуже прошлой.
@@ -93,25 +85,12 @@ mod tests {
         let dir = dir();
         let file = file(&dir);
         let cache = CachedHome::new(
-            vec![LibraryEntry {
-                id: "p".into(),
-                title: "Mix".into(),
-                ..Default::default()
-            }],
+            vec![LibraryEntry { id: "p".into(), title: "Mix".into(), ..Default::default() }],
             Vec::new(),
-            vec![ArtistItem {
-                name: "A".into(),
-                ..Default::default()
-            }],
+            vec![ArtistItem { name: "A".into(), ..Default::default() }],
             Vec::new(),
-            vec![ArtistItem {
-                name: "B".into(),
-                ..Default::default()
-            }],
-            vec![TrackItem {
-                uri: "spotify:track:1".into(),
-                ..Default::default()
-            }],
+            vec![ArtistItem { name: "B".into(), ..Default::default() }],
+            vec![TrackItem { uri: "spotify:track:1".into(), ..Default::default() }],
         );
         write(&file, &cache);
         assert_eq!(read(&file), Some(cache));
@@ -122,29 +101,11 @@ mod tests {
     fn an_empty_shelf_set_is_not_written_over_a_good_cache() {
         let dir = dir();
         let file = file(&dir);
-        let cache = CachedHome::new(
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            Vec::new(),
-            vec![TrackItem {
-                uri: "spotify:track:1".into(),
-                ..Default::default()
-            }],
-        );
+        let cache = CachedHome::new(Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), vec![
+            TrackItem { uri: "spotify:track:1".into(), ..Default::default() },
+        ]);
         write(&file, &cache);
-        write(
-            &file,
-            &CachedHome::new(
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-            ),
-        );
+        write(&file, &CachedHome::new(Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new(), Vec::new()));
         assert_eq!(read(&file), Some(cache));
         std::fs::remove_dir_all(dir).unwrap();
     }

@@ -19,11 +19,7 @@ pub struct CachedLibrary {
 
 impl CachedLibrary {
     pub fn new(rootlist: Vec<RootlistEntry>, playlists: Vec<Playlist>) -> Self {
-        Self {
-            version: VERSION,
-            rootlist,
-            playlists,
-        }
+        Self { version: VERSION, rootlist, playlists }
     }
 
     /// Пустое дерево кэш не заменяет: пустая библиотека на экране хуже старой.
@@ -71,21 +67,11 @@ mod tests {
         let file = path(&dir);
         let entries = vec![
             RootlistEntry::Playlist("spotify:playlist:a".into()),
-            RootlistEntry::FolderStart {
-                id: "f1".into(),
-                name: "Jazz".into(),
-            },
+            RootlistEntry::FolderStart { id: "f1".into(), name: "Jazz".into() },
             RootlistEntry::FolderEnd,
         ];
-        let playlists = vec![Playlist {
-            id: "a".into(),
-            name: "Mix".into(),
-            ..Default::default()
-        }];
-        write(
-            &file,
-            &CachedLibrary::new(entries.clone(), playlists.clone()),
-        );
+        let playlists = vec![Playlist { id: "a".into(), name: "Mix".into(), ..Default::default() }];
+        write(&file, &CachedLibrary::new(entries.clone(), playlists.clone()));
         let read_back = read(&file).expect("the cache is there");
         assert_eq!(read_back.rootlist, entries);
         assert_eq!(read_back.playlists, playlists);

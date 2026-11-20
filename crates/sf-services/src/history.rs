@@ -84,12 +84,7 @@ impl HistoryService {
     }
 
     /// То же с другим файлом истории (тесты).
-    pub fn with_file(
-        rt: Handle,
-        auth: Arc<AuthService>,
-        player: PlayerHandle,
-        path: PathBuf,
-    ) -> Arc<Self> {
+    pub fn with_file(rt: Handle, auth: Arc<AuthService>, player: PlayerHandle, path: PathBuf) -> Arc<Self> {
         let journal = Journal::load(&path);
         let service = Arc::new_cyclic(|me| Self {
             rt,
@@ -97,10 +92,7 @@ impl HistoryService {
             player,
             events: broadcast::channel(64).0,
             path,
-            state: Mutex::new(State {
-                journal,
-                ..Default::default()
-            }),
+            state: Mutex::new(State { journal, ..Default::default() }),
             me: me.clone(),
         });
         service.spawn_listeners();
@@ -167,11 +159,7 @@ impl HistoryService {
         let started = jiff::Timestamp::now()
             .checked_sub(jiff::SignedDuration::from_secs_f64(played.max(0.0)))
             .unwrap_or_else(|_| jiff::Timestamp::now());
-        let record = PlayRecord {
-            track,
-            context,
-            played_at: started.to_string(),
-        };
+        let record = PlayRecord { track, context, played_at: started.to_string() };
         lock(&self.state).journal.record(record);
         self.save_later();
         let _ = self.events.send(HistoryEvent::Changed);
@@ -200,11 +188,7 @@ impl HistoryService {
         self.recent(usize::MAX)
             .into_iter()
             .filter_map(|play| {
-                let uri = play
-                    .context
-                    .context_uri
-                    .clone()
-                    .filter(|uri| !uri.is_empty())?;
+                let uri = play.context.context_uri.clone().filter(|uri| !uri.is_empty())?;
                 seen.insert(uri).then_some(play.context)
             })
             .take(limit)
@@ -276,8 +260,7 @@ impl HistoryService {
     async fn read_recent(&self, generation: u64) -> Option<bool> {
         let api = self.auth.api();
         // сессия ответила (в том числе «истории нет») — Web API не спрашиваем
-        let session =
-            route::wait_account_session(&api, &self.player, route::STARTUP_SESSION_WAIT).await;
+        let session = route::wait_account_session(&api, &self.player, route::STARTUP_SESSION_WAIT).await;
         let from_session = match session {
             Some(session) => {
                 let http = api.http();
@@ -297,12 +280,7 @@ impl HistoryService {
         let records = match from_session {
             Some(records) => records,
             None => {
-                let read = async {
-                    api.client_for(Operation::UserData)
-                        .await?
-                        .recently_played(50, None, None)
-                        .await
-                };
+                let read = async { api.client_for(Operation::UserData).await?.recently_played(50, None, None).await };
                 let page = match tokio::time::timeout(READ_TIMEOUT, read).await {
                     Ok(Ok(page)) => page,
                     Ok(Err(error)) => {
@@ -325,12 +303,7 @@ impl HistoryService {
                             .context
                             .as_ref()
                             .filter(|context| !context.uri.is_empty())
-                            .map(|context| {
-                                PlayContext::with_uri(
-                                    context_kind(&context.kind),
-                                    context.uri.clone(),
-                                )
-                            })
+                            .map(|context| PlayContext::with_uri(context_kind(&context.kind), context.uri.clone()))
                             .unwrap_or_else(|| PlayContext::new(contexts::TRACKS)),
                         played_at: play.played_at.clone().unwrap_or_default(),
                     })
@@ -376,10 +349,7 @@ impl HistoryService {
 }
 
 /// Недавние контексты аккаунта сессии с подписями и обложками (lookup GraphQL; без подписей — только URI).
-async fn session_recent(
-    http: &sf_api::Http,
-    session: &sf_player::Session,
-) -> anyhow::Result<Vec<PlayRecord>> {
+async fn session_recent(http: &sf_api::Http, session: &sf_player::Session) -> anyhow::Result<Vec<PlayRecord>> {
     let recent = home_feed::recently_played(session, SESSION_RECENT).await?;
     if recent.is_empty() {
         return Ok(Vec::new());
@@ -392,11 +362,9 @@ async fn session_recent(
             }
         }
     }
-    let cards = home_feed::lookup(http, session, &uris)
-        .await
-        .unwrap_or_else(|error| {
-            tracing::debug!("recent labels: {error:#}");
-            Vec::new()
-        });
+    let cards = home_feed::lookup(http, session, &uris).await.unwrap_or_else(|error| {
+        tracing::debug!("recent labels: {error:#}");
+        Vec::new()
+    });
     Ok(feed::recent_records(&recent, &cards))
 }

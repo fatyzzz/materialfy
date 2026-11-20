@@ -1,14 +1,12 @@
 //! Состав полок главной (spotifast ui/home.rs + App::load_home): чистые функции без сети.
 use std::collections::HashSet;
 
-use md3_model::{
-    EpisodeItem, HomeShelf, LibraryEntry, PlayContext, PlaylistItem, ShowItem, TrackItem,
-};
+use md3_model::{EpisodeItem, HomeShelf, LibraryEntry, PlayContext, PlaylistItem, ShowItem, TrackItem};
 use serde::Serialize;
 use sf_api::util::{station_seed, uri_id, uri_kind};
 
-use crate::data::artist_overview::PreRelease;
 use crate::extra::seeds::station_title;
+use crate::data::artist_overview::PreRelease;
 use crate::releases::NewRelease;
 
 /// Поисковые термины «Сделано для вас» (reference model.rs DISCOVER_TERMS).
@@ -38,16 +36,7 @@ pub const TOP_ARTISTS: &str = "topArtists";
 pub const TOP_TRACKS: &str = "topTracks";
 
 /// Порядок полок на главной.
-pub const ORDER: &[&str] = &[
-    QUICK,
-    RECENT,
-    MADE_FOR_YOU,
-    UPCOMING,
-    NEW_RELEASES,
-    PODCASTS,
-    TOP_ARTISTS,
-    TOP_TRACKS,
-];
+pub const ORDER: &[&str] = &[QUICK, RECENT, MADE_FOR_YOU, UPCOMING, NEW_RELEASES, PODCASTS, TOP_ARTISTS, TOP_TRACKS];
 
 /// Английский исходник; в снимок полки — через mf_i18n::t (shelf).
 pub fn title(key: &str) -> &'static str {
@@ -80,20 +69,13 @@ pub fn shelf<T: Serialize>(key: &str, items: &[T]) -> HomeShelf {
         key: key.to_owned(),
         title: mf_i18n::t(title(key)),
         kind: kind(key).to_owned(),
-        items: items
-            .iter()
-            .filter_map(|item| serde_json::to_value(item).ok())
-            .collect(),
+        items: items.iter().filter_map(|item| serde_json::to_value(item).ok()).collect(),
     }
 }
 
 /// Скрытые полки (SettingKey::HomeHidden: ключи через запятую).
 pub fn hidden_keys(csv: &str) -> HashSet<String> {
-    csv.split(',')
-        .map(str::trim)
-        .filter(|k| !k.is_empty())
-        .map(str::to_owned)
-        .collect()
+    csv.split(',').map(str::trim).filter(|k| !k.is_empty()).map(str::to_owned).collect()
 }
 
 /// Плейлист Spotify под этот термин: «Discover Weekly», «Daily Mix 3» и т. п.
@@ -130,11 +112,7 @@ pub fn playlist_entry(p: &PlaylistItem) -> LibraryEntry {
     LibraryEntry {
         kind: if dj { "dj".into() } else { "playlist".into() },
         id: p.playlist_id.clone(),
-        uri: if p.uri.is_empty() {
-            format!("spotify:playlist:{}", p.playlist_id)
-        } else {
-            p.uri.clone()
-        },
+        uri: if p.uri.is_empty() { format!("spotify:playlist:{}", p.playlist_id) } else { p.uri.clone() },
         title: if dj { "DJ".into() } else { p.title.clone() },
         subtitle: if dj {
             mf_i18n::t("Music and commentary picked for you")
@@ -144,11 +122,7 @@ pub fn playlist_entry(p: &PlaylistItem) -> LibraryEntry {
             mf_i18n::tf("Playlist · {0}", &[&p.owner])
         },
         cover: p.cover.clone(),
-        covers: if p.cover.is_empty() {
-            Vec::new()
-        } else {
-            vec![p.cover.clone()]
-        },
+        covers: if p.cover.is_empty() { Vec::new() } else { vec![p.cover.clone()] },
         owner: p.owner.clone(),
         owner_id: p.owner_id.clone(),
         can_edit: p.can_edit,
@@ -160,22 +134,14 @@ pub fn playlist_entry(p: &PlaylistItem) -> LibraryEntry {
 }
 
 /// «Новинки»: «Радар новинок» первой плиткой, потом свежие релизы (плитки альбомов открывают их страницу).
-pub fn new_release_tiles(
-    radar: Option<&PlaylistItem>,
-    releases: &[NewRelease],
-) -> Vec<LibraryEntry> {
-    let radar = radar.map(|p| LibraryEntry {
-        subtitle: mf_i18n::tf("Playlist · {0}", &[&"Spotify"]),
-        ..playlist_entry(p)
-    });
+pub fn new_release_tiles(radar: Option<&PlaylistItem>, releases: &[NewRelease]) -> Vec<LibraryEntry> {
+    let radar = radar.map(|p| LibraryEntry { subtitle: mf_i18n::tf("Playlist · {0}", &[&"Spotify"]), ..playlist_entry(p) });
     radar
         .into_iter()
         .chain(releases.iter().map(|r| {
             let album = &r.album;
-            let details: Vec<&str> = [album.artists.as_str(), r.date_label.as_str()]
-                .into_iter()
-                .filter(|s| !s.is_empty())
-                .collect();
+            let details: Vec<&str> =
+                [album.artists.as_str(), r.date_label.as_str()].into_iter().filter(|s| !s.is_empty()).collect();
             LibraryEntry {
                 kind: "album".into(),
                 id: album.album_id.clone(),
@@ -183,11 +149,7 @@ pub fn new_release_tiles(
                 title: album.title.clone(),
                 subtitle: details.join(" · "),
                 cover: album.cover.clone(),
-                covers: if album.cover.is_empty() {
-                    Vec::new()
-                } else {
-                    vec![album.cover.clone()]
-                },
+                covers: if album.cover.is_empty() { Vec::new() } else { vec![album.cover.clone()] },
                 read_only: true,
                 track_count: album.track_count,
                 ..Default::default()
@@ -204,17 +166,9 @@ pub fn upcoming_tiles(upcoming: &[PreRelease]) -> Vec<LibraryEntry> {
     upcoming
         .iter()
         .map(|pre| {
-            let day = pre
-                .release_at
-                .parse::<jiff::Timestamp>()
-                .map(|at| at.to_zoned(zone.clone()).date());
-            let when = day
-                .map(|day| crate::releases::date_label(day, today))
-                .unwrap_or_default();
-            let details: Vec<&str> = [pre.artist.as_str(), when.as_str()]
-                .into_iter()
-                .filter(|s| !s.is_empty())
-                .collect();
+            let day = pre.release_at.parse::<jiff::Timestamp>().map(|at| at.to_zoned(zone.clone()).date());
+            let when = day.map(|day| crate::releases::date_label(day, today)).unwrap_or_default();
+            let details: Vec<&str> = [pre.artist.as_str(), when.as_str()].into_iter().filter(|s| !s.is_empty()).collect();
             LibraryEntry {
                 kind: "upcoming".into(),
                 id: pre.artist_id.clone(),
@@ -222,11 +176,7 @@ pub fn upcoming_tiles(upcoming: &[PreRelease]) -> Vec<LibraryEntry> {
                 title: pre.name.clone(),
                 subtitle: details.join(" · "),
                 cover: pre.cover.clone(),
-                covers: if pre.cover.is_empty() {
-                    Vec::new()
-                } else {
-                    vec![pre.cover.clone()]
-                },
+                covers: if pre.cover.is_empty() { Vec::new() } else { vec![pre.cover.clone()] },
                 read_only: true,
                 ..Default::default()
             }
@@ -248,11 +198,7 @@ pub fn liked_entry(liked_uri: &str, count: i64) -> LibraryEntry {
 }
 
 /// «Быстрый доступ»: Любимые + первые 5 плейлистов библиотеки.
-pub fn quick_tiles(
-    liked_uri: &str,
-    liked_count: i64,
-    playlists: &[PlaylistItem],
-) -> Vec<LibraryEntry> {
+pub fn quick_tiles(liked_uri: &str, liked_count: i64, playlists: &[PlaylistItem]) -> Vec<LibraryEntry> {
     std::iter::once(liked_entry(liked_uri, liked_count))
         .chain(playlists.iter().take(QUICK_PLAYLISTS).map(playlist_entry))
         .collect()
@@ -267,10 +213,7 @@ pub struct Play {
 }
 
 fn played_key(at: &str) -> (i64, String) {
-    let secs = at
-        .parse::<jiff::Timestamp>()
-        .map(|t| t.as_millisecond())
-        .unwrap_or(i64::MIN);
+    let secs = at.parse::<jiff::Timestamp>().map(|t| t.as_millisecond()).unwrap_or(i64::MIN);
     (secs, at.to_owned())
 }
 
@@ -281,52 +224,25 @@ pub fn recent_tile(play: &Play, playlists: &[PlaylistItem]) -> Option<LibraryEnt
     let context = play.context.as_ref();
     let context_uri = context.and_then(|c| c.context_uri.as_deref()).unwrap_or("");
     let context_title = context.map(|c| c.title.as_str()).unwrap_or("");
-    let context_cover = context
-        .map(|c| c.cover.as_str())
-        .filter(|c| !c.is_empty())
-        .unwrap_or(&track.cover);
-    let base = |kind: &str, id: &str, uri: &str, title: &str, subtitle: String, cover: &str| {
-        LibraryEntry {
-            kind: kind.to_owned(),
-            id: id.to_owned(),
-            uri: uri.to_owned(),
-            title: title.to_owned(),
-            subtitle,
-            cover: cover.to_owned(),
-            covers: if cover.is_empty() {
-                Vec::new()
-            } else {
-                vec![cover.to_owned()]
-            },
-            read_only: true,
-            played_at: play.played_at.clone(),
-            ..Default::default()
-        }
+    let context_cover = context.map(|c| c.cover.as_str()).filter(|c| !c.is_empty()).unwrap_or(&track.cover);
+    let base = |kind: &str, id: &str, uri: &str, title: &str, subtitle: String, cover: &str| LibraryEntry {
+        kind: kind.to_owned(),
+        id: id.to_owned(),
+        uri: uri.to_owned(),
+        title: title.to_owned(),
+        subtitle,
+        cover: cover.to_owned(),
+        covers: if cover.is_empty() { Vec::new() } else { vec![cover.to_owned()] },
+        read_only: true,
+        played_at: play.played_at.clone(),
+        ..Default::default()
     };
     if let Some(seed) = station_seed(context_uri) {
-        let title = if context_title.is_empty() {
-            station_title(&track.title)
-        } else {
-            context_title.to_owned()
-        };
-        return Some(base(
-            "radio",
-            &seed,
-            context_uri,
-            &title,
-            mf_i18n::t("Radio"),
-            context_cover,
-        ));
+        let title = if context_title.is_empty() { station_title(&track.title) } else { context_title.to_owned() };
+        return Some(base("radio", &seed, context_uri, &title, mf_i18n::t("Radio"), context_cover));
     }
     if context_uri.ends_with(":collection") {
-        let mut entry = base(
-            "liked",
-            "liked",
-            context_uri,
-            &mf_i18n::t("Liked Songs"),
-            mf_i18n::t("Playlist"),
-            "",
-        );
+        let mut entry = base("liked", "liked", context_uri, &mf_i18n::t("Liked Songs"), mf_i18n::t("Playlist"), "");
         entry.covers.clear();
         return Some(entry);
     }
@@ -337,73 +253,24 @@ pub fn recent_tile(play: &Play, playlists: &[PlaylistItem]) -> Option<LibraryEnt
                 entry.played_at = play.played_at.clone();
                 return Some(entry);
             }
-            let title = if context_title.is_empty() {
-                mf_i18n::t("Playlist")
-            } else {
-                context_title.to_owned()
-            };
-            return Some(base(
-                "playlist",
-                id,
-                context_uri,
-                &title,
-                mf_i18n::t("Playlist"),
-                context_cover,
-            ));
+            let title = if context_title.is_empty() { mf_i18n::t("Playlist") } else { context_title.to_owned() };
+            return Some(base("playlist", id, context_uri, &title, mf_i18n::t("Playlist"), context_cover));
         }
         Some(("album", id)) => {
-            let title = if context_title.is_empty() {
-                track.album.as_str()
-            } else {
-                context_title
-            };
-            return Some(base(
-                "album",
-                id,
-                context_uri,
-                title,
-                album_subtitle(track),
-                context_cover,
-            ));
+            let title = if context_title.is_empty() { track.album.as_str() } else { context_title };
+            return Some(base("album", id, context_uri, title, album_subtitle(track), context_cover));
         }
         Some(("artist", id)) => {
-            let name = track
-                .artist_refs
-                .iter()
-                .find(|a| a.id == id)
-                .map(|a| a.name.as_str())
-                .unwrap_or("");
-            let title = if context_title.is_empty() {
-                name
-            } else {
-                context_title
-            };
+            let name = track.artist_refs.iter().find(|a| a.id == id).map(|a| a.name.as_str()).unwrap_or("");
+            let title = if context_title.is_empty() { name } else { context_title };
             if title.is_empty() {
                 return None;
             }
-            return Some(base(
-                "artist",
-                id,
-                context_uri,
-                title,
-                mf_i18n::t("Artist"),
-                context_cover,
-            ));
+            return Some(base("artist", id, context_uri, title, mf_i18n::t("Artist"), context_cover));
         }
         Some(("show", id)) => {
-            let title = if context_title.is_empty() {
-                track.album.as_str()
-            } else {
-                context_title
-            };
-            return Some(base(
-                "show",
-                id,
-                context_uri,
-                title,
-                mf_i18n::t("Podcast"),
-                context_cover,
-            ));
+            let title = if context_title.is_empty() { track.album.as_str() } else { context_title };
+            return Some(base("show", id, context_uri, title, mf_i18n::t("Podcast"), context_cover));
         }
         _ => {}
     }
@@ -412,35 +279,17 @@ pub fn recent_tile(play: &Play, playlists: &[PlaylistItem]) -> Option<LibraryEnt
             return None;
         }
         let uri = format!("spotify:show:{}", track.show_id);
-        return Some(base(
-            "show",
-            &track.show_id,
-            &uri,
-            &track.album,
-            mf_i18n::t("Podcast"),
-            &track.cover,
-        ));
+        return Some(base("show", &track.show_id, &uri, &track.album, mf_i18n::t("Podcast"), &track.cover));
     }
     if track.album_id.is_empty() {
         return None;
     }
     let uri = format!("spotify:album:{}", track.album_id);
-    Some(base(
-        "album",
-        &track.album_id,
-        &uri,
-        &track.album,
-        album_subtitle(track),
-        &track.cover,
-    ))
+    Some(base("album", &track.album_id, &uri, &track.album, album_subtitle(track), &track.cover))
 }
 
 fn album_subtitle(track: &TrackItem) -> String {
-    if track.artists.is_empty() {
-        mf_i18n::t("Album")
-    } else {
-        mf_i18n::tf("Album · {0}", &[&track.artists])
-    }
+    if track.artists.is_empty() { mf_i18n::t("Album") } else { mf_i18n::tf("Album · {0}", &[&track.artists]) }
 }
 
 /// «Недавно прослушанное»: прослушивания новые первыми → плитки без повторов, ≤ 16.
@@ -457,18 +306,9 @@ pub fn recent_tiles(mut plays: Vec<Play>, playlists: &[PlaylistItem]) -> Vec<Lib
 
 /// «Продолжить подкасты»: сначала начатые (новые первыми), затем самый новый невыслушанный выпуск каждого шоу
 /// за последние 30 дней; без повторов, ≤ 16. Выпуски шоу Spotify отдаёт новыми первыми.
-pub fn podcast_episodes(
-    podcasts: &[(ShowItem, Vec<EpisodeItem>)],
-    today: jiff::civil::Date,
-) -> Vec<EpisodeItem> {
-    let oldest_new = today
-        .checked_sub(jiff::Span::new().days(NEW_EPISODE_DAYS))
-        .unwrap_or(today);
-    let released = |e: &EpisodeItem| {
-        e.release_date
-            .get(..10)
-            .and_then(|d| d.parse::<jiff::civil::Date>().ok())
-    };
+pub fn podcast_episodes(podcasts: &[(ShowItem, Vec<EpisodeItem>)], today: jiff::civil::Date) -> Vec<EpisodeItem> {
+    let oldest_new = today.checked_sub(jiff::Span::new().days(NEW_EPISODE_DAYS)).unwrap_or(today);
+    let released = |e: &EpisodeItem| e.release_date.get(..10).and_then(|d| d.parse::<jiff::civil::Date>().ok());
     let with_show = |show: &ShowItem, e: &EpisodeItem| {
         let mut e = e.clone();
         if e.show_id.is_empty() {
@@ -523,11 +363,7 @@ mod tests {
             uri: format!("spotify:playlist:{id}"),
             title: title.into(),
             owner_id: owner_id.into(),
-            owner: if owner_id == "spotify" {
-                "Spotify".into()
-            } else {
-                owner_id.into()
-            },
+            owner: if owner_id == "spotify" { "Spotify".into() } else { owner_id.into() },
             ..Default::default()
         }
     }
@@ -540,21 +376,14 @@ mod tests {
             album_id: format!("al{id}"),
             album: format!("Al{id}"),
             artists: "Группа".into(),
-            artist_refs: vec![ArtistRef {
-                id: "ar".into(),
-                name: "Группа".into(),
-            }],
+            artist_refs: vec![ArtistRef { id: "ar".into(), name: "Группа".into() }],
             cover: format!("c{id}"),
             ..Default::default()
         }
     }
 
     fn play(id: &str, context: Option<PlayContext>, at: &str) -> Play {
-        Play {
-            track: track(id),
-            context,
-            played_at: at.into(),
-        }
+        Play { track: track(id), context, played_at: at.into() }
     }
 
     #[test]
@@ -563,10 +392,7 @@ mod tests {
         assert!(is_made_for_you(" daily mix 3", "Daily Mix"));
         assert!(!is_made_for_you("Daily Mix Chill", "Daily Mix"));
         assert!(!is_made_for_you("Daily Mix 2b", "Daily Mix"));
-        assert!(!is_made_for_you(
-            "Discover Weekly Archive",
-            "Discover Weekly"
-        ));
+        assert!(!is_made_for_you("Discover Weekly Archive", "Discover Weekly"));
     }
 
     #[test]
@@ -578,28 +404,18 @@ mod tests {
             playlist("4", "Daily Mix 3", "spotify"),
             playlist("5", "Daily Mixes", "spotify"),
         ];
-        let ids: Vec<_> = made_for_you("Daily Mix", found)
-            .into_iter()
-            .map(|p| p.playlist_id)
-            .collect();
+        let ids: Vec<_> = made_for_you("Daily Mix", found).into_iter().map(|p| p.playlist_id).collect();
         assert_eq!(ids, ["1", "4"]);
-        let many: Vec<_> = (0..9)
-            .map(|i| playlist(&i.to_string(), &format!("Daily Mix {i}"), "spotify"))
-            .collect();
+        let many: Vec<_> = (0..9).map(|i| playlist(&i.to_string(), &format!("Daily Mix {i}"), "spotify")).collect();
         assert_eq!(made_for_you("Daily Mix", many).len(), MADE_FOR_YOU_PER_TERM);
     }
 
     #[test]
     fn quick_access_is_liked_and_five_playlists() {
-        let playlists: Vec<_> = (0..8)
-            .map(|i| playlist(&i.to_string(), "P", "me"))
-            .collect();
+        let playlists: Vec<_> = (0..8).map(|i| playlist(&i.to_string(), "P", "me")).collect();
         let tiles = quick_tiles("spotify:user:me:collection", 21, &playlists);
         assert_eq!(tiles.len(), 1 + QUICK_PLAYLISTS);
-        assert_eq!(
-            (tiles[0].kind.as_str(), tiles[0].subtitle.as_str()),
-            ("liked", "21 tracks")
-        );
+        assert_eq!((tiles[0].kind.as_str(), tiles[0].subtitle.as_str()), ("liked", "21 tracks"));
         assert_eq!(tiles[1].uri, "spotify:playlist:0");
         assert!(tiles[1].read_only);
     }
@@ -614,62 +430,27 @@ mod tests {
             ..Default::default()
         };
         let entry = playlist_entry(&dj);
-        assert_eq!(
-            (entry.kind.as_str(), entry.title.as_str()),
-            ("dj", "DJ"),
-            "у DJ нет списка треков, он только играет"
-        );
-        assert_eq!(
-            entry.subtitle,
-            mf_i18n::t("Music and commentary picked for you")
-        );
+        assert_eq!((entry.kind.as_str(), entry.title.as_str()), ("dj", "DJ"), "у DJ нет списка треков, он только играет");
+        assert_eq!(entry.subtitle, mf_i18n::t("Music and commentary picked for you"));
         assert_eq!(entry.uri, crate::data::home_feed::DJ_URI);
         assert_eq!(entry.owner, "Spotify", "остальные поля не тронуты");
 
-        assert_eq!(
-            playlist_entry(&playlist("p", "Мой плейлист", "me")).kind,
-            "playlist"
-        );
+        assert_eq!(playlist_entry(&playlist("p", "Мой плейлист", "me")).kind, "playlist");
     }
 
     #[test]
     fn recent_tiles_follow_contexts_newest_first_without_repeats() {
         let mine = [playlist("p", "Мой плейлист", "me")];
         let plays = vec![
-            play(
-                "1",
-                Some(PlayContext::with_uri("playlist", "spotify:playlist:p")),
-                "2026-10-10T10:00:00Z",
-            ),
+            play("1", Some(PlayContext::with_uri("playlist", "spotify:playlist:p")), "2026-10-10T10:00:00Z"),
             play("2", None, "2026-10-11T09:00:00Z"),
-            play(
-                "3",
-                Some(
-                    PlayContext::with_uri("radio", "spotify:station:track:3").titled("Radio “T3”"),
-                ),
-                "2026-10-11T08:00:00Z",
-            ),
-            play(
-                "4",
-                Some(PlayContext::with_uri("playlist", "spotify:playlist:p")),
-                "2026-10-09T10:00:00Z",
-            ),
-            play(
-                "5",
-                Some(PlayContext::with_uri("liked", "spotify:user:me:collection")),
-                "2026-10-08T10:00:00Z",
-            ),
-            play(
-                "6",
-                Some(PlayContext::with_uri("artist", "spotify:artist:ar")),
-                "2026-10-07T10:00:00Z",
-            ),
+            play("3", Some(PlayContext::with_uri("radio", "spotify:station:track:3").titled("Radio “T3”")), "2026-10-11T08:00:00Z"),
+            play("4", Some(PlayContext::with_uri("playlist", "spotify:playlist:p")), "2026-10-09T10:00:00Z"),
+            play("5", Some(PlayContext::with_uri("liked", "spotify:user:me:collection")), "2026-10-08T10:00:00Z"),
+            play("6", Some(PlayContext::with_uri("artist", "spotify:artist:ar")), "2026-10-07T10:00:00Z"),
         ];
         let tiles = recent_tiles(plays, &mine);
-        let kinds: Vec<_> = tiles
-            .iter()
-            .map(|t| (t.kind.as_str(), t.uri.as_str()))
-            .collect();
+        let kinds: Vec<_> = tiles.iter().map(|t| (t.kind.as_str(), t.uri.as_str())).collect();
         assert_eq!(
             kinds,
             [
@@ -689,14 +470,7 @@ mod tests {
 
     #[test]
     fn a_radio_without_title_is_named_after_its_song() {
-        let tile = recent_tile(
-            &play(
-                "9",
-                Some(PlayContext::with_uri("radio", "spotify:station:track:9")),
-                "",
-            ),
-            &[],
-        );
+        let tile = recent_tile(&play("9", Some(PlayContext::with_uri("radio", "spotify:station:track:9")), ""), &[]);
         assert_eq!(tile.map(|t| t.title), Some("Radio “T9”".into()));
     }
 
@@ -714,28 +488,11 @@ mod tests {
     #[test]
     fn podcasts_continue_first_then_new() {
         let today: jiff::civil::Date = "2026-10-11".parse().unwrap();
-        let show = |id: &str| ShowItem {
-            show_id: id.into(),
-            name: format!("Шоу {id}"),
-            cover: "sc".into(),
-            ..Default::default()
-        };
+        let show = |id: &str| ShowItem { show_id: id.into(), name: format!("Шоу {id}"), cover: "sc".into(), ..Default::default() };
         let podcasts = vec![
-            (
-                show("a"),
-                vec![
-                    episode("a3", "2026-10-10", 0, false),
-                    episode("a2", "2026-09-01", 5000, false),
-                ],
-            ),
+            (show("a"), vec![episode("a3", "2026-10-10", 0, false), episode("a2", "2026-09-01", 5000, false)]),
             (show("b"), vec![episode("b2", "2026-08-01", 0, false)]),
-            (
-                show("c"),
-                vec![
-                    episode("c2", "2026-10-05", 100, false),
-                    episode("c1", "2026-10-01", 0, true),
-                ],
-            ),
+            (show("c"), vec![episode("c2", "2026-10-05", 100, false), episode("c1", "2026-10-01", 0, true)]),
             (show("d"), vec![episode("d1", "2026-10-09", 0, false)]),
         ];
         let shelf = podcast_episodes(&podcasts, today);
@@ -749,15 +506,9 @@ mod tests {
     #[test]
     fn shelves_carry_qml_keys() {
         let s = shelf(TOP_TRACKS, &[track("1")]);
-        assert_eq!(
-            (s.kind.as_str(), s.title.as_str()),
-            ("tracks", "Top tracks")
-        );
+        assert_eq!((s.kind.as_str(), s.title.as_str()), ("tracks", "Top tracks"));
         assert_eq!(s.items[0]["trackId"], "1");
-        assert_eq!(
-            hidden_keys(" quick, podcasts ,"),
-            HashSet::from(["quick".to_owned(), "podcasts".to_owned()])
-        );
+        assert_eq!(hidden_keys(" quick, podcasts ,"), HashSet::from(["quick".to_owned(), "podcasts".to_owned()]));
     }
 
     #[test]
@@ -778,20 +529,14 @@ mod tests {
         };
         let tiles = new_release_tiles(Some(&radar), std::slice::from_ref(&release));
         assert_eq!(tiles.len(), 2);
-        assert_eq!(
-            (tiles[0].kind.as_str(), tiles[0].id.as_str()),
-            ("playlist", "37i9dQZEVXbsGPw6v9FjFR")
-        );
+        assert_eq!((tiles[0].kind.as_str(), tiles[0].id.as_str()), ("playlist", "37i9dQZEVXbsGPw6v9FjFR"));
         assert_eq!(tiles[1].kind, "album");
         assert_eq!(tiles[1].uri, "spotify:album:a1");
         assert_eq!(tiles[1].subtitle, "Artist · 9 октября");
         let many = vec![release; 40];
         assert_eq!(new_release_tiles(None, &many).len(), NEW_RELEASE_TILES);
         let s = shelf(NEW_RELEASES, &new_release_tiles(None, &many[..1]));
-        assert_eq!(
-            (s.kind.as_str(), s.title.as_str()),
-            ("tiles", "New releases")
-        );
+        assert_eq!((s.kind.as_str(), s.title.as_str()), ("tiles", "New releases"));
         assert!(ORDER.contains(&NEW_RELEASES));
     }
 }

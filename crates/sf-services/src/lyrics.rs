@@ -7,10 +7,10 @@ use std::time::Duration;
 
 use futures::FutureExt;
 use md3_model::TrackItem;
-use mf_lyrics::{ExtraLrc, LyricsResult};
 use sf_player::{PlayerEvent, PlayerHandle};
 use tokio::runtime::Handle;
 use tokio::sync::{broadcast, watch};
+use mf_lyrics::{ExtraLrc, LyricsResult};
 
 /// Задержка поиска после смены трека.
 pub const DEBOUNCE_MS: u64 = 350;
@@ -127,16 +127,10 @@ impl LyricsService {
 
     fn load(&self, force: bool) {
         let track = self.player.snapshot().track;
-        let track_id = track
-            .as_ref()
-            .map(|t| t.track_id.clone())
-            .unwrap_or_default();
+        let track_id = track.as_ref().map(|t| t.track_id.clone()).unwrap_or_default();
         if !force {
             let current = self.snapshot.borrow();
-            let settled = matches!(
-                current.status,
-                LyricsStatus::Ok | LyricsStatus::Loading | LyricsStatus::NotFound
-            );
+            let settled = matches!(current.status, LyricsStatus::Ok | LyricsStatus::Loading | LyricsStatus::NotFound);
             if current.track_id == track_id && settled {
                 return;
             }
@@ -164,20 +158,8 @@ impl LyricsService {
             match result {
                 Ok(result) => {
                     let status = LyricsStatus::of(&result);
-                    tracing::info!(
-                        "lyrics {track_id}: {} {}",
-                        if result.source.is_empty() {
-                            "—"
-                        } else {
-                            &result.source
-                        },
-                        result.kind
-                    );
-                    me.set(
-                        track_id,
-                        status,
-                        (status == LyricsStatus::Ok).then_some(result),
-                    );
+                    tracing::info!("lyrics {track_id}: {} {}", if result.source.is_empty() { "—" } else { &result.source }, result.kind);
+                    me.set(track_id, status, (status == LyricsStatus::Ok).then_some(result));
                 }
                 Err(e) => {
                     tracing::warn!("lyrics failed to load: {e}");
@@ -242,21 +224,9 @@ mod tests {
     #[test]
     fn statuses() {
         assert_eq!(LyricsStatus::NotFound.as_str(), "notfound");
-        assert_eq!(
-            LyricsStatus::of(&LyricsResult {
-                ok: true,
-                ..Default::default()
-            }),
-            LyricsStatus::Ok
-        );
-        assert_eq!(
-            LyricsStatus::of(&LyricsResult::default()),
-            LyricsStatus::NotFound
-        );
-        let failed = LyricsResult {
-            details: vec!["NetEase: 503".into()],
-            ..Default::default()
-        };
+        assert_eq!(LyricsStatus::of(&LyricsResult { ok: true, ..Default::default() }), LyricsStatus::Ok);
+        assert_eq!(LyricsStatus::of(&LyricsResult::default()), LyricsStatus::NotFound);
+        let failed = LyricsResult { details: vec!["NetEase: 503".into()], ..Default::default() };
         assert_eq!(LyricsStatus::of(&failed), LyricsStatus::Error);
     }
 
@@ -271,14 +241,6 @@ mod tests {
             ..Default::default()
         };
         let q = query_for(&track);
-        assert_eq!(
-            (
-                q.title.as_str(),
-                q.artist.as_str(),
-                q.album.as_str(),
-                q.duration
-            ),
-            ("Song", "A, B", "Al", 90.5)
-        );
+        assert_eq!((q.title.as_str(), q.artist.as_str(), q.album.as_str(), q.duration), ("Song", "A, B", "Al", 90.5));
     }
 }

@@ -4,11 +4,11 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use mf_platform::{SettingKey, SettingsStore};
 use sf_auth::ProxyConfig;
 use sf_player::{EngineConfig, PlayerHandle};
 use tokio::runtime::Handle;
 use tokio::sync::broadcast;
+use mf_platform::{SettingKey, SettingsStore};
 
 use crate::AppRequest;
 
@@ -21,12 +21,8 @@ pub fn spawn_settings_glue(rt: &Handle, settings: Arc<SettingsStore>, player: Pl
     rt.spawn(async move {
         loop {
             match changes.recv().await {
-                Ok(SettingKey::Autoplay) => {
-                    player.set_autoplay(settings.get_bool(SettingKey::Autoplay))
-                }
-                Ok(SettingKey::PlaybackSpeed | SettingKey::Crossfade | SettingKey::DjVoice) => {
-                    apply_audio_fx(&settings)
-                }
+                Ok(SettingKey::Autoplay) => player.set_autoplay(settings.get_bool(SettingKey::Autoplay)),
+                Ok(SettingKey::PlaybackSpeed | SettingKey::Crossfade | SettingKey::DjVoice) => apply_audio_fx(&settings),
                 Err(broadcast::error::RecvError::Lagged(_)) => {
                     player.set_autoplay(settings.get_bool(SettingKey::Autoplay));
                     apply_audio_fx(&settings);
@@ -42,9 +38,7 @@ pub fn spawn_settings_glue(rt: &Handle, settings: Arc<SettingsStore>, player: Pl
 fn apply_audio_fx(settings: &SettingsStore) {
     use sf_player::engine::fx;
     fx::set_speed(settings.get_f64(SettingKey::PlaybackSpeed) as f32);
-    let seconds = settings
-        .get_int(SettingKey::Crossfade)
-        .clamp(0, mf_platform::settings::CROSSFADE_MAX_S) as u64;
+    let seconds = settings.get_int(SettingKey::Crossfade).clamp(0, mf_platform::settings::CROSSFADE_MAX_S) as u64;
     fx::set_crossfade(Duration::from_secs(seconds));
     fx::set_dj_voice(settings.get_bool(SettingKey::DjVoice));
 }
@@ -55,11 +49,7 @@ fn apply_audio_fx(settings: &SettingsStore) {
 pub fn engine_config(settings: &SettingsStore, proxy: ProxyConfig) -> EngineConfig {
     let volume = settings.get_f64(SettingKey::Volume).clamp(0.0, 1.0);
     let name = settings.get_str(SettingKey::DeviceName);
-    let device_name = if name.trim().is_empty() {
-        crate::devices::DevicesService::default_device_name()
-    } else {
-        name
-    };
+    let device_name = if name.trim().is_empty() { crate::devices::DevicesService::default_device_name() } else { name };
     let cache_mb = settings.get_int(SettingKey::AudioCacheMb).max(0) as u64;
     let device = settings.get_str(SettingKey::AudioDevice);
     EngineConfig {
@@ -76,9 +66,7 @@ pub fn engine_config(settings: &SettingsStore, proxy: ProxyConfig) -> EngineConf
         audio_device: (!device.is_empty()).then_some(device),
         initial_volume: sf_player::volume_to_u16(volume),
         volume_dir: mf_platform::dirs::volume_dir(),
-        audio_cache_dir: settings
-            .get_bool(SettingKey::AudioCache)
-            .then(mf_platform::dirs::audio_cache_dir),
+        audio_cache_dir: settings.get_bool(SettingKey::AudioCache).then(mf_platform::dirs::audio_cache_dir),
         audio_cache_limit: Some(cache_mb * 1024 * 1024),
         buffer_ms: sf_player::engine::sink::DEFAULT_BUFFER_MS,
         tap: sf_player::engine::vis::AudioTap::new(),

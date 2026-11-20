@@ -17,18 +17,11 @@ pub struct CachedPlaylist {
 
 impl CachedPlaylist {
     pub fn new(snapshot: String, items: Vec<TrackItem>) -> Self {
-        Self {
-            version: VERSION,
-            snapshot,
-            total: items.len() as u32,
-            items,
-        }
+        Self { version: VERSION, snapshot, total: items.len() as u32, items }
     }
 
     fn valid(&self) -> bool {
-        self.version == VERSION
-            && !self.snapshot.is_empty()
-            && self.items.len() == self.total as usize
+        self.version == VERSION && !self.snapshot.is_empty() && self.items.len() == self.total as usize
     }
 }
 
@@ -63,10 +56,7 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("sf-playlists-{:016x}", rand::random::<u64>()));
         let file = path(&dir, "abc:../x");
         assert_eq!(file.file_name().unwrap(), "abcx.json");
-        let rows = vec![TrackItem {
-            uri: "spotify:track:1".into(),
-            ..Default::default()
-        }];
+        let rows = vec![TrackItem { uri: "spotify:track:1".into(), ..Default::default() }];
         write(&file, &CachedPlaylist::new("snap".into(), rows.clone()));
         assert_eq!(read(&file).unwrap().items, rows);
         let mut broken = CachedPlaylist::new("snap".into(), rows);

@@ -7,25 +7,25 @@ use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex, Weak};
 
 use md3_model::{
-    AccountId, AlbumItem, ArtistItem, EpisodeItem, LibraryEntry, ListChange, PlaylistId,
-    PlaylistItem, ShowItem, TrackItem, contexts,
+    AccountId, AlbumItem, ArtistItem, EpisodeItem, LibraryEntry, ListChange, PlaylistId, PlaylistItem, ShowItem,
+    TrackItem, contexts,
 };
-use mf_platform::{SettingKey, SettingsStore};
 use sf_api::models::{self, SavedTrack};
 use sf_api::{ApiClient, ApiError, Operation, map};
 use sf_player::{PlayerEvent, PlayerHandle, Rootlist, RootlistEntry};
 use tokio::runtime::Handle;
 use tokio::sync::broadcast;
+use mf_platform::{SettingKey, SettingsStore};
 
 use crate::auth::{AuthEvent, AuthService};
-use crate::data::collection_session::{self, LikedFeed};
 use crate::data::liked::{self, LikedSongs};
 use crate::data::paged::PagedList;
 use crate::data::text::list_change;
+use crate::data::collection_session::{self, LikedFeed};
 use crate::data::{known, library_cache, playlist_cache, playlist_session, podcast_session, route};
+use sf_player::engine::session_playlists::Change;
 use crate::history::HistoryService;
 use crate::lock;
-use sf_player::engine::session_playlists::Change;
 
 /// Страница Liked Songs у Web API.
 pub const CHUNK: usize = 50;
@@ -38,10 +38,8 @@ const MAX_PLAYLIST_PAGES: u32 = 200;
 const MAX_SECTION_PAGES: u32 = 100;
 /// Паузы перед самостоятельными повторами, когда раздел не загрузился ни через сессию, ни через
 /// Web API (сессия не ответила вовремя, Web API под 429): пустой список без повтора — тупик.
-const AUTO_RETRIES: [std::time::Duration; 2] = [
-    std::time::Duration::from_secs(15),
-    std::time::Duration::from_secs(60),
-];
+const AUTO_RETRIES: [std::time::Duration; 2] =
+    [std::time::Duration::from_secs(15), std::time::Duration::from_secs(60)];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FeedbackKind {
@@ -87,10 +85,7 @@ pub struct PlaylistInfo {
 pub enum LibraryEvent {
     Playlists(ListChange<PlaylistItem>),
     Liked(ListChange<TrackItem>),
-    PlaylistTracks {
-        id: PlaylistId,
-        change: ListChange<TrackItem>,
-    },
+    PlaylistTracks { id: PlaylistId, change: ListChange<TrackItem> },
     /// изменилась шапка плейлиста (название/описание/обложка/видимость/права)
     PlaylistInfo(PlaylistId),
     Albums(ListChange<AlbumItem>),
@@ -106,10 +101,7 @@ pub enum LibraryEvent {
     PinsChanged,
     Notice(String),
     /// для радио (стоп-лист) и истории
-    Feedback {
-        kind: FeedbackKind,
-        track: TrackItem,
-    },
+    Feedback { kind: FeedbackKind, track: TrackItem },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -167,11 +159,7 @@ impl PlaylistPage {
 
     fn open_action(&self, force: bool) -> OpenAction {
         if self.loading {
-            return if force {
-                OpenAction::Fetch
-            } else {
-                OpenAction::Loading
-            };
+            return if force { OpenAction::Fetch } else { OpenAction::Loading };
         }
         if !force && self.complete && !self.reload_after_write && self.header_confirmed() {
             OpenAction::Idle
@@ -184,19 +172,13 @@ impl PlaylistPage {
 /// Тот же аккаунт и то же поколение страницы: ответ чтения ещё «свой».
 fn same_read(state: &State, id: &PlaylistId, generation: u64, page_generation: u64) -> bool {
     state.generation == generation
-        && state
-            .pages
-            .get(id)
-            .is_some_and(|page| page.generation == page_generation)
+        && state.pages.get(id).is_some_and(|page| page.generation == page_generation)
 }
 
 /// То же, и записи не начались: их оптимистичные строки перечитывание не трогает.
 fn read_is_current(state: &State, id: &PlaylistId, generation: u64, page_generation: u64) -> bool {
     same_read(state, id, generation, page_generation)
-        && state
-            .pages
-            .get(id)
-            .is_some_and(|page| page.pending_writes == 0)
+        && state.pages.get(id).is_some_and(|page| page.pending_writes == 0)
 }
 
 /// Кэш плейлиста и его перезаливка в модель уходят кусками: первый — Reset, дальше — Append.
@@ -205,15 +187,9 @@ fn cached_events(id: &PlaylistId, rows: &[TrackItem]) -> Vec<LibraryEvent> {
     rows.chunks(CHUNK)
         .enumerate()
         .map(|(i, chunk)| {
-            let change = if i == 0 {
-                ListChange::Reset(chunk.to_vec())
-            } else {
-                ListChange::Append(chunk.to_vec())
-            };
-            LibraryEvent::PlaylistTracks {
-                id: id.clone(),
-                change,
-            }
+            let change =
+                if i == 0 { ListChange::Reset(chunk.to_vec()) } else { ListChange::Append(chunk.to_vec()) };
+            LibraryEvent::PlaylistTracks { id: id.clone(), change }
         })
         .collect()
 }
@@ -277,11 +253,8 @@ struct UploadedCover {
 }
 
 /// Перепроверки обложки после загрузки (Spotify обрабатывает картинку не сразу).
-const COVER_RECHECKS: [std::time::Duration; 3] = [
-    std::time::Duration::from_secs(3),
-    std::time::Duration::from_secs(8),
-    std::time::Duration::from_secs(20),
-];
+const COVER_RECHECKS: [std::time::Duration; 3] =
+    [std::time::Duration::from_secs(3), std::time::Duration::from_secs(8), std::time::Duration::from_secs(20)];
 
 /// Картинка целиком (≤ 20 МБ), через общий клиент с прокси.
 async fn fetch_bytes(http: &sf_api::Http, url: &str) -> Result<Vec<u8>, String> {
@@ -293,17 +266,10 @@ async fn fetch_bytes(http: &sf_api::Http, url: &str) -> Result<Vec<u8>, String> 
         .await
         .and_then(reqwest::Response::error_for_status)
         .map_err(|error| error.without_url().to_string())?;
-    if response
-        .content_length()
-        .is_some_and(|length| length > 20 * 1024 * 1024)
-    {
+    if response.content_length().is_some_and(|length| length > 20 * 1024 * 1024) {
         return Err("image is too large".to_owned());
     }
-    response
-        .bytes()
-        .await
-        .map(|bytes| bytes.to_vec())
-        .map_err(|error| error.without_url().to_string())
+    response.bytes().await.map(|bytes| bytes.to_vec()).map_err(|error| error.without_url().to_string())
 }
 
 pub struct LibraryService {
@@ -345,11 +311,7 @@ fn playlist_row(item: &models::PlaylistItem, collaborative: bool) -> Option<Trac
     };
     row.added_at = item.added_at.clone().unwrap_or_default();
     if collaborative {
-        row.added_by = item
-            .added_by
-            .as_ref()
-            .and_then(|user| user.id.clone())
-            .unwrap_or_default();
+        row.added_by = item.added_by.as_ref().and_then(|user| user.id.clone()).unwrap_or_default();
     }
     Some(row)
 }
@@ -382,35 +344,21 @@ fn folder_tree(rootlist: &Rootlist) -> (Vec<String>, HashMap<String, Folder>) {
             RootlistEntry::Playlist(uri) => {
                 let key = format!("playlist:{uri}");
                 match stack.last() {
-                    Some(parent) => folders
-                        .entry(parent.clone())
-                        .or_default()
-                        .children
-                        .push(key),
+                    Some(parent) => folders.entry(parent.clone()).or_default().children.push(key),
                     None => root.push(key),
                 }
             }
             // папка внутри самой себя или уже встреченная дала бы цикл (и бесконечную рекурсию в collect_placed):
             // её содержимое идёт в уже известную папку, а при вложении в себя — в текущую
-            RootlistEntry::FolderStart { id, .. }
-                if stack.contains(id) || folders.get(id).is_some_and(|f| !f.id.is_empty()) =>
-            {
-                let into = if stack.contains(id) {
-                    stack.last().cloned().unwrap_or_default()
-                } else {
-                    id.clone()
-                };
+            RootlistEntry::FolderStart { id, .. } if stack.contains(id) || folders.get(id).is_some_and(|f| !f.id.is_empty()) => {
+                let into = if stack.contains(id) { stack.last().cloned().unwrap_or_default() } else { id.clone() };
                 stack.push(into);
             }
             RootlistEntry::FolderStart { id, name } => {
                 let parent = stack.last().cloned().unwrap_or_default();
                 let key = format!("folder:{id}");
                 match stack.last() {
-                    Some(parent) => folders
-                        .entry(parent.clone())
-                        .or_default()
-                        .children
-                        .push(key),
+                    Some(parent) => folders.entry(parent.clone()).or_default().children.push(key),
                     None => root.push(key),
                 }
                 let folder = folders.entry(id.clone()).or_default();
@@ -466,11 +414,7 @@ fn merge_recent(mut all: Vec<LibraryEntry>, limit: usize, pins: &[String]) -> Ve
 
 /// Сортировка строк экрана «Библиотека» (закреплённые — первыми в порядке закрепления).
 fn sort_entries(entries: &mut [LibraryEntry], sort: &str, pins: &[String]) {
-    let pin_rank = |entry: &LibraryEntry| {
-        pins.iter()
-            .position(|uri| *uri == entry.uri)
-            .unwrap_or(usize::MAX)
-    };
+    let pin_rank = |entry: &LibraryEntry| pins.iter().position(|uri| *uri == entry.uri).unwrap_or(usize::MAX);
     let liked_first = |entry: &LibraryEntry| entry.kind != "liked";
     match sort {
         "recent" => entries.sort_by(|a, b| {
@@ -506,29 +450,20 @@ impl State {
     }
 
     fn owns(&self, playlist: &models::Playlist) -> bool {
-        self.account
-            .as_deref()
-            .is_some_and(|me| playlist.owned_by(me))
+        self.account.as_deref().is_some_and(|me| playlist.owned_by(me))
     }
 
     fn can_edit_raw(&self, playlist: &models::Playlist) -> bool {
         self.owns(playlist)
             || playlist.collaborative
-            || self
-                .rootlist
-                .as_ref()
-                .is_some_and(|root| root.editable.contains(&playlist.uri))
+            || self.rootlist.as_ref().is_some_and(|root| root.editable.contains(&playlist.uri))
     }
 
     fn playlist_item(&self, playlist: &models::Playlist) -> PlaylistItem {
         let mut item = map::playlist_item(playlist, self.account_id().as_ref());
         item.can_edit = self.can_edit_raw(playlist);
         item.pinned = self.pins.contains(&item.uri);
-        if let Some(upload) = self
-            .uploaded_covers
-            .get(&playlist.id)
-            .filter(|upload| !upload.local_url.is_empty())
-        {
+        if let Some(upload) = self.uploaded_covers.get(&playlist.id).filter(|upload| !upload.local_url.is_empty()) {
             item.cover = upload.local_url.clone();
         }
         item
@@ -540,11 +475,7 @@ impl State {
 
     /// Пересобрать строки плейлистов; изменение для модели.
     fn rebuild_playlists(&mut self) -> Option<LibraryEvent> {
-        let rows: Vec<PlaylistItem> = self
-            .playlists_raw
-            .iter()
-            .map(|pl| self.playlist_item(pl))
-            .collect();
+        let rows: Vec<PlaylistItem> = self.playlists_raw.iter().map(|pl| self.playlist_item(pl)).collect();
         let change = list_change(&self.playlists, &rows);
         self.playlists = rows;
         change.map(LibraryEvent::Playlists)
@@ -585,19 +516,10 @@ impl State {
             events.push(LibraryEvent::Liked(change));
         }
         self.liked_rows = rows;
-        let uris: HashSet<String> = self
-            .liked_view
-            .items
-            .iter()
-            .map(|item| item.track.uri.clone())
-            .collect();
+        let uris: HashSet<String> = self.liked_view.items.iter().map(|item| item.track.uri.clone()).collect();
         if uris != self.liked_uris {
-            self.liked_recordings = self
-                .liked_view
-                .items
-                .iter()
-                .filter_map(|item| item.track.recording_key())
-                .collect();
+            self.liked_recordings =
+                self.liked_view.items.iter().filter_map(|item| item.track.recording_key()).collect();
             known::remember_recordings(self.liked_view.items.iter().map(|item| &item.track));
             self.liked_uris = uris;
             self.likes_revision += 1;
@@ -639,11 +561,7 @@ impl State {
     /// Сохранённое — из прочитанных разделов; намерение снимается, когда чтение его подтвердило
     /// (снятие — только по полному разделу).
     fn rebuild_saved(&mut self, complete: bool) {
-        let mut saved: HashSet<String> = self
-            .albums
-            .iter()
-            .map(|(_, item)| item.uri.clone())
-            .collect();
+        let mut saved: HashSet<String> = self.albums.iter().map(|(_, item)| item.uri.clone()).collect();
         saved.extend(self.artists.iter().map(|item| item.uri.clone()));
         saved.extend(self.shows.iter().map(|(_, item)| item.uri.clone()));
         saved.extend(self.episodes.iter().map(|item| item.uri.clone()));
@@ -661,54 +579,23 @@ impl State {
         })
     }
 
-    fn playlist_entry(
-        &self,
-        item: &PlaylistItem,
-        folder: &str,
-        times: &HashMap<String, String>,
-    ) -> LibraryEntry {
-        let own = self
-            .account
-            .as_deref()
-            .is_some_and(|me| me == item.owner_id);
-        let owner = if own {
-            mf_i18n::t("You")
-        } else {
-            item.owner.clone()
-        };
+    fn playlist_entry(&self, item: &PlaylistItem, folder: &str, times: &HashMap<String, String>) -> LibraryEntry {
+        let own = self.account.as_deref().is_some_and(|me| me == item.owner_id);
+        let owner = if own { mf_i18n::t("You") } else { item.owner.clone() };
         let mut subtitle = mf_i18n::tf("Playlist · {0}", &[&owner]);
         if item.track_count > 0 {
-            subtitle.push_str(&format!(
-                " · {}",
-                mf_i18n::n(item.track_count, "{0} track", "{0} tracks")
-            ));
+            subtitle.push_str(&format!(" · {}", mf_i18n::n(item.track_count, "{0} track", "{0} tracks")));
         }
         // DJ — не плейлист: у него нет списка треков, он только запускается (как кнопка)
         let dj = item.uri == crate::data::home_feed::DJ_URI;
         LibraryEntry {
-            kind: if dj {
-                "dj".to_owned()
-            } else {
-                "playlist".to_owned()
-            },
+            kind: if dj { "dj".to_owned() } else { "playlist".to_owned() },
             id: item.playlist_id.clone(),
             uri: item.uri.clone(),
-            title: if dj {
-                "DJ".to_owned()
-            } else {
-                item.title.clone()
-            },
-            subtitle: if dj {
-                mf_i18n::t("Music and commentary picked for you").to_owned()
-            } else {
-                subtitle
-            },
+            title: if dj { "DJ".to_owned() } else { item.title.clone() },
+            subtitle: if dj { mf_i18n::t("Music and commentary picked for you").to_owned() } else { subtitle },
             cover: item.cover.clone(),
-            covers: if item.cover.is_empty() {
-                Vec::new()
-            } else {
-                vec![item.cover.clone()]
-            },
+            covers: if item.cover.is_empty() { Vec::new() } else { vec![item.cover.clone()] },
             owner: item.owner.clone(),
             owner_id: item.owner_id.clone(),
             can_edit: item.can_edit,
@@ -741,15 +628,8 @@ impl State {
             kind: "folder".to_owned(),
             id: folder.id.clone(),
             uri: format!("spotify:folder:{}", folder.id),
-            title: if folder.name.is_empty() {
-                mf_i18n::t("Folder")
-            } else {
-                folder.name.clone()
-            },
-            subtitle: mf_i18n::tf(
-                "Folder · {0}",
-                &[&mf_i18n::n(count as i64, "{0} playlist", "{0} playlists")],
-            ),
+            title: if folder.name.is_empty() { mf_i18n::t("Folder") } else { folder.name.clone() },
+            subtitle: mf_i18n::tf("Folder · {0}", &[&mf_i18n::n(count as i64, "{0} playlist", "{0} playlists")]),
             cover: covers.first().cloned().unwrap_or_default(),
             covers,
             read_only: true,
@@ -761,19 +641,12 @@ impl State {
 
     fn liked_entry(&self, times: &HashMap<String, String>) -> LibraryEntry {
         let uri = contexts::liked_uri(self.account.as_deref().unwrap_or_default());
-        let count = self
-            .liked_view
-            .total
-            .map(i64::from)
-            .unwrap_or(self.liked_rows.len() as i64);
+        let count = self.liked_view.total.map(i64::from).unwrap_or(self.liked_rows.len() as i64);
         LibraryEntry {
             kind: "liked".to_owned(),
             id: "liked".to_owned(),
             title: mf_i18n::t("Liked Songs"),
-            subtitle: mf_i18n::tf(
-                "Playlist · {0}",
-                &[&mf_i18n::n(count, "{0} track", "{0} tracks")],
-            ),
+            subtitle: mf_i18n::tf("Playlist · {0}", &[&mf_i18n::n(count, "{0} track", "{0} tracks")]),
             owner: mf_i18n::t("You"),
             owner_id: self.account.clone().unwrap_or_default(),
             can_edit: false,
@@ -787,10 +660,7 @@ impl State {
     }
 
     fn owner_matches(&self, item: &PlaylistItem, owner: &str) -> bool {
-        let own = self
-            .account
-            .as_deref()
-            .is_some_and(|me| me == item.owner_id);
+        let own = self.account.as_deref().is_some_and(|me| me == item.owner_id);
         let collab = !own && (item.collaborative || item.can_edit);
         match owner {
             "mine" => own,
@@ -813,9 +683,7 @@ impl LibraryService {
     ) -> Arc<Self> {
         let state = State {
             pins: read_list(&settings, SettingKey::Pins),
-            hidden: read_list(&settings, SettingKey::HiddenTracks)
-                .into_iter()
-                .collect(),
+            hidden: read_list(&settings, SettingKey::HiddenTracks).into_iter().collect(),
             ..Default::default()
         };
         let service = Arc::new_cyclic(|me| Self {
@@ -874,8 +742,7 @@ impl LibraryService {
                             let wanted = {
                                 let state = lock(&service.state);
                                 // список с диска (library_cache) — тоже повод: свежий rootlist заменит его
-                                state.account.is_some()
-                                    && (state.rootlist.is_none() || !state.session_list)
+                                state.account.is_some() && (state.rootlist.is_none() || !state.session_list)
                                     && !state.rootlist_loading
                             };
                             if wanted {
@@ -950,11 +817,7 @@ impl LibraryService {
             let opened: Vec<PlaylistId> = state.pages.keys().cloned().collect();
             let pins = std::mem::take(&mut state.pins);
             let hidden = std::mem::take(&mut state.hidden);
-            let revisions = (
-                state.likes_revision,
-                state.saved_revision,
-                state.pins_revision,
-            );
+            let revisions = (state.likes_revision, state.saved_revision, state.pins_revision);
             *state = State {
                 account: account.clone(),
                 generation,
@@ -967,10 +830,7 @@ impl LibraryService {
             };
             let mut events: Vec<LibraryEvent> = opened
                 .into_iter()
-                .map(|id| LibraryEvent::PlaylistTracks {
-                    id,
-                    change: ListChange::Reset(Vec::new()),
-                })
+                .map(|id| LibraryEvent::PlaylistTracks { id, change: ListChange::Reset(Vec::new()) })
                 .collect();
             events.extend([
                 LibraryEvent::Playlists(ListChange::Reset(Vec::new())),
@@ -1010,9 +870,7 @@ impl LibraryService {
             if state.generation != generation || state.auto_retry_pending {
                 return;
             }
-            let Some(&pause) = AUTO_RETRIES.get(state.auto_retries) else {
-                return;
-            };
+            let Some(&pause) = AUTO_RETRIES.get(state.auto_retries) else { return };
             state.auto_retries += 1;
             state.auto_retry_pending = true;
             pause
@@ -1041,12 +899,7 @@ impl LibraryService {
         self.load_liked(force);
         self.load_playlists();
         self.load_rootlist();
-        for section in [
-            Section::Albums,
-            Section::Artists,
-            Section::Shows,
-            Section::Episodes,
-        ] {
+        for section in [Section::Albums, Section::Artists, Section::Shows, Section::Episodes] {
             self.load_section(section);
         }
         let ids: Vec<PlaylistId> = lock(&self.state).pages.keys().cloned().collect();
@@ -1070,12 +923,8 @@ impl LibraryService {
                 return;
             }
             let liked = !state.liked_running && std::mem::take(&mut state.liked_without_session);
-            let idle: Vec<Section> = state
-                .sections_without_session
-                .iter()
-                .filter(|s| !state.progress.contains_key(*s))
-                .copied()
-                .collect();
+            let idle: Vec<Section> =
+                state.sections_without_session.iter().filter(|s| !state.progress.contains_key(*s)).copied().collect();
             for section in &idle {
                 state.sections_without_session.remove(section);
             }
@@ -1097,9 +946,7 @@ impl LibraryService {
             if state.liked_running {
                 return;
             }
-            let Some(account) = state.account.clone() else {
-                return;
-            };
+            let Some(account) = state.account.clone() else { return };
             state.liked_running = true;
             (state.generation, account)
         };
@@ -1135,21 +982,12 @@ impl LibraryService {
             let mut feed: Option<LikedFeed> = None;
             let mut feed_opened = false;
             loop {
-                let Some(offset) = lock(&service.state).liked.request_offset() else {
-                    break;
-                };
+                let Some(offset) = lock(&service.state).liked.request_offset() else { break };
                 if !feed_opened {
                     feed_opened = true;
-                    route::wait_account_session(
-                        &service.auth.api(),
-                        &service.player,
-                        route::STARTUP_SESSION_WAIT,
-                    )
-                    .await;
+                    route::wait_account_session(&service.auth.api(), &service.player, route::STARTUP_SESSION_WAIT).await;
                     feed = LikedFeed::open(&service.auth.api(), &service.player).await;
-                    if feed.is_none()
-                        && route::account_session(&service.auth.api(), &service.player).is_none()
-                    {
+                    if feed.is_none() && route::account_session(&service.auth.api(), &service.player).is_none() {
                         let mut state = lock(&service.state);
                         if state.generation == generation {
                             state.liked_without_session = true;
@@ -1165,16 +1003,10 @@ impl LibraryService {
                 }
                 let result = match from_session {
                     Some(page) => Ok(page),
-                    None => {
-                        async {
-                            service
-                                .client(Operation::UserData)
-                                .await?
-                                .saved_tracks(offset, CHUNK as u32)
-                                .await
-                        }
-                        .await
+                    None => async {
+                        service.client(Operation::UserData).await?.saved_tracks(offset, CHUNK as u32).await
                     }
+                    .await,
                 };
                 let (events, cache) = {
                     let mut state = lock(&service.state);
@@ -1193,10 +1025,7 @@ impl LibraryService {
                             let mut state = lock(&service.state);
                             state.liked.fail(text.clone());
                             let mut events = state.sync_liked();
-                            events.extend(state.set_error(mf_i18n::tf(
-                                "Couldn’t load Liked Songs: {0}",
-                                &[&text],
-                            )));
+                            events.extend(state.set_error(mf_i18n::tf("Couldn’t load Liked Songs: {0}", &[&text])));
                             state.liked_running = false;
                             events.extend(state.sync_liked());
                             drop(state);
@@ -1237,9 +1066,7 @@ impl LibraryService {
     fn checkpoint_liked(&self) {
         let (account, cache) = {
             let mut state = lock(&self.state);
-            let Some(account) = state.account.clone() else {
-                return;
-            };
+            let Some(account) = state.account.clone() else { return };
             let cache = state.liked.checkpoint(account.clone(), true);
             (account, cache)
         };
@@ -1286,9 +1113,7 @@ impl LibraryService {
             let mut uris = vec![uri.clone()];
             if !target && let Some(key) = known::recording(&uri) {
                 for item in &state.liked_view.items {
-                    if item.track.recording_key().as_deref() == Some(key.as_str())
-                        && !uris.contains(&item.track.uri)
-                    {
+                    if item.track.recording_key().as_deref() == Some(key.as_str()) && !uris.contains(&item.track.uri) {
                         uris.push(item.track.uri.clone());
                     }
                 }
@@ -1310,17 +1135,11 @@ impl LibraryService {
             (target, uris, state.sync_liked())
         };
         self.send(events);
-        let kind = if target {
-            FeedbackKind::Like
-        } else {
-            FeedbackKind::Unlike
-        };
+        let kind = if target { FeedbackKind::Like } else { FeedbackKind::Unlike };
         self.send([LibraryEvent::Feedback { kind, track }]);
         let generation = self.generation();
         self.spawn(move |service| async move {
-            let result =
-                collection_session::write(&service.auth.api(), &service.player, &uris, target)
-                    .await;
+            let result = collection_session::write(&service.auth.api(), &service.player, &uris, target).await;
             if !service.current(generation) {
                 return;
             }
@@ -1359,15 +1178,8 @@ impl LibraryService {
         if let Some(list) = list {
             write_list(&self.settings, SettingKey::HiddenTracks, &list);
         }
-        self.send([LibraryEvent::Feedback {
-            kind: FeedbackKind::Dislike,
-            track,
-        }]);
-        let playing = self
-            .player
-            .snapshot()
-            .track
-            .is_some_and(|current| current.play_uri() == uri);
+        self.send([LibraryEvent::Feedback { kind: FeedbackKind::Dislike, track }]);
+        let playing = self.player.snapshot().track.is_some_and(|current| current.play_uri() == uri);
         if playing {
             self.player.next();
         }
@@ -1394,10 +1206,7 @@ impl LibraryService {
         self.spawn_background(move |service| async move {
             let api = service.auth.api();
             // сначала rootlist сессии: шапки, папки и права одним чтением, без квоты Web API
-            if let Some(library) =
-                playlist_session::library(&api, &service.player, playlist_session::SESSION_WAIT)
-                    .await
-            {
+            if let Some(library) = playlist_session::library(&api, &service.player, playlist_session::SESSION_WAIT).await {
                 service.adopt_library(library, generation);
                 return;
             }
@@ -1413,14 +1222,7 @@ impl LibraryService {
             let mut offset = 0;
             let mut failure = None;
             for page_index in 0..MAX_SECTION_PAGES {
-                let result = async {
-                    service
-                        .client(Operation::PlaylistLibrary)
-                        .await?
-                        .my_playlists(offset, 50)
-                        .await
-                }
-                .await;
+                let result = async { service.client(Operation::PlaylistLibrary).await?.my_playlists(offset, 50).await }.await;
                 let page = match result {
                     Ok(page) => page,
                     Err(error) => {
@@ -1440,11 +1242,8 @@ impl LibraryService {
                     if offset == 0 || raw.len() >= state.playlists_raw.len() {
                         state.playlists_raw = raw.clone();
                     }
-                    state
-                        .progress
-                        .insert(Section::Playlists, (page_index + 1, total_pages));
-                    let mut events: Vec<LibraryEvent> =
-                        state.rebuild_playlists().into_iter().collect();
+                    state.progress.insert(Section::Playlists, (page_index + 1, total_pages));
+                    let mut events: Vec<LibraryEvent> = state.rebuild_playlists().into_iter().collect();
                     events.push(LibraryEvent::EntriesChanged);
                     events.push(LibraryEvent::SavedChanged);
                     events
@@ -1474,8 +1273,7 @@ impl LibraryService {
             service.send(events);
             if let Some(error) = failure {
                 let text = service.error_text_of(&error);
-                let event = lock(&service.state)
-                    .set_error(mf_i18n::tf("Couldn’t load playlists: {0}", &[&text]));
+                let event = lock(&service.state).set_error(mf_i18n::tf("Couldn’t load playlists: {0}", &[&text]));
                 service.send(event);
                 service.retry_later(generation);
             }
@@ -1487,8 +1285,7 @@ impl LibraryService {
     fn load_rootlist(&self) {
         let generation = {
             let mut state = lock(&self.state);
-            if state.rootlist_loading || state.account.is_none() || self.player.session().is_none()
-            {
+            if state.rootlist_loading || state.account.is_none() || self.player.session().is_none() {
                 return;
             }
             state.rootlist_loading = true;
@@ -1496,8 +1293,7 @@ impl LibraryService {
         };
         self.spawn(move |service| async move {
             let api = service.auth.api();
-            match playlist_session::library(&api, &service.player, std::time::Duration::ZERO).await
-            {
+            match playlist_session::library(&api, &service.player, std::time::Duration::ZERO).await {
                 Some(library) => service.adopt_library(library, generation),
                 None => {
                     let mut state = lock(&service.state);
@@ -1524,11 +1320,8 @@ impl LibraryService {
                 }
             }
             self.auth.api().observe_playlists(raw.iter());
-            let coverless: Vec<String> = raw
-                .iter()
-                .filter(|pl| pl.images.is_empty() && pl.track_total() > 0)
-                .map(|pl| pl.id.clone())
-                .collect();
+            let coverless: Vec<String> =
+                raw.iter().filter(|pl| pl.images.is_empty() && pl.track_total() > 0).map(|pl| pl.id.clone()).collect();
             state.playlists_raw = raw;
             // дерево уходит на диск: когда сессия в следующий раз будет подниматься, библиотека уже видна
             let cached = library_cache::CachedLibrary::new(
@@ -1551,14 +1344,10 @@ impl LibraryService {
         };
         self.send(events);
         if !coverless.is_empty() {
-            self.spawn(
-                move |service| async move { service.fill_mosaics(coverless, generation).await },
-            );
+            self.spawn(move |service| async move { service.fill_mosaics(coverless, generation).await });
         }
         self.spawn(move |service| async move {
-            let Some(account) = lock(&service.state).account.clone() else {
-                return;
-            };
+            let Some(account) = lock(&service.state).account.clone() else { return };
             let file = library_cache::path(&mf_platform::dirs::playlist_cache_dir(&account));
             let _ = tokio::task::spawn_blocking(move || library_cache::write(&file, &cached)).await;
         });
@@ -1569,9 +1358,7 @@ impl LibraryService {
     fn hydrate_from_cache(&self) {
         let (account, generation) = {
             let state = lock(&self.state);
-            let Some(account) = state.account.clone() else {
-                return;
-            };
+            let Some(account) = state.account.clone() else { return };
             if state.rootlist.is_some() {
                 return;
             }
@@ -1579,10 +1366,7 @@ impl LibraryService {
         };
         let file = library_cache::path(&mf_platform::dirs::playlist_cache_dir(&account));
         self.spawn(move |service| async move {
-            let cached = tokio::task::spawn_blocking(move || library_cache::read(&file))
-                .await
-                .ok()
-                .flatten();
+            let cached = tokio::task::spawn_blocking(move || library_cache::read(&file)).await.ok().flatten();
             let Some(cached) = cached else { return };
             service.adopt_cached(cached, generation);
         });
@@ -1599,10 +1383,7 @@ impl LibraryService {
             let playlists = cached.playlists;
             self.auth.api().observe_playlists(playlists.iter());
             state.playlists_raw = playlists;
-            state.rootlist = Some(Rootlist {
-                entries: cached.rootlist,
-                ..Default::default()
-            });
+            state.rootlist = Some(Rootlist { entries: cached.rootlist, ..Default::default() });
             let mut events: Vec<LibraryEvent> = state.rebuild_playlists().into_iter().collect();
             events.push(LibraryEvent::EntriesChanged);
             events
@@ -1630,17 +1411,14 @@ impl LibraryService {
                     return;
                 }
                 let generated = state.mosaics.contains(&id);
-                if let Some(listed) = state.playlists_raw.iter_mut().find(|pl| {
-                    pl.id == id && (pl.images.is_empty() || generated || spotify_mosaic(&pl.images))
-                }) {
+                if let Some(listed) =
+                    state.playlists_raw.iter_mut().find(|pl| pl.id == id && (pl.images.is_empty() || generated || spotify_mosaic(&pl.images)))
+                {
                     listed.images = images.clone();
                 }
                 state.mosaics.insert(id.clone());
                 let id = PlaylistId::new(id);
-                if let Some(header) = state
-                    .pages
-                    .get_mut(&id)
-                    .and_then(|page| page.header.as_mut())
+                if let Some(header) = state.pages.get_mut(&id).and_then(|page| page.header.as_mut())
                     && (header.images.is_empty() || generated)
                 {
                     header.images = images;
@@ -1663,44 +1441,27 @@ impl LibraryService {
             if state.uploaded_covers.contains_key(id.as_str()) {
                 return;
             }
-            let Some(header) = state.pages.get(id).and_then(|page| page.header.as_ref()) else {
-                return;
-            };
+            let Some(header) = state.pages.get(id).and_then(|page| page.header.as_ref()) else { return };
             let generated = state.mosaics.contains(id.as_str());
             if !header.images.is_empty() && !generated && !spotify_mosaic(&header.images) {
                 return;
             }
-            let images =
-                sf_player::engine::session_playlists::mosaic_from(rows.iter().map(|row| {
-                    if row.cover_large.is_empty() {
-                        row.cover.as_str()
-                    } else {
-                        row.cover_large.as_str()
-                    }
-                }));
+            let images = sf_player::engine::session_playlists::mosaic_from(
+                rows.iter().map(|row| if row.cover_large.is_empty() { row.cover.as_str() } else { row.cover_large.as_str() }),
+            );
             let listed = state.raw(id.as_str()).map(|listed| listed.images.clone());
             let changed = match &listed {
-                Some(current) if current.is_empty() || generated || spotify_mosaic(current) => {
-                    *current != images
-                }
+                Some(current) if current.is_empty() || generated || spotify_mosaic(current) => *current != images,
                 Some(_) => return,
                 None => header.images != images,
             };
             if !changed {
                 return;
             }
-            if let Some(listed) = state
-                .playlists_raw
-                .iter_mut()
-                .find(|pl| pl.id == id.as_str())
-            {
+            if let Some(listed) = state.playlists_raw.iter_mut().find(|pl| pl.id == id.as_str()) {
                 listed.images = images.clone();
             }
-            if let Some(header) = state
-                .pages
-                .get_mut(id)
-                .and_then(|page| page.header.as_mut())
-            {
+            if let Some(header) = state.pages.get_mut(id).and_then(|page| page.header.as_mut()) {
                 header.images = images;
             }
             state.mosaics.insert(id.as_str().to_owned());
@@ -1733,9 +1494,7 @@ impl LibraryService {
     fn open_playlist(&self, id: PlaylistId, force: bool) {
         let (generation, page_generation, cached_needed, account, action) = {
             let mut state = lock(&self.state);
-            let Some(account) = state.account.clone() else {
-                return;
-            };
+            let Some(account) = state.account.clone() else { return };
             let generation = state.generation;
             let page = state.pages.entry(id.clone()).or_default();
             if page.pending_writes > 0 {
@@ -1750,21 +1509,12 @@ impl LibraryService {
                 page.generation += 1;
                 page.loading = true;
             }
-            (
-                generation,
-                page.generation,
-                page.rows.is_empty(),
-                account,
-                action,
-            )
+            (generation, page.generation, page.rows.is_empty(), account, action)
         };
         // новому экрану (и модели, созданной позже чтения) нужно видеть, что чтение идёт; при Idle
         // чтения нет — погасить зависший loading, если он остался от пропущенных событий
         let loading = action != OpenAction::Idle;
-        self.send([LibraryEvent::PlaylistTracks {
-            id: id.clone(),
-            change: ListChange::Loading(loading),
-        }]);
+        self.send([LibraryEvent::PlaylistTracks { id: id.clone(), change: ListChange::Loading(loading) }]);
         if action == OpenAction::Loading {
             return;
         }
@@ -1772,9 +1522,7 @@ impl LibraryService {
         let task_id = id.clone();
         let read = self.rt.spawn(async move {
             if let Some(service) = me.upgrade() {
-                service
-                    .fetch_playlist(task_id, generation, page_generation, cached_needed, account)
-                    .await;
+                service.fetch_playlist(task_id, generation, page_generation, cached_needed, account).await;
             }
         });
         // чтение запоминается под своей генерацией: заменить его может только более новое
@@ -1792,9 +1540,7 @@ impl LibraryService {
     /// Экран закрылся: отменить чтение, которое больше никому не нужно (записи и воспроизведение не трогает).
     pub fn cancel_playlist(&self, id: &PlaylistId) {
         let mut state = lock(&self.state);
-        let Some(page) = state.pages.get_mut(id) else {
-            return;
-        };
+        let Some(page) = state.pages.get_mut(id) else { return };
         if page.pending_writes > 0 {
             return;
         }
@@ -1810,10 +1556,7 @@ impl LibraryService {
         // loading при complete=true — это явное обновление (force) или перечитывание после правки;
         // отмена не должна прятать намерение: иначе следующее открытие покажет старый кэш как Idle
         page.complete = false;
-        let event = LibraryEvent::PlaylistTracks {
-            id: id.clone(),
-            change: ListChange::Loading(false),
-        };
+        let event = LibraryEvent::PlaylistTracks { id: id.clone(), change: ListChange::Loading(false) };
         drop(state);
         self.send([event]);
     }
@@ -1823,9 +1566,7 @@ impl LibraryService {
     /// допишет свои куски после, устаревший Reset не догонит свежие строки.
     pub fn replay_playlist(&self, id: &PlaylistId) {
         let state = lock(&self.state);
-        let Some(page) = state.pages.get(id) else {
-            return;
-        };
+        let Some(page) = state.pages.get(id) else { return };
         if page.rows.is_empty() {
             return;
         }
@@ -1847,16 +1588,10 @@ impl LibraryService {
             let state = lock(&service.state);
             read_is_current(&state, &id, generation, page_generation)
         };
-        let cache_file = playlist_cache::path(
-            &mf_platform::dirs::playlist_cache_dir(&account),
-            id.as_str(),
-        );
+        let cache_file = playlist_cache::path(&mf_platform::dirs::playlist_cache_dir(&account), id.as_str());
         if cached_needed {
             let file = cache_file.clone();
-            let cached = tokio::task::spawn_blocking(move || playlist_cache::read(&file))
-                .await
-                .ok()
-                .flatten();
+            let cached = tokio::task::spawn_blocking(move || playlist_cache::read(&file)).await.ok().flatten();
             if let Some(cached) = cached {
                 if !still(&service) {
                     return;
@@ -1891,10 +1626,7 @@ impl LibraryService {
                     page.read = None;
                 }
             }
-            events.push(LibraryEvent::PlaylistTracks {
-                id: id.clone(),
-                change: ListChange::Loading(false),
-            });
+            events.push(LibraryEvent::PlaylistTracks { id: id.clone(), change: ListChange::Loading(false) });
             if let Some(error) = error {
                 events.push(LibraryEvent::Notice(error));
             }
@@ -1923,9 +1655,7 @@ impl LibraryService {
                 }
                 let page = state.pages.entry(id.clone()).or_default();
                 match &page.expected_snapshot {
-                    Some(expected) if header.snapshot_id.as_deref() != Some(expected.as_str()) => {
-                        false
-                    }
+                    Some(expected) if header.snapshot_id.as_deref() != Some(expected.as_str()) => false,
                     _ => {
                         page.expected_snapshot = None;
                         true
@@ -1939,12 +1669,7 @@ impl LibraryService {
                 if let Some(page) = lock(&service.state).pages.get_mut(&id) {
                     page.expected_snapshot = None;
                 }
-                finish(
-                    &service,
-                    Some(mf_i18n::t(
-                        "Spotify hasn’t confirmed the playlist changes yet — refresh a bit later",
-                    )),
-                );
+                finish(&service, Some(mf_i18n::t("Spotify hasn’t confirmed the playlist changes yet — refresh a bit later")));
                 return;
             };
             tokio::time::sleep(*delay).await;
@@ -1977,15 +1702,11 @@ impl LibraryService {
             finish(&service, None);
             return;
         }
-        let progressive = lock(&service.state)
-            .pages
-            .get(&id)
-            .is_none_or(|page| page.rows.is_empty());
+        let progressive = lock(&service.state).pages.get(&id).is_none_or(|page| page.rows.is_empty());
         let mut rows: Vec<TrackItem> = Vec::new();
         let mut offset = 0;
         for _ in 0..MAX_PLAYLIST_PAGES {
-            let page = match route::playlist_items(&api, &service.player, id.as_str(), offset).await
-            {
+            let page = match route::playlist_items(&api, &service.player, id.as_str(), offset).await {
                 Ok(page) => page,
                 Err(error) => {
                     service.auth.note_api_error(&error);
@@ -1999,18 +1720,10 @@ impl LibraryService {
                 return;
             }
             let next = page.next_offset();
-            let added: Vec<TrackItem> = page
-                .items
-                .iter()
-                .filter_map(|item| playlist_row(item, collaborative))
-                .collect();
+            let added: Vec<TrackItem> = page.items.iter().filter_map(|item| playlist_row(item, collaborative)).collect();
             known::remember(added.iter());
             if progressive {
-                let change = if rows.is_empty() {
-                    ListChange::Reset(added.clone())
-                } else {
-                    ListChange::Append(added.clone())
-                };
+                let change = if rows.is_empty() { ListChange::Reset(added.clone()) } else { ListChange::Append(added.clone()) };
                 {
                     let mut state = lock(&service.state);
                     if !read_is_current(&state, &id, generation, page_generation) {
@@ -2021,10 +1734,7 @@ impl LibraryService {
                         page.rows.clear();
                     }
                     page.rows.extend(added.iter().cloned());
-                    service.send([LibraryEvent::PlaylistTracks {
-                        id: id.clone(),
-                        change,
-                    }]);
+                    service.send([LibraryEvent::PlaylistTracks { id: id.clone(), change }]);
                 }
             }
             rows.extend(added);
@@ -2045,10 +1755,7 @@ impl LibraryService {
             page.complete = true;
             page.read = None;
             if let Some(change) = change {
-                service.send([LibraryEvent::PlaylistTracks {
-                    id: id.clone(),
-                    change,
-                }]);
+                service.send([LibraryEvent::PlaylistTracks { id: id.clone(), change }]);
             }
         };
         service.send([LibraryEvent::PlaylistInfo(id.clone())]);
@@ -2061,10 +1768,7 @@ impl LibraryService {
     }
 
     pub fn playlist_tracks(&self, id: &PlaylistId) -> Option<Vec<TrackItem>> {
-        lock(&self.state)
-            .pages
-            .get(id)
-            .map(|page| page.rows.clone())
+        lock(&self.state).pages.get(id).map(|page| page.rows.clone())
     }
     pub fn playlist_info(&self, id: &PlaylistId) -> Option<PlaylistInfo> {
         lock(&self.state).playlist_info(id.as_str())
@@ -2072,16 +1776,11 @@ impl LibraryService {
     /// Свой, совместный или по приглашению (rootlist).
     pub fn can_edit(&self, id: &PlaylistId) -> bool {
         let state = lock(&self.state);
-        state
-            .header(id.as_str())
-            .is_some_and(|header| state.can_edit_raw(&header))
+        state.header(id.as_str()).is_some_and(|header| state.can_edit_raw(&header))
     }
 
     fn playlist_title(&self, id: &PlaylistId) -> String {
-        lock(&self.state)
-            .header(id.as_str())
-            .map(|header| header.name)
-            .unwrap_or_default()
+        lock(&self.state).header(id.as_str()).map(|header| header.name).unwrap_or_default()
     }
 
     /// Строки для оптимистичной вставки: известные или дочитанные из каталога.
@@ -2089,9 +1788,7 @@ impl LibraryService {
         let mut rows = Vec::with_capacity(uris.len());
         let unknown: Vec<String> = uris
             .iter()
-            .filter(|uri| {
-                hint.is_none_or(|hint| hint.play_uri() != **uri) && known::get(uri).is_none()
-            })
+            .filter(|uri| hint.is_none_or(|hint| hint.play_uri() != **uri) && known::get(uri).is_none())
             .cloned()
             .collect();
         let mut from_session = self.session_rows(&unknown).await;
@@ -2115,23 +1812,13 @@ impl LibraryService {
             }
             let id = sf_api::util::uri_id(uri).unwrap_or_default();
             let fetched = match (&client, uri_kind(uri)) {
-                (Some(client), "track") => client
-                    .track(id)
-                    .await
-                    .ok()
-                    .map(|track| map::track_item(&track)),
-                (Some(client), "episode") => client
-                    .episode(id)
-                    .await
-                    .ok()
-                    .map(|episode| map::episode_item(&episode, None).to_track()),
+                (Some(client), "track") => client.track(id).await.ok().map(|track| map::track_item(&track)),
+                (Some(client), "episode") => {
+                    client.episode(id).await.ok().map(|episode| map::episode_item(&episode, None).to_track())
+                }
                 _ => None,
             };
-            let row = fetched.unwrap_or_else(|| TrackItem {
-                uri: uri.clone(),
-                available: true,
-                ..Default::default()
-            });
+            let row = fetched.unwrap_or_else(|| TrackItem { uri: uri.clone(), available: true, ..Default::default() });
             known::remember([&row]);
             rows.push(row);
         }
@@ -2144,61 +1831,35 @@ impl LibraryService {
         if uris.is_empty() {
             return rows;
         }
-        let Some(session) = route::account_session(&self.auth.api(), &self.player) else {
-            return rows;
-        };
-        let tracks: Vec<String> = uris
-            .iter()
-            .filter(|uri| uri_kind(uri) == "track")
-            .cloned()
-            .collect();
-        let episodes: Vec<String> = uris
-            .iter()
-            .filter(|uri| uri_kind(uri) == "episode")
-            .cloned()
-            .collect();
+        let Some(session) = route::account_session(&self.auth.api(), &self.player) else { return rows };
+        let tracks: Vec<String> = uris.iter().filter(|uri| uri_kind(uri) == "track").cloned().collect();
+        let episodes: Vec<String> = uris.iter().filter(|uri| uri_kind(uri) == "episode").cloned().collect();
         let read_tracks = async {
             if tracks.is_empty() {
                 return None;
             }
-            sf_player::engine::session_collection::tracks(&session, &tracks)
-                .await
-                .ok()
+            sf_player::engine::session_collection::tracks(&session, &tracks).await.ok()
         };
         let read_episodes = async {
             if episodes.is_empty() {
                 return None;
             }
-            sf_player::engine::session_podcasts::episodes(&session, &episodes)
-                .await
-                .ok()
+            sf_player::engine::session_podcasts::episodes(&session, &episodes).await.ok()
         };
         let read = async { tokio::join!(read_tracks, read_episodes) };
-        let Ok((tracks, episodes)) =
-            tokio::time::timeout(std::time::Duration::from_secs(15), read).await
-        else {
-            return rows;
-        };
+        let Ok((tracks, episodes)) = tokio::time::timeout(std::time::Duration::from_secs(15), read).await else { return rows };
         for (uri, track) in tracks.unwrap_or_default() {
             rows.insert(uri, map::track_item(&track));
         }
         for episode in episodes.unwrap_or_default() {
-            rows.insert(
-                episode.uri.clone(),
-                map::episode_item(&episode, None).to_track(),
-            );
+            rows.insert(episode.uri.clone(), map::episode_item(&episode, None).to_track());
         }
         rows
     }
 
     /// Начать запись: оптимистичные строки (если плейлист загружен) и счётчик записей; delta — изменение
     /// числа треков для незагруженного плейлиста.
-    fn begin_write(
-        &self,
-        id: &PlaylistId,
-        delta: i64,
-        edit: impl FnOnce(&mut Vec<TrackItem>),
-    ) -> Vec<LibraryEvent> {
+    fn begin_write(&self, id: &PlaylistId, delta: i64, edit: impl FnOnce(&mut Vec<TrackItem>)) -> Vec<LibraryEvent> {
         let mut state = lock(&self.state);
         let mut events = Vec::new();
         let page = state.pages.entry(id.clone()).or_default();
@@ -2211,32 +1872,20 @@ impl LibraryService {
             let mut rows = page.rows.clone();
             edit(&mut rows);
             if let Some(change) = list_change(&page.rows, &rows) {
-                events.push(LibraryEvent::PlaylistTracks {
-                    id: id.clone(),
-                    change,
-                });
+                events.push(LibraryEvent::PlaylistTracks { id: id.clone(), change });
             }
             page.rows = rows;
         }
         let exact = page.complete.then_some(page.rows.len() as u32);
         let recount = |playlist: &mut models::Playlist| {
-            let total =
-                exact.unwrap_or_else(|| (i64::from(playlist.track_total()) + delta).max(0) as u32);
+            let total = exact.unwrap_or_else(|| (i64::from(playlist.track_total()) + delta).max(0) as u32);
             playlist.tracks = Some(models::TrackCount { total });
             playlist.items_count = None;
         };
-        if let Some(listed) = state
-            .playlists_raw
-            .iter_mut()
-            .find(|pl| pl.id == id.as_str())
-        {
+        if let Some(listed) = state.playlists_raw.iter_mut().find(|pl| pl.id == id.as_str()) {
             recount(listed);
         }
-        if let Some(header) = state
-            .pages
-            .get_mut(id)
-            .and_then(|page| page.header.as_mut())
-        {
+        if let Some(header) = state.pages.get_mut(id).and_then(|page| page.header.as_mut()) {
             recount(header);
         }
         events.extend(state.rebuild_playlists());
@@ -2246,12 +1895,7 @@ impl LibraryService {
     }
 
     /// Закончить запись: новый snapshot или перечитать.
-    fn end_write(
-        &self,
-        id: &PlaylistId,
-        result: Result<Option<String>, ApiError>,
-        success: Option<String>,
-    ) {
+    fn end_write(&self, id: &PlaylistId, result: Result<Option<String>, ApiError>, success: Option<String>) {
         let mosaic: Option<Option<Vec<TrackItem>>>;
         let reload = {
             let mut state = lock(&self.state);
@@ -2274,19 +1918,13 @@ impl LibraryService {
             }
             let reload = page.pending_writes == 0 && std::mem::take(&mut page.reload_after_write);
             // коллаж из первых строк — по строкам после правки (известны все) или заново через сессию
-            mosaic = (result.is_ok() && page.pending_writes == 0 && !reload)
-                .then(|| page.complete.then(|| page.rows.clone()));
+            mosaic = (result.is_ok() && page.pending_writes == 0 && !reload).then(|| page.complete.then(|| page.rows.clone()));
             if page.pending_writes == 0 && !reload && page.complete && !page.snapshot.is_empty() {
                 let account = state.account.clone().unwrap_or_default();
                 let page = &state.pages[id];
-                let cache =
-                    playlist_cache::CachedPlaylist::new(page.snapshot.clone(), page.rows.clone());
-                let file = playlist_cache::path(
-                    &mf_platform::dirs::playlist_cache_dir(&account),
-                    id.as_str(),
-                );
-                self.rt
-                    .spawn_blocking(move || playlist_cache::write(&file, &cache));
+                let cache = playlist_cache::CachedPlaylist::new(page.snapshot.clone(), page.rows.clone());
+                let file = playlist_cache::path(&mf_platform::dirs::playlist_cache_dir(&account), id.as_str());
+                self.rt.spawn_blocking(move || playlist_cache::write(&file, &cache));
             }
             reload
         };
@@ -2307,18 +1945,16 @@ impl LibraryService {
                 let (wanted, generation) = {
                     let state = lock(&self.state);
                     let wanted = !state.uploaded_covers.contains_key(id.as_str())
-                        && state.raw(id.as_str()).is_some_and(|listed| {
-                            listed.images.is_empty()
-                                || state.mosaics.contains(id.as_str())
-                                || spotify_mosaic(&listed.images)
-                        });
+                        && state
+                            .raw(id.as_str())
+                            .is_some_and(|listed| {
+                                listed.images.is_empty() || state.mosaics.contains(id.as_str()) || spotify_mosaic(&listed.images)
+                            });
                     (wanted, state.generation)
                 };
                 if wanted {
                     let ids = vec![id.as_str().to_owned()];
-                    self.spawn(move |service| async move {
-                        service.fill_mosaics(ids, generation).await
-                    });
+                    self.spawn(move |service| async move { service.fill_mosaics(ids, generation).await });
                 }
             }
             None => {}
@@ -2349,9 +1985,7 @@ impl LibraryService {
                     let page = state.pages.get(&id);
                     (
                         page.is_some_and(|page| page.complete),
-                        page.is_some_and(|page| {
-                            page.rows.iter().any(|row| row.play_uri() == uris[0])
-                        }),
+                        page.is_some_and(|page| page.rows.iter().any(|row| row.play_uri() == uris[0])),
                     )
                 };
                 let duplicate = if present {
@@ -2360,17 +1994,14 @@ impl LibraryService {
                     false
                 } else {
                     let api = service.auth.api();
-                    match playlist_session::duplicates(&api, &service.player, id.as_str(), &uris)
-                        .await
-                    {
+                    match playlist_session::duplicates(&api, &service.player, id.as_str(), &uris).await {
                         Some(found) => found.is_ok_and(|found| !found.is_empty()),
                         None => {
                             let access = api.playlist_access(id.as_str());
                             match api.client_for(Operation::PlaylistItems(access)).await {
-                                Ok(client) => client
-                                    .playlist_duplicates(id.as_str(), &uris)
-                                    .await
-                                    .is_ok_and(|found| !found.is_empty()),
+                                Ok(client) => {
+                                    client.playlist_duplicates(id.as_str(), &uris).await.is_ok_and(|found| !found.is_empty())
+                                }
                                 Err(_) => false,
                             }
                         }
@@ -2400,13 +2031,8 @@ impl LibraryService {
             service.send(events);
             let api = service.auth.api();
             let access = api.playlist_access(id.as_str());
-            let add = Change::Add {
-                uris: uris.clone(),
-                at: position.map(|at| at as u32),
-            };
-            let result = match playlist_session::change(&api, &service.player, id.as_str(), add)
-                .await
-            {
+            let add = Change::Add { uris: uris.clone(), at: position.map(|at| at as u32) };
+            let result = match playlist_session::change(&api, &service.player, id.as_str(), add).await {
                 Some(result) => result,
                 None => {
                     async {
@@ -2414,10 +2040,7 @@ impl LibraryService {
                         let mut snapshot = None;
                         for (index, chunk) in uris.chunks(WRITE_CHUNK).enumerate() {
                             let at = position.map(|at| (at + index * WRITE_CHUNK) as u32);
-                            snapshot = client
-                                .add_playlist_items(id.as_str(), chunk, at)
-                                .await?
-                                .or(snapshot);
+                            snapshot = client.add_playlist_items(id.as_str(), chunk, at).await?.or(snapshot);
                         }
                         Ok(snapshot)
                     }
@@ -2430,14 +2053,8 @@ impl LibraryService {
             let success = match (count, title.is_empty()) {
                 (1, false) => mf_i18n::tf("Added to “{0}”", &[&title]),
                 (1, true) => mf_i18n::t("Added to playlist"),
-                (n, false) => mf_i18n::tf(
-                    "{0} added to “{1}”",
-                    &[&mf_i18n::n(n as i64, "{0} track", "{0} tracks"), &title],
-                ),
-                (n, true) => mf_i18n::tf(
-                    "{0} added to playlist",
-                    &[&mf_i18n::n(n as i64, "{0} track", "{0} tracks")],
-                ),
+                (n, false) => mf_i18n::tf("{0} added to “{1}”", &[&mf_i18n::n(n as i64, "{0} track", "{0} tracks"), &title]),
+                (n, true) => mf_i18n::tf("{0} added to playlist", &[&mf_i18n::n(n as i64, "{0} track", "{0} tracks")]),
             };
             service.end_write(&id, result, Some(success));
         });
@@ -2469,9 +2086,7 @@ impl LibraryService {
             return;
         }
         let delta = -(uris.len() as i64);
-        let events = self.begin_write(&id, delta, |list| {
-            list.retain(|row| !uris.contains(&row.play_uri()))
-        });
+        let events = self.begin_write(&id, delta, |list| list.retain(|row| !uris.contains(&row.play_uri())));
         self.send(events);
         let generation = self.generation();
         self.spawn(move |service| async move {
@@ -2479,25 +2094,17 @@ impl LibraryService {
             let access = api.playlist_access(id.as_str());
             let mut snapshot = {
                 let state = lock(&service.state);
-                state
-                    .pages
-                    .get(&id)
-                    .map(|page| page.snapshot.clone())
-                    .filter(|s| !s.is_empty())
+                state.pages.get(&id).map(|page| page.snapshot.clone()).filter(|s| !s.is_empty())
             };
             let remove = Change::Remove { uris: uris.clone() };
-            let result = match playlist_session::change(&api, &service.player, id.as_str(), remove)
-                .await
-            {
+            let result = match playlist_session::change(&api, &service.player, id.as_str(), remove).await {
                 Some(result) => result,
                 None => {
                     async {
                         let client = api.client_for(Operation::PlaylistMutation(access)).await?;
                         for chunk in uris.chunks(WRITE_CHUNK) {
-                            snapshot = client
-                                .remove_playlist_items(id.as_str(), chunk, snapshot.as_deref())
-                                .await?
-                                .or(snapshot);
+                            snapshot =
+                                client.remove_playlist_items(id.as_str(), chunk, snapshot.as_deref()).await?.or(snapshot);
                         }
                         Ok(snapshot)
                     }
@@ -2511,10 +2118,7 @@ impl LibraryService {
     }
 
     pub fn move_tracks(&self, id: PlaylistId, from: usize, to: usize) {
-        let len = lock(&self.state)
-            .pages
-            .get(&id)
-            .map_or(0, |page| page.rows.len());
+        let len = lock(&self.state).pages.get(&id).map_or(0, |page| page.rows.len());
         if from == to || from >= len || to >= len {
             return;
         }
@@ -2532,36 +2136,25 @@ impl LibraryService {
                 let state = lock(&service.state);
                 let page = state.pages.get(&id);
                 (
-                    page.map(|page| page.snapshot.clone())
-                        .filter(|s| !s.is_empty()),
+                    page.map(|page| page.snapshot.clone()).filter(|s| !s.is_empty()),
                     page.is_some_and(|page| page.pending_writes == 1),
                 )
             };
             // позиции — в строках, которые видел пользователь: их ревизия — база (сервер перебазирует),
             // если до переноса нет других незаконченных записей
-            let r#move = Change::Move {
-                from: from as u32,
-                insert_before,
-                snapshot: snapshot.clone().filter(|_| alone),
-            };
-            let result =
-                match playlist_session::change(&api, &service.player, id.as_str(), r#move).await {
-                    Some(result) => result,
-                    None => {
-                        async {
-                            api.client_for(Operation::PlaylistMutation(access))
-                                .await?
-                                .reorder_playlist(
-                                    id.as_str(),
-                                    from as u32,
-                                    insert_before,
-                                    snapshot.as_deref(),
-                                )
-                                .await
-                        }
-                        .await
+            let r#move = Change::Move { from: from as u32, insert_before, snapshot: snapshot.clone().filter(|_| alone) };
+            let result = match playlist_session::change(&api, &service.player, id.as_str(), r#move).await {
+                Some(result) => result,
+                None => {
+                    async {
+                        api.client_for(Operation::PlaylistMutation(access))
+                            .await?
+                            .reorder_playlist(id.as_str(), from as u32, insert_before, snapshot.as_deref())
+                            .await
                     }
-                };
+                    .await
+                }
+            };
             if service.current(generation) {
                 service.end_write(&id, result, None);
             }
@@ -2574,19 +2167,11 @@ impl LibraryService {
         let playlist = match playlist_session::create(&api, &self.player, title, false).await {
             Some(created) => {
                 let mut playlist = created?;
-                playlist.owner.display_name = self
-                    .auth
-                    .account()
-                    .map(|account| account.display_name)
-                    .filter(|name| !name.is_empty());
+                playlist.owner.display_name =
+                    self.auth.account().map(|account| account.display_name).filter(|name| !name.is_empty());
                 playlist
             }
-            None => {
-                self.client(Operation::PlaylistCreation)
-                    .await?
-                    .create_playlist(title, false, "")
-                    .await?
-            }
+            None => self.client(Operation::PlaylistCreation).await?.create_playlist(title, false, "").await?,
         };
         api.observe_playlist(&playlist);
         Ok(playlist)
@@ -2609,11 +2194,7 @@ impl LibraryService {
     }
 
     pub fn create_playlist(&self, title: String, track: Option<TrackItem>) {
-        let title = if title.trim().is_empty() {
-            mf_i18n::t("New playlist")
-        } else {
-            title.trim().to_owned()
-        };
+        let title = if title.trim().is_empty() { mf_i18n::t("New playlist") } else { title.trim().to_owned() };
         let generation = self.generation();
         self.spawn(move |service| async move {
             match service.create(&title).await {
@@ -2645,51 +2226,32 @@ impl LibraryService {
 
     /// Создать из списка URI (очередь, радио).
     pub fn create_playlist_from(&self, title: String, uris: Vec<String>) {
-        let title = if title.trim().is_empty() {
-            mf_i18n::t("New playlist")
-        } else {
-            title.trim().to_owned()
-        };
+        let title = if title.trim().is_empty() { mf_i18n::t("New playlist") } else { title.trim().to_owned() };
         let generation = self.generation();
         self.spawn(move |service| async move {
             let result = async {
                 let mut playlist = service.create(&title).await?;
                 let api = service.auth.api();
-                let add = Change::Add {
-                    uris: uris.clone(),
-                    at: None,
-                };
+                let add = Change::Add { uris: uris.clone(), at: None };
                 match playlist_session::change(&api, &service.player, &playlist.id, add).await {
                     Some(result) => playlist.snapshot_id = result?.or(playlist.snapshot_id),
                     None => {
-                        let client = service
-                            .client(Operation::PlaylistMutation(sf_api::PlaylistAccess::Owned))
-                            .await?;
+                        let client = service.client(Operation::PlaylistMutation(sf_api::PlaylistAccess::Owned)).await?;
                         for chunk in uris.chunks(WRITE_CHUNK) {
-                            if let Some(snapshot) =
-                                client.add_playlist_items(&playlist.id, chunk, None).await?
-                            {
+                            if let Some(snapshot) = client.add_playlist_items(&playlist.id, chunk, None).await? {
                                 playlist.snapshot_id = Some(snapshot);
                             }
                         }
                     }
                 }
-                playlist.tracks = Some(models::TrackCount {
-                    total: uris.len() as u32,
-                });
+                playlist.tracks = Some(models::TrackCount { total: uris.len() as u32 });
                 Ok::<_, ApiError>(playlist)
             }
             .await;
             match result {
                 Ok(playlist) => {
                     if service.adopt_created(&playlist, generation) {
-                        service.notice(mf_i18n::tf(
-                            "Playlist “{0}” created · {1}",
-                            &[
-                                &title,
-                                &mf_i18n::n(uris.len() as i64, "{0} track", "{0} tracks"),
-                            ],
-                        ));
+                        service.notice(mf_i18n::tf("Playlist “{0}” created · {1}", &[&title, &mf_i18n::n(uris.len() as i64, "{0} track", "{0} tracks")]));
                     }
                 }
                 Err(error) => {
@@ -2701,13 +2263,7 @@ impl LibraryService {
     }
 
     /// Поменять шапку оптимистично; ошибка — вернуть как было.
-    fn edit_details(
-        &self,
-        id: PlaylistId,
-        name: Option<String>,
-        description: Option<String>,
-        public: Option<bool>,
-    ) {
+    fn edit_details(&self, id: PlaylistId, name: Option<String>, description: Option<String>, public: Option<bool>) {
         let change = |playlist: &mut models::Playlist| {
             if let Some(name) = &name {
                 playlist.name = name.clone();
@@ -2725,18 +2281,10 @@ impl LibraryService {
                 state.raw(id.as_str()).cloned(),
                 state.pages.get(&id).and_then(|page| page.header.clone()),
             );
-            if let Some(listed) = state
-                .playlists_raw
-                .iter_mut()
-                .find(|pl| pl.id == id.as_str())
-            {
+            if let Some(listed) = state.playlists_raw.iter_mut().find(|pl| pl.id == id.as_str()) {
                 change(listed);
             }
-            if let Some(header) = state
-                .pages
-                .get_mut(&id)
-                .and_then(|page| page.header.as_mut())
-            {
+            if let Some(header) = state.pages.get_mut(&id).and_then(|page| page.header.as_mut()) {
                 change(header);
             }
             let mut events: Vec<LibraryEvent> = state.rebuild_playlists().into_iter().collect();
@@ -2753,23 +2301,13 @@ impl LibraryService {
             // сессию — всё через Web API (запись повторяемая)
             let in_session = async {
                 if name.is_some() || description.is_some() {
-                    let details = Change::Details {
-                        name: name.clone(),
-                        description: description.clone(),
-                        collaborative: None,
-                    };
-                    if let Err(error) =
-                        playlist_session::change(&api, &service.player, id.as_str(), details)
-                            .await?
-                    {
+                    let details = Change::Details { name: name.clone(), description: description.clone(), collaborative: None };
+                    if let Err(error) = playlist_session::change(&api, &service.player, id.as_str(), details).await? {
                         return Some(Err(error));
                     }
                 }
                 match public {
-                    Some(public) => {
-                        playlist_session::set_public(&api, &service.player, id.as_str(), public)
-                            .await
-                    }
+                    Some(public) => playlist_session::set_public(&api, &service.player, id.as_str(), public).await,
                     None => Some(Ok(())),
                 }
             };
@@ -2779,12 +2317,7 @@ impl LibraryService {
                     async {
                         api.client_for(Operation::PlaylistMutation(access))
                             .await?
-                            .update_playlist(
-                                id.as_str(),
-                                name.as_deref(),
-                                description.as_deref(),
-                                public,
-                            )
+                            .update_playlist(id.as_str(), name.as_deref(), description.as_deref(), public)
                             .await
                     }
                     .await
@@ -2796,20 +2329,15 @@ impl LibraryService {
             if let Err(error) = result {
                 let events = {
                     let mut state = lock(&service.state);
-                    if let (Some(old), Some(listed)) = (
-                        before.0,
-                        state
-                            .playlists_raw
-                            .iter_mut()
-                            .find(|pl| pl.id == id.as_str()),
-                    ) {
+                    if let (Some(old), Some(listed)) =
+                        (before.0, state.playlists_raw.iter_mut().find(|pl| pl.id == id.as_str()))
+                    {
                         *listed = old;
                     }
                     if let (Some(old), Some(page)) = (before.1, state.pages.get_mut(&id)) {
                         page.header = Some(old);
                     }
-                    let mut events: Vec<LibraryEvent> =
-                        state.rebuild_playlists().into_iter().collect();
+                    let mut events: Vec<LibraryEvent> = state.rebuild_playlists().into_iter().collect();
                     events.push(LibraryEvent::PlaylistInfo(id.clone()));
                     events.push(LibraryEvent::EntriesChanged);
                     events
@@ -2832,9 +2360,7 @@ impl LibraryService {
     pub fn set_description(&self, id: PlaylistId, text: String) {
         let text = text.trim().to_owned();
         if text.is_empty() {
-            self.notice(mf_i18n::t(
-                "Spotify doesn’t allow clearing the description completely",
-            ));
+            self.notice(mf_i18n::t("Spotify doesn’t allow clearing the description completely"));
             return;
         }
         self.edit_details(id, None, Some(text), None);
@@ -2847,46 +2373,26 @@ impl LibraryService {
     /// (локальная копия); картинка Spotify принимается, только когда её пиксели совпали с выбранной
     /// (до 3 перепроверок, как в spotifast).
     pub fn upload_cover(&self, id: PlaylistId, path: std::path::PathBuf) {
-        let path = match path.to_str().and_then(|text| {
-            text.strip_prefix("file:///")
-                .or(text.strip_prefix("file://"))
-        }) {
+        let path = match path.to_str().and_then(|text| text.strip_prefix("file:///").or(text.strip_prefix("file://"))) {
             Some(rest) if cfg!(windows) => std::path::PathBuf::from(rest),
             Some(rest) => std::path::PathBuf::from(format!("/{}", rest.trim_start_matches('/'))),
             None => path,
         };
         let generation = self.generation();
         self.spawn(move |service| async move {
-            let cover =
-                tokio::task::spawn_blocking(move || sf_api::playlist_cover::read(&path)).await;
+            let cover = tokio::task::spawn_blocking(move || sf_api::playlist_cover::read(&path)).await;
             let cover = match cover {
                 Ok(Ok(cover)) => cover,
                 Ok(Err(text)) => return service.notice(text),
-                Err(_) => {
-                    return service
-                        .notice(mf_i18n::t("Couldn’t read the image — choose a JPEG or PNG"));
-                }
+                Err(_) => return service.notice(mf_i18n::t("Couldn’t read the image — choose a JPEG or PNG")),
             };
             let previous_urls: Vec<String> = lock(&service.state)
                 .header(id.as_str())
-                .map(|header| {
-                    header
-                        .images
-                        .iter()
-                        .map(|image| image.url.clone())
-                        .collect()
-                })
+                .map(|header| header.images.iter().map(|image| image.url.clone()).collect())
                 .unwrap_or_default();
             let api = service.auth.api();
             let access = api.playlist_access(id.as_str());
-            let result = match playlist_session::upload_cover(
-                &api,
-                &service.player,
-                id.as_str(),
-                cover.jpeg.to_vec(),
-            )
-            .await
-            {
+            let result = match playlist_session::upload_cover(&api, &service.player, id.as_str(), cover.jpeg.to_vec()).await {
                 Some(result) => result.map(|_| ()),
                 None => {
                     async {
@@ -2909,10 +2415,7 @@ impl LibraryService {
             }
             let local_url = {
                 let jpeg = cover.jpeg.clone();
-                let name = cover
-                    .uri
-                    .trim_start_matches("bytes://playlist-cover-")
-                    .to_owned();
+                let name = cover.uri.trim_start_matches("bytes://playlist-cover-").to_owned();
                 let file = mf_platform::dirs::cache_subdir("covers").join(format!("upload-{name}"));
                 tokio::task::spawn_blocking(move || {
                     std::fs::create_dir_all(file.parent()?).ok()?;
@@ -2928,14 +2431,7 @@ impl LibraryService {
                 let mut state = lock(&service.state);
                 state.cover_requests += 1;
                 let request = state.cover_requests;
-                state.uploaded_covers.insert(
-                    id.as_str().to_owned(),
-                    UploadedCover {
-                        request,
-                        local_url,
-                        previous_urls,
-                    },
-                );
+                state.uploaded_covers.insert(id.as_str().to_owned(), UploadedCover { request, local_url, previous_urls });
                 request
             };
             service.send_playlist_cover(&id, None);
@@ -2945,39 +2441,24 @@ impl LibraryService {
     }
 
     /// Перечитывать шапку, пока Spotify не отдаст картинку с теми же пикселями (≤ 3 раз).
-    async fn confirm_cover(
-        &self,
-        id: PlaylistId,
-        generation: u64,
-        request: u64,
-        cover: sf_api::playlist_cover::Cover,
-    ) {
+    async fn confirm_cover(&self, id: PlaylistId, generation: u64, request: u64, cover: sf_api::playlist_cover::Cover) {
         let api = self.auth.api();
         let pending = |service: &Self| {
             let state = lock(&service.state);
             state.generation == generation
-                && state
-                    .uploaded_covers
-                    .get(id.as_str())
-                    .is_some_and(|upload| upload.request == request)
+                && state.uploaded_covers.get(id.as_str()).is_some_and(|upload| upload.request == request)
         };
         for delay in COVER_RECHECKS {
             tokio::time::sleep(delay).await;
             if !pending(self) {
                 return;
             }
-            let Ok(header) = route::playlist(&api, &self.player, id.as_str()).await else {
-                continue;
-            };
+            let Ok(header) = route::playlist(&api, &self.player, id.as_str()).await else { continue };
             let previous = match lock(&self.state).uploaded_covers.get(id.as_str()) {
                 Some(upload) if upload.request == request => upload.previous_urls.clone(),
                 _ => return,
             };
-            let fresh = !header.images.is_empty()
-                && header
-                    .images
-                    .iter()
-                    .all(|image| !previous.contains(&image.url));
+            let fresh = !header.images.is_empty() && header.images.iter().all(|image| !previous.contains(&image.url));
             if !fresh {
                 continue;
             }
@@ -3002,9 +2483,7 @@ impl LibraryService {
                 }
                 Ok(false) => {
                     if let Some(upload) = lock(&self.state).uploaded_covers.get_mut(id.as_str()) {
-                        upload
-                            .previous_urls
-                            .extend(header.images.iter().map(|image| image.url.clone()));
+                        upload.previous_urls.extend(header.images.iter().map(|image| image.url.clone()));
                     }
                 }
                 // проверить не удалось — остаётся загруженная обложка
@@ -3021,11 +2500,7 @@ impl LibraryService {
         let events = {
             let mut state = lock(&self.state);
             if let Some(header) = header {
-                if let Some(listed) = state
-                    .playlists_raw
-                    .iter_mut()
-                    .find(|pl| pl.id == id.as_str())
-                {
+                if let Some(listed) = state.playlists_raw.iter_mut().find(|pl| pl.id == id.as_str()) {
                     listed.images = header.images.clone();
                 }
                 state.pages.entry(id.clone()).or_default().header = Some(header);
@@ -3045,10 +2520,7 @@ impl LibraryService {
             state.saved_intents.insert(uri.clone(), true);
             state.saved_revision += 1;
         }
-        self.send([
-            LibraryEvent::SavedChanged,
-            LibraryEvent::PlaylistInfo(id.clone()),
-        ]);
+        self.send([LibraryEvent::SavedChanged, LibraryEvent::PlaylistInfo(id.clone())]);
         let generation = self.generation();
         self.spawn(move |service| async move {
             let api = service.auth.api();
@@ -3056,13 +2528,8 @@ impl LibraryService {
             let result = match playlist_session::follow(&api, &service.player, id.as_str()).await {
                 Some(result) => result,
                 None => {
-                    async {
-                        api.client_for(Operation::PlaylistMutation(access))
-                            .await?
-                            .follow_playlist(id.as_str())
-                            .await
-                    }
-                    .await
+                    async { api.client_for(Operation::PlaylistMutation(access)).await?.follow_playlist(id.as_str()).await }
+                        .await
                 }
             };
             if !service.current(generation) {
@@ -3073,10 +2540,7 @@ impl LibraryService {
                 let mut state = lock(&service.state);
                 state.saved_intents.remove(&uri);
                 state.saved_revision += 1;
-                let mut events = vec![
-                    LibraryEvent::SavedChanged,
-                    LibraryEvent::PlaylistInfo(id.clone()),
-                ];
+                let mut events = vec![LibraryEvent::SavedChanged, LibraryEvent::PlaylistInfo(id.clone())];
                 if result.is_ok()
                     && let Some(header) = header
                     && state.raw(id.as_str()).is_none()
@@ -3103,20 +2567,13 @@ impl LibraryService {
         let uri = id.uri();
         let (removed, own, events) = {
             let mut state = lock(&self.state);
-            let index = state
-                .playlists_raw
-                .iter()
-                .position(|pl| pl.id == id.as_str());
+            let index = state.playlists_raw.iter().position(|pl| pl.id == id.as_str());
             let removed = index.map(|index| (index, state.playlists_raw.remove(index)));
             let own = removed.as_ref().is_some_and(|(_, pl)| state.owns(pl));
             state.saved_intents.insert(uri.clone(), false);
             state.saved_revision += 1;
             let mut events: Vec<LibraryEvent> = state.rebuild_playlists().into_iter().collect();
-            events.extend([
-                LibraryEvent::EntriesChanged,
-                LibraryEvent::SavedChanged,
-                LibraryEvent::PlaylistInfo(id.clone()),
-            ]);
+            events.extend([LibraryEvent::EntriesChanged, LibraryEvent::SavedChanged, LibraryEvent::PlaylistInfo(id.clone())]);
             (removed, own, events)
         };
         self.send(events);
@@ -3137,17 +2594,11 @@ impl LibraryService {
         self.spawn(move |service| async move {
             let api = service.auth.api();
             let access = api.playlist_access(id.as_str());
-            let result = match playlist_session::unfollow(&api, &service.player, id.as_str()).await
-            {
+            let result = match playlist_session::unfollow(&api, &service.player, id.as_str()).await {
                 Some(result) => result,
                 None => {
-                    async {
-                        api.client_for(Operation::PlaylistMutation(access))
-                            .await?
-                            .unfollow_playlist(id.as_str())
-                            .await
-                    }
-                    .await
+                    async { api.client_for(Operation::PlaylistMutation(access)).await?.unfollow_playlist(id.as_str()).await }
+                        .await
                 }
             };
             if !service.current(generation) {
@@ -3157,10 +2608,7 @@ impl LibraryService {
                 let mut state = lock(&service.state);
                 state.saved_intents.remove(&uri);
                 state.saved_revision += 1;
-                let mut events = vec![
-                    LibraryEvent::SavedChanged,
-                    LibraryEvent::PlaylistInfo(id.clone()),
-                ];
+                let mut events = vec![LibraryEvent::SavedChanged, LibraryEvent::PlaylistInfo(id.clone())];
                 if result.is_err()
                     && let Some((index, playlist)) = removed
                     && state.raw(id.as_str()).is_none()
@@ -3174,17 +2622,10 @@ impl LibraryService {
             };
             service.send(events);
             match result {
-                Ok(()) => service.notice(if own {
-                    mf_i18n::t("Playlist deleted")
-                } else {
-                    mf_i18n::t("Playlist removed from your library")
-                }),
+                Ok(()) => service.notice(if own { mf_i18n::t("Playlist deleted") } else { mf_i18n::t("Playlist removed from your library") }),
                 Err(error) => {
                     let text = service.error_text_of(&error);
-                    service.notice(mf_i18n::tf(
-                        "Playlist is still in your library: {0}",
-                        &[&text],
-                    ));
+                    service.notice(mf_i18n::tf("Playlist is still in your library: {0}", &[&text]));
                 }
             }
         });
@@ -3203,25 +2644,21 @@ impl LibraryService {
         };
         self.spawn_background(move |service| async move {
             let result = service.fetch_section(section, generation).await;
-            let events =
-                {
+            let events = {
+                let mut state = lock(&service.state);
+                if state.generation != generation {
+                    return;
+                }
+                state.progress.remove(&section);
+                let mut events = vec![LibraryEvent::SavedChanged, LibraryEvent::EntriesChanged];
+                if let Err(error) = &result {
+                    drop(state);
+                    let text = service.error_text_of(error);
                     let mut state = lock(&service.state);
-                    if state.generation != generation {
-                        return;
-                    }
-                    state.progress.remove(&section);
-                    let mut events = vec![LibraryEvent::SavedChanged, LibraryEvent::EntriesChanged];
-                    if let Err(error) = &result {
-                        drop(state);
-                        let text = service.error_text_of(error);
-                        let mut state = lock(&service.state);
-                        events.extend(state.set_error(mf_i18n::tf(
-                            "Your library didn’t fully load: {0}",
-                            &[&text],
-                        )));
-                    }
-                    events
-                };
+                    events.extend(state.set_error(mf_i18n::tf("Your library didn’t fully load: {0}", &[&text])));
+                }
+                events
+            };
             service.send(events);
             if result.is_err() {
                 service.retry_later(generation);
@@ -3257,8 +2694,7 @@ impl LibraryService {
     }
 
     async fn fetch_section(&self, section: Section, generation: u64) -> Result<(), ApiError> {
-        route::wait_account_session(&self.auth.api(), &self.player, route::STARTUP_SESSION_WAIT)
-            .await;
+        route::wait_account_session(&self.auth.api(), &self.player, route::STARTUP_SESSION_WAIT).await;
         if self.session_section(section, generation).await {
             return Ok(());
         }
@@ -3288,10 +2724,8 @@ impl LibraryService {
                         if !last && snapshot.len() < state.albums.len() {
                             return None;
                         }
-                        let old: Vec<AlbumItem> =
-                            state.albums.iter().map(|(_, item)| item.clone()).collect();
-                        let new: Vec<AlbumItem> =
-                            snapshot.iter().map(|(_, item)| item.clone()).collect();
+                        let old: Vec<AlbumItem> = state.albums.iter().map(|(_, item)| item.clone()).collect();
+                        let new: Vec<AlbumItem> = snapshot.iter().map(|(_, item)| item.clone()).collect();
                         state.albums = snapshot;
                         list_change(&old, &new).map(LibraryEvent::Albums)
                     }) {
@@ -3318,21 +2752,17 @@ impl LibraryService {
                     if !matches!(next, Some(n) if n > offset) || done == MAX_SECTION_PAGES {
                         // аудиокниги librespot не играет
                         if let Some(session) = self.player.session() {
-                            let uris: Vec<String> =
-                                shows.iter().map(|(_, show)| show.uri.clone()).collect();
+                            let uris: Vec<String> = shows.iter().map(|(_, show)| show.uri.clone()).collect();
                             if let Ok(books) =
-                                sf_player::engine::session_reads::audiobook_shows(&session, &uris)
-                                    .await
+                                sf_player::engine::session_reads::audiobook_shows(&session, &uris).await
                             {
                                 shows.retain(|(_, show)| !books.contains(&show.uri));
                             }
                         }
                         let snapshot = shows.clone();
                         self.put_section(section, generation, (done, pages, true), |state| {
-                            let old: Vec<ShowItem> =
-                                state.shows.iter().map(|(_, item)| item.clone()).collect();
-                            let new: Vec<ShowItem> =
-                                snapshot.iter().map(|(_, item)| item.clone()).collect();
+                            let old: Vec<ShowItem> = state.shows.iter().map(|(_, item)| item.clone()).collect();
+                            let new: Vec<ShowItem> = snapshot.iter().map(|(_, item)| item.clone()).collect();
                             state.shows = snapshot;
                             list_change(&old, &new).map(LibraryEvent::Shows)
                         });
@@ -3379,11 +2809,7 @@ impl LibraryService {
                     let pages = page.total.map_or(done, |total| total.div_ceil(50));
                     let count = page.items.len();
                     artists.extend(page.items.iter().map(map::artist_item));
-                    after = page
-                        .cursors
-                        .as_ref()
-                        .and_then(|cursors| cursors.after.clone())
-                        .filter(|_| page.next.is_some());
+                    after = page.cursors.as_ref().and_then(|cursors| cursors.after.clone()).filter(|_| page.next.is_some());
                     let last = after.is_none() || count == 0;
                     let snapshot = artists.clone();
                     if !self.put_section(section, generation, (done, pages, last), |state| {
@@ -3412,10 +2838,8 @@ impl LibraryService {
         match section {
             Section::Albums => {
                 let Some(saved) =
-                    collection_session::read(&api, player, "albums", |s| async move {
-                        collection_session::saved_albums(&s).await
-                    })
-                    .await
+                    collection_session::read(&api, player, "albums", |s| async move { collection_session::saved_albums(&s).await })
+                        .await
                 else {
                     return false;
                 };
@@ -3428,8 +2852,7 @@ impl LibraryService {
                     })
                     .collect();
                 self.put_section(section, generation, (1, 1, true), |state| {
-                    let old: Vec<AlbumItem> =
-                        state.albums.iter().map(|(_, item)| item.clone()).collect();
+                    let old: Vec<AlbumItem> = state.albums.iter().map(|(_, item)| item.clone()).collect();
                     let new: Vec<AlbumItem> = rows.iter().map(|(_, item)| item.clone()).collect();
                     state.albums = rows;
                     list_change(&old, &new).map(LibraryEvent::Albums)
@@ -3437,11 +2860,10 @@ impl LibraryService {
                 true
             }
             Section::Artists => {
-                let Some(followed) =
-                    collection_session::read(&api, player, "followed artists", |s| async move {
-                        collection_session::followed_artists(&s).await
-                    })
-                    .await
+                let Some(followed) = collection_session::read(&api, player, "followed artists", |s| async move {
+                    collection_session::followed_artists(&s).await
+                })
+                .await
                 else {
                     return false;
                 };
@@ -3464,10 +2886,8 @@ impl LibraryService {
         match section {
             Section::Shows => {
                 let Some(saved) =
-                    collection_session::read(&api, player, "podcasts", |s| async move {
-                        podcast_session::saved_shows(&s).await
-                    })
-                    .await
+                    collection_session::read(&api, player, "podcasts", |s| async move { podcast_session::saved_shows(&s).await })
+                        .await
                 else {
                     return false;
                 };
@@ -3480,8 +2900,7 @@ impl LibraryService {
                     })
                     .collect();
                 self.put_section(section, generation, (1, 1, true), |state| {
-                    let old: Vec<ShowItem> =
-                        state.shows.iter().map(|(_, item)| item.clone()).collect();
+                    let old: Vec<ShowItem> = state.shows.iter().map(|(_, item)| item.clone()).collect();
                     let new: Vec<ShowItem> = rows.iter().map(|(_, item)| item.clone()).collect();
                     state.shows = rows;
                     list_change(&old, &new).map(LibraryEvent::Shows)
@@ -3489,11 +2908,10 @@ impl LibraryService {
                 true
             }
             Section::Episodes => {
-                let Some(saved) =
-                    collection_session::read(&api, player, "your episodes", |s| async move {
-                        podcast_session::saved_episodes(&s).await
-                    })
-                    .await
+                let Some(saved) = collection_session::read(&api, player, "your episodes", |s| async move {
+                    podcast_session::saved_episodes(&s).await
+                })
+                .await
                 else {
                     return false;
                 };
@@ -3517,21 +2935,13 @@ impl LibraryService {
     }
 
     pub fn albums(&self) -> Vec<AlbumItem> {
-        lock(&self.state)
-            .albums
-            .iter()
-            .map(|(_, item)| item.clone())
-            .collect()
+        lock(&self.state).albums.iter().map(|(_, item)| item.clone()).collect()
     }
     pub fn artists(&self) -> Vec<ArtistItem> {
         lock(&self.state).artists.clone()
     }
     pub fn shows(&self) -> Vec<ShowItem> {
-        lock(&self.state)
-            .shows
-            .iter()
-            .map(|(_, item)| item.clone())
-            .collect()
+        lock(&self.state).shows.iter().map(|(_, item)| item.clone()).collect()
     }
     pub fn episodes(&self) -> Vec<EpisodeItem> {
         lock(&self.state).episodes.clone()
@@ -3550,11 +2960,7 @@ impl LibraryService {
         match kind.as_str() {
             "playlist" => {
                 let id = PlaylistId::from_uri_or_id(&uri);
-                if self.is_saved(&uri) {
-                    self.unfollow_playlist(id)
-                } else {
-                    self.follow_playlist(id)
-                }
+                if self.is_saved(&uri) { self.unfollow_playlist(id) } else { self.follow_playlist(id) }
                 return;
             }
             "track" => {
@@ -3591,9 +2997,7 @@ impl LibraryService {
         let generation = self.generation();
         self.spawn(move |service| async move {
             let uris = [uri.clone()];
-            let result =
-                collection_session::write(&service.auth.api(), &service.player, &uris, target)
-                    .await;
+            let result = collection_session::write(&service.auth.api(), &service.player, &uris, target).await;
             if !service.current(generation) {
                 return;
             }
@@ -3654,8 +3058,7 @@ impl LibraryService {
                 if let (true, Some((root, folders))) = (folders_shown, &tree) {
                     for key in root {
                         if let Some(uri) = key.strip_prefix("playlist:") {
-                            if let Some(item) = state.playlists.iter().find(|item| item.uri == uri)
-                            {
+                            if let Some(item) = state.playlists.iter().find(|item| item.uri == uri) {
                                 placed.insert(item.uri.as_str());
                                 entries.push(state.playlist_entry(item, "", &times));
                             }
@@ -3674,9 +3077,7 @@ impl LibraryService {
                             .values()
                             .flat_map(|folder| {
                                 folder.children.iter().filter_map(|child| {
-                                    child
-                                        .strip_prefix("playlist:")
-                                        .map(|uri| (uri.to_owned(), folder.id.clone()))
+                                    child.strip_prefix("playlist:").map(|uri| (uri.to_owned(), folder.id.clone()))
                                 })
                             })
                             .collect()
@@ -3686,11 +3087,7 @@ impl LibraryService {
                     if placed.contains(item.uri.as_str()) || !state.owner_matches(item, owner) {
                         continue;
                     }
-                    let folder = if folders_shown {
-                        ""
-                    } else {
-                        folder_of.get(&item.uri).map_or("", String::as_str)
-                    };
+                    let folder = if folders_shown { "" } else { folder_of.get(&item.uri).map_or("", String::as_str) };
                     entries.push(state.playlist_entry(item, folder, &times));
                 }
                 entries
@@ -3773,12 +3170,7 @@ impl LibraryService {
     /// Папки остаются в дереве плейлистов: в «последних» они только мешают.
     pub fn recent_entries(&self, limit: usize) -> Vec<LibraryEntry> {
         let mut all = Vec::new();
-        for kind in [
-            LibraryKind::Playlists,
-            LibraryKind::Albums,
-            LibraryKind::Artists,
-            LibraryKind::Shows,
-        ] {
+        for kind in [LibraryKind::Playlists, LibraryKind::Albums, LibraryKind::Artists, LibraryKind::Shows] {
             all.extend(self.entries(kind, "all", "added"));
         }
         let pins = self.pins();
@@ -3788,12 +3180,8 @@ impl LibraryService {
     pub fn folder_children(&self, folder_id: &str) -> Vec<LibraryEntry> {
         let times = self.history.context_times();
         let state = lock(&self.state);
-        let Some((_, folders)) = state.rootlist.as_ref().map(folder_tree) else {
-            return Vec::new();
-        };
-        let Some(folder) = folders.get(folder_id) else {
-            return Vec::new();
-        };
+        let Some((_, folders)) = state.rootlist.as_ref().map(folder_tree) else { return Vec::new() };
+        let Some(folder) = folders.get(folder_id) else { return Vec::new() };
         folder
             .children
             .iter()
@@ -3815,14 +3203,8 @@ impl LibraryService {
         let (done, total) = state
             .progress
             .values()
-            .fold((0, 0), |(done, total), (d, t)| {
-                (done + d, total + (*t).max(*d))
-            });
-        if total == 0 || done >= total {
-            (0, 0)
-        } else {
-            (done, total)
-        }
+            .fold((0, 0), |(done, total), (d, t)| (done + d, total + (*t).max(*d)));
+        if total == 0 || done >= total { (0, 0) } else { (done, total) }
     }
 
     // --- закрепления (локально, SettingKey::Pins) -------------------------------------------
@@ -3865,17 +3247,10 @@ impl LibraryService {
 
 /// Коллаж, который Spotify сам нарисовал плейлисту без своей обложки (Web API отдаёт его как обложку).
 fn spotify_mosaic(images: &[models::Image]) -> bool {
-    !images.is_empty()
-        && images
-            .iter()
-            .all(|image| image.url.starts_with("https://mosaic.scdn.co/"))
+    !images.is_empty() && images.iter().all(|image| image.url.starts_with("https://mosaic.scdn.co/"))
 }
 
-fn collect_placed<'a>(
-    folder: &'a Folder,
-    folders: &'a HashMap<String, Folder>,
-    placed: &mut HashSet<&'a str>,
-) {
+fn collect_placed<'a>(folder: &'a Folder, folders: &'a HashMap<String, Folder>, placed: &mut HashSet<&'a str>) {
     collect_placed_from(folder, folders, placed, &mut HashSet::new());
 }
 
@@ -3932,10 +3307,7 @@ fn saved_page(offset: u32, count: u32, total: u32) -> models::Page<SavedTrack> {
         next: (offset + count < total).then(|| "next".into()),
         items: (offset..offset + count)
             .map(|n| SavedTrack {
-                track: models::Track {
-                    uri: format!("spotify:track:{n}"),
-                    ..Default::default()
-                },
+                track: models::Track { uri: format!("spotify:track:{n}"), ..Default::default() },
                 ..Default::default()
             })
             .collect(),
@@ -3947,12 +3319,7 @@ mod tests {
     use super::*;
 
     fn entry(kind: &str, title: &str, uri: &str) -> LibraryEntry {
-        LibraryEntry {
-            kind: kind.into(),
-            title: title.into(),
-            uri: uri.into(),
-            ..Default::default()
-        }
+        LibraryEntry { kind: kind.into(), title: title.into(), uri: uri.into(), ..Default::default() }
     }
 
     #[test]
@@ -4009,16 +3376,8 @@ mod tests {
         let folder = entry("folder", "folder", "folder:1");
         let merged = merge_recent(vec![playlist, folder, artist, album], 10, &[]);
         let titles: Vec<&str> = merged.iter().map(|e| e.title.as_str()).collect();
-        assert_eq!(
-            titles,
-            ["album", "artist", "playlist"],
-            "newest first, folders dropped"
-        );
-        assert_eq!(
-            merge_recent(vec![entry("album", "only", "u")], 0, &[]).len(),
-            0,
-            "limit is honoured"
-        );
+        assert_eq!(titles, ["album", "artist", "playlist"], "newest first, folders dropped");
+        assert_eq!(merge_recent(vec![entry("album", "only", "u")], 0, &[]).len(), 0, "limit is honoured");
         // закреплённое — первым, даже если добавлено давно
         let mut old = entry("playlist", "pinned", "spotify:playlist:pin");
         old.added_at = "2020-01-01T00:00:00Z".into();
@@ -4053,36 +3412,21 @@ mod tests {
         // у плейлиста added_at пустой: он всегда последний по времени и раньше выпадал из обрезки целиком
         let mut all = vec![entry("playlist", "playlist", "spotify:playlist:p")];
         for day in 1..=50 {
-            let mut album = entry(
-                "album",
-                &format!("album {day}"),
-                &format!("spotify:album:{day}"),
-            );
+            let mut album = entry("album", &format!("album {day}"), &format!("spotify:album:{day}"));
             album.added_at = format!("2026-01-01T00:{day:02}:00Z");
             all.push(album);
         }
         let merged = merge_recent(all, 10, &[]);
         assert_eq!(merged.len(), 10, "limit is honoured");
-        let playlists: Vec<&str> = merged
-            .iter()
-            .filter(|e| e.kind == "playlist")
-            .map(|e| e.uri.as_str())
-            .collect();
-        assert_eq!(
-            playlists,
-            ["spotify:playlist:p"],
-            "the playlist survives once"
-        );
+        let playlists: Vec<&str> =
+            merged.iter().filter(|e| e.kind == "playlist").map(|e| e.uri.as_str()).collect();
+        assert_eq!(playlists, ["spotify:playlist:p"], "the playlist survives once");
         assert_eq!(merged[0].title, "album 50", "the bulk stays newest first");
     }
 
     #[test]
     fn recent_sort_puts_never_played_last() {
-        let mut entries = vec![
-            entry("album", "old", "a"),
-            entry("album", "never", "b"),
-            entry("album", "new", "c"),
-        ];
+        let mut entries = vec![entry("album", "old", "a"), entry("album", "never", "b"), entry("album", "new", "c")];
         entries[0].played_at = "2026-01-01T00:00:00Z".into();
         entries[2].played_at = "2026-09-01T00:00:00Z".into();
         sort_entries(&mut entries, "recent", &[]);
@@ -4095,15 +3439,9 @@ mod tests {
         let rootlist = Rootlist {
             entries: vec![
                 RootlistEntry::Playlist("spotify:playlist:a".into()),
-                RootlistEntry::FolderStart {
-                    id: "f1".into(),
-                    name: "Рок".into(),
-                },
+                RootlistEntry::FolderStart { id: "f1".into(), name: "Рок".into() },
                 RootlistEntry::Playlist("spotify:playlist:b".into()),
-                RootlistEntry::FolderStart {
-                    id: "f2".into(),
-                    name: "Старое".into(),
-                },
+                RootlistEntry::FolderStart { id: "f2".into(), name: "Старое".into() },
                 RootlistEntry::Playlist("spotify:playlist:c".into()),
                 RootlistEntry::FolderEnd,
                 RootlistEntry::FolderEnd,
@@ -4112,10 +3450,7 @@ mod tests {
         };
         let (root, folders) = folder_tree(&rootlist);
         assert_eq!(root, ["playlist:spotify:playlist:a", "folder:f1"]);
-        assert_eq!(
-            folders["f1"].children,
-            ["playlist:spotify:playlist:b", "folder:f2"]
-        );
+        assert_eq!(folders["f1"].children, ["playlist:spotify:playlist:b", "folder:f2"]);
         assert_eq!(folders["f2"].parent, "f1");
         let mut placed = HashSet::new();
         collect_placed(&folders["f1"], &folders, &mut placed);
@@ -4126,22 +3461,13 @@ mod tests {
     fn a_folder_inside_itself_does_not_loop() {
         let rootlist = Rootlist {
             entries: vec![
-                RootlistEntry::FolderStart {
-                    id: "f1".into(),
-                    name: "A".into(),
-                },
+                RootlistEntry::FolderStart { id: "f1".into(), name: "A".into() },
                 RootlistEntry::Playlist("spotify:playlist:a".into()),
-                RootlistEntry::FolderStart {
-                    id: "f1".into(),
-                    name: "A again".into(),
-                },
+                RootlistEntry::FolderStart { id: "f1".into(), name: "A again".into() },
                 RootlistEntry::Playlist("spotify:playlist:b".into()),
                 RootlistEntry::FolderEnd,
                 RootlistEntry::FolderEnd,
-                RootlistEntry::FolderStart {
-                    id: "f1".into(),
-                    name: "A elsewhere".into(),
-                },
+                RootlistEntry::FolderStart { id: "f1".into(), name: "A elsewhere".into() },
                 RootlistEntry::Playlist("spotify:playlist:c".into()),
                 RootlistEntry::FolderEnd,
             ],
@@ -4151,47 +3477,29 @@ mod tests {
         assert_eq!(root, ["folder:f1"]);
         let mut placed = HashSet::new();
         collect_placed(&folders["f1"], &folders, &mut placed);
-        for uri in [
-            "spotify:playlist:a",
-            "spotify:playlist:b",
-            "spotify:playlist:c",
-        ] {
+        for uri in ["spotify:playlist:a", "spotify:playlist:b", "spotify:playlist:c"] {
             assert!(placed.contains(uri), "{uri}");
         }
     }
 
     #[test]
     fn a_stale_read_does_not_undo_a_like() {
-        let mut state = State {
-            account: Some("me".into()),
-            ..Default::default()
-        };
+        let mut state = State { account: Some("me".into()), ..Default::default() };
         state.liked.cache_checked = true;
         state.liked.start_refresh(1);
         state.liked.absorb(0, saved_page(0, 3, 3), now_seconds());
         state.sync_liked();
         assert!(state.is_liked("spotify:track:1"));
         let revision = state.likes_revision;
-        state
-            .liked
-            .change("spotify:track:1".into(), false, models::Track::default());
+        state.liked.change("spotify:track:1".into(), false, models::Track::default());
         let events = state.sync_liked();
-        assert!(
-            !state.is_liked("spotify:track:1"),
-            "unliking updates rows before the network answers"
-        );
+        assert!(!state.is_liked("spotify:track:1"), "unliking updates rows before the network answers");
         assert!(state.likes_revision > revision);
-        assert!(events.iter().any(|e| matches!(
-            e,
-            LibraryEvent::Liked(ListChange::Remove { at: 1, count: 1 })
-        )));
+        assert!(events.iter().any(|e| matches!(e, LibraryEvent::Liked(ListChange::Remove { at: 1, count: 1 }))));
         state.liked.start_refresh(2);
         state.liked.absorb(0, saved_page(0, 3, 3), now_seconds());
         state.sync_liked();
-        assert!(
-            !state.is_liked("spotify:track:1"),
-            "a lagging read keeps the unlike"
-        );
+        assert!(!state.is_liked("spotify:track:1"), "a lagging read keeps the unlike");
     }
 
     #[test]
@@ -4204,17 +3512,9 @@ mod tests {
         assert!(remove_saved(&mut state, "spotify:album:missing").is_none());
     }
 
-    fn page_with(
-        id: &str,
-        complete: bool,
-        loading: bool,
-        reload_after_write: bool,
-    ) -> (PlaylistId, State) {
+    fn page_with(id: &str, complete: bool, loading: bool, reload_after_write: bool) -> (PlaylistId, State) {
         let id = PlaylistId::from_uri_or_id(id);
-        let mut state = State {
-            account: Some("me".into()),
-            ..Default::default()
-        };
+        let mut state = State { account: Some("me".into()), ..Default::default() };
         let page = state.pages.entry(id.clone()).or_default();
         page.complete = complete;
         page.loading = loading;
@@ -4265,22 +3565,13 @@ mod tests {
     fn stale_generation_or_a_started_write_drops_the_answer() {
         let (id, mut state) = page_with("spotify:playlist:a", false, true, false);
         state.generation = 2;
-        assert!(
-            !read_is_current(&state, &id, 1, 1),
-            "смена аккаунта сбрасывает чтение"
-        );
+        assert!(!read_is_current(&state, &id, 1, 1), "смена аккаунта сбрасывает чтение");
         let (id, mut state) = page_with("spotify:playlist:a", false, true, false);
         state.pages.get_mut(&id).unwrap().generation = 7;
-        assert!(
-            !read_is_current(&state, &id, 1, 1),
-            "новое чтение страницы сбрасывает старое"
-        );
+        assert!(!read_is_current(&state, &id, 1, 1), "новое чтение страницы сбрасывает старое");
         let (id, mut state) = page_with("spotify:playlist:a", false, true, false);
         state.pages.get_mut(&id).unwrap().pending_writes = 1;
-        assert!(
-            !read_is_current(&state, &id, 1, 1),
-            "начавшаяся запись прерывает чтение"
-        );
+        assert!(!read_is_current(&state, &id, 1, 1), "начавшаяся запись прерывает чтение");
         let (id, state) = page_with("spotify:playlist:a", false, true, false);
         assert!(read_is_current(&state, &id, 0, 0));
         assert!(same_read(&state, &id, 0, 0));
@@ -4289,10 +3580,7 @@ mod tests {
     #[test]
     fn cached_rows_arrive_in_order_and_with_repeats() {
         let id = PlaylistId::from_uri_or_id("spotify:playlist:a");
-        let track = |i: usize| TrackItem {
-            uri: format!("spotify:track:{i}"),
-            ..Default::default()
-        };
+        let track = |i: usize| TrackItem { uri: format!("spotify:track:{i}"), ..Default::default() };
         let mut rows: Vec<TrackItem> = (0..CHUNK + 3).map(track).collect();
         rows.push(track(0)); // повтор в конце должен дойти до модели
         rows.insert(1, track(2)); // повтор в начале
@@ -4301,17 +3589,11 @@ mod tests {
         let mut delivered: Vec<String> = Vec::new();
         for event in &events {
             match event {
-                LibraryEvent::PlaylistTracks {
-                    change: ListChange::Reset(chunk),
-                    ..
-                } => {
+                LibraryEvent::PlaylistTracks { change: ListChange::Reset(chunk), .. } => {
                     assert!(delivered.is_empty(), "Reset только первым куском");
                     delivered.extend(chunk.iter().map(|r| r.uri.clone()));
                 }
-                LibraryEvent::PlaylistTracks {
-                    change: ListChange::Append(chunk),
-                    ..
-                } => {
+                LibraryEvent::PlaylistTracks { change: ListChange::Append(chunk), .. } => {
                     delivered.extend(chunk.iter().map(|r| r.uri.clone()));
                 }
                 _ => panic!("только Reset/Append"),
@@ -4319,12 +3601,6 @@ mod tests {
         }
         let source: Vec<&str> = rows.iter().map(|r| r.uri.as_str()).collect();
         assert_eq!(delivered, source, "порядок и повторы сохраняются");
-        assert!(matches!(
-            &events[0],
-            LibraryEvent::PlaylistTracks {
-                change: ListChange::Reset(_),
-                ..
-            }
-        ));
+        assert!(matches!(&events[0], LibraryEvent::PlaylistTracks { change: ListChange::Reset(_), .. }));
     }
 }

@@ -12,11 +12,11 @@ use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
 
 use md3_model::{ArtistItem, EpisodeItem, HomeShelf, LibraryEntry, ShowItem, TrackItem, contexts};
-use mf_platform::{SettingKey, SettingsStore};
 use sf_api::Operation;
 use sf_player::{PlayerHandle, Session};
 use tokio::runtime::Handle;
 use tokio::sync::{broadcast, watch};
+use mf_platform::{SettingKey, SettingsStore};
 
 use crate::ServiceError;
 use crate::auth::{AuthEvent, AuthService};
@@ -25,8 +25,8 @@ use crate::extra::feed;
 use crate::extra::shelves::{self, Play};
 use crate::history::{HistoryEvent, HistoryService};
 use crate::library::{LibraryEvent, LibraryService};
-use crate::lock;
 use crate::releases::ReleasesService;
+use crate::lock;
 
 /// Не чаще раза в 10 минут без force.
 pub const REFRESH_EVERY: Duration = Duration::from_secs(600);
@@ -130,9 +130,7 @@ impl HomeService {
         }
         {
             let mut data = lock(&self.data);
-            let fresh = data
-                .loaded_at
-                .is_some_and(|at| at.elapsed() < REFRESH_EVERY);
+            let fresh = data.loaded_at.is_some_and(|at| at.elapsed() < REFRESH_EVERY);
             if fresh && !force {
                 drop(data);
                 self.publish();
@@ -156,19 +154,14 @@ impl HomeService {
     /// Пока сессия поднимается (это может занять десятки секунд), показать прошлые полки с диска.
     /// Свежие придут следом и заменят их; если что-то уже загружено, кэш не трогаем.
     fn hydrate(&self) {
-        let Some(account) = self.auth.account_id() else {
-            return;
-        };
+        let Some(account) = self.auth.account_id() else { return };
         if !lock(&self.data).is_empty() {
             return;
         }
         let file = mf_platform::dirs::home_cache_file(account.as_str());
         let Some(me) = self.me.upgrade() else { return };
         self.rt.spawn(async move {
-            let cached = tokio::task::spawn_blocking(move || home_cache::read(&file))
-                .await
-                .ok()
-                .flatten();
+            let cached = tokio::task::spawn_blocking(move || home_cache::read(&file)).await.ok().flatten();
             let Some(cached) = cached else { return };
             me.adopt_cached(cached);
         });
@@ -194,9 +187,7 @@ impl HomeService {
 
     /// Полки — на диск: следующий запуск показывает их, не дожидаясь сессии.
     fn save_cache(&self) {
-        let Some(account) = self.auth.account_id() else {
-            return;
-        };
+        let Some(account) = self.auth.account_id() else { return };
         let cached = {
             let data = lock(&self.data);
             home_cache::CachedHome::new(
@@ -237,22 +228,14 @@ impl HomeService {
             return;
         }
         let hidden = shelves::hidden_keys(&self.settings.get_str(SettingKey::HomeHidden));
-        let liked_uri = self
-            .auth
-            .account_id()
-            .map(|a| contexts::liked_uri(a.as_str()))
-            .unwrap_or_default();
+        let liked_uri = self.auth.account_id().map(|a| contexts::liked_uri(a.as_str())).unwrap_or_default();
         let playlists = self.library.playlists();
         let fresh = self.releases.snapshot();
         let built: Vec<HomeShelf> = {
             let data = lock(&self.data);
             // запасной топ — по локальной истории (считается, только если Spotify топ не дал)
             let history_tracks = || -> Vec<TrackItem> {
-                self.history
-                    .recent(HISTORY_FOR_TOP)
-                    .into_iter()
-                    .map(|r| r.track)
-                    .collect()
+                self.history.recent(HISTORY_FOR_TOP).into_iter().map(|r| r.track).collect()
             };
             let top = shelves::TOP_LIMIT as usize;
             shelves::ORDER
@@ -261,67 +244,35 @@ impl HomeService {
                 .flat_map(|key| match *key {
                     shelves::QUICK => {
                         let liked = self.library.liked().len() as i64;
-                        vec![shelves::shelf(
-                            key,
-                            &shelves::quick_tiles(&liked_uri, liked, &playlists),
-                        )]
+                        vec![shelves::shelf(key, &shelves::quick_tiles(&liked_uri, liked, &playlists))]
                     }
                     // свои недавние обновляются сразу после прослушивания, полка Spotify — раз в 10 минут
                     shelves::RECENT => {
                         let local = shelves::recent_tiles(self.plays(), &playlists);
-                        match data
-                            .feed
-                            .iter()
-                            .find(|s| s.key == feed::RECENTLY_PLAYED_SHELF)
-                        {
+                        match data.feed.iter().find(|s| s.key == feed::RECENTLY_PLAYED_SHELF) {
                             Some(spotify) if local.is_empty() => vec![spotify.clone()],
                             _ => vec![shelves::shelf(key, &local)],
                         }
                     }
                     // за «Сделано для вас» — разделы главной Spotify
-                    shelves::MADE_FOR_YOU => {
-                        std::iter::once(shelves::shelf(key, &data.made_for_you))
-                            .chain(
-                                data.feed
-                                    .iter()
-                                    .filter(|s| {
-                                        !hidden.contains(&s.key)
-                                            && s.key != feed::RECENTLY_PLAYED_SHELF
-                                    })
-                                    .cloned(),
-                            )
-                            .collect()
-                    }
+                    shelves::MADE_FOR_YOU => std::iter::once(shelves::shelf(key, &data.made_for_you))
+                        .chain(data.feed.iter().filter(|s| !hidden.contains(&s.key) && s.key != feed::RECENTLY_PLAYED_SHELF).cloned())
+                        .collect(),
                     shelves::NEW_RELEASES => {
-                        vec![shelves::shelf(
-                            key,
-                            &shelves::new_release_tiles(fresh.radar.as_ref(), &fresh.releases),
-                        )]
+                        vec![shelves::shelf(key, &shelves::new_release_tiles(fresh.radar.as_ref(), &fresh.releases))]
                     }
-                    shelves::UPCOMING => vec![shelves::shelf(
-                        key,
-                        &shelves::upcoming_tiles(&fresh.upcoming),
-                    )],
+                    shelves::UPCOMING => vec![shelves::shelf(key, &shelves::upcoming_tiles(&fresh.upcoming))],
                     shelves::PODCASTS => vec![shelves::shelf(key, &data.podcasts)],
-                    shelves::TOP_ARTISTS if !data.top_artists.is_empty() => {
-                        vec![shelves::shelf(key, &data.top_artists)]
-                    }
+                    shelves::TOP_ARTISTS if !data.top_artists.is_empty() => vec![shelves::shelf(key, &data.top_artists)],
                     shelves::TOP_ARTISTS if !data.favorite_artists.is_empty() => {
                         vec![shelves::shelf(key, &data.favorite_artists)]
                     }
                     shelves::TOP_ARTISTS => {
-                        let derived = feed::top_artists_from_plays(
-                            &history_tracks(),
-                            &data.favorite_artists,
-                            top,
-                        );
+                        let derived = feed::top_artists_from_plays(&history_tracks(), &data.favorite_artists, top);
                         vec![shelves::shelf(key, &derived)]
                     }
                     _ if !data.top_tracks.is_empty() => vec![shelves::shelf(key, &data.top_tracks)],
-                    _ => vec![shelves::shelf(
-                        key,
-                        &feed::top_tracks_from_plays(&history_tracks(), top),
-                    )],
+                    _ => vec![shelves::shelf(key, &feed::top_tracks_from_plays(&history_tracks(), top))],
                 })
                 .filter(|shelf| !shelf.items.is_empty())
                 .collect()
@@ -340,8 +291,7 @@ impl HomeService {
             .recent(HISTORY_FOR_HOME)
             .into_iter()
             .map(|r| Play {
-                context: (!r.context.kind.is_empty() || r.context.context_uri.is_some())
-                    .then_some(r.context),
+                context: (!r.context.kind.is_empty() || r.context.context_uri.is_some()).then_some(r.context),
                 track: r.track,
                 played_at: r.played_at,
             })
@@ -367,10 +317,7 @@ impl HomeService {
             if let Some(session) = self.session() {
                 return Some(session);
             }
-            let coming = matches!(
-                self.player.local_playback(),
-                sf_player::LocalPlayback::Connecting
-            );
+            let coming = matches!(self.player.local_playback(), sf_player::LocalPlayback::Connecting);
             if !coming || started.elapsed() >= SESSION_WAIT {
                 return None;
             }
@@ -417,11 +364,7 @@ impl HomeService {
                 };
                 let (home, browse, dj) = match tokio::time::timeout(SESSION_TIMEOUT, read).await {
                     Ok(answers) => answers,
-                    Err(_) => (
-                        Err(anyhow::anyhow!("timeout")),
-                        Err(anyhow::anyhow!("timeout")),
-                        None,
-                    ),
+                    Err(_) => (Err(anyhow::anyhow!("timeout")), Err(anyhow::anyhow!("timeout")), None),
                 };
                 if let Err(error) = &home {
                     tracing::debug!("Spotify home via session: {error:#}");
@@ -433,8 +376,7 @@ impl HomeService {
                     let home = home.unwrap_or_default();
                     let mut browse = browse.unwrap_or_default();
                     let publish = |browse: &[home_feed::FeedSection]| {
-                        let tiles =
-                            feed::with_dj(feed::made_for_you_tiles(&home, browse), dj.as_deref());
+                        let tiles = feed::with_dj(feed::made_for_you_tiles(&home, browse), dj.as_deref());
                         let shelves = feed::feed_shelves(&home);
                         let favorites = feed::favorite_artists(&home);
                         self.store(generation, |d| {
@@ -445,17 +387,10 @@ impl HomeService {
                     };
                     publish(&browse);
                     // миксы дня приходят из browse одними URI — подписи дочитываются через сессию
-                    if browse
-                        .iter()
-                        .any(|s| s.cards.iter().any(|c| c.title.is_empty()))
-                    {
+                    if browse.iter().any(|s| s.cards.iter().any(|c| c.title.is_empty())) {
                         for section in &mut browse {
                             section.cards.truncate(feed::MADE_FOR_YOU_PER_SECTION * 2);
-                            section.cards = home_feed::resolve_playlists(
-                                session,
-                                std::mem::take(&mut section.cards),
-                            )
-                            .await;
+                            section.cards = home_feed::resolve_playlists(session, std::mem::take(&mut section.cards)).await;
                         }
                         publish(&browse);
                     }
@@ -477,9 +412,7 @@ impl HomeService {
                                 .map(|p| sf_api::map::playlist_item(p, me.as_ref()))
                                 .collect();
                             all.extend(
-                                shelves::made_for_you(term, found)
-                                    .into_iter()
-                                    .filter(|p| seen.insert(p.playlist_id.clone())),
+                                shelves::made_for_you(term, found).into_iter().filter(|p| seen.insert(p.playlist_id.clone())),
                             );
                         }
                         Err(e) => tracing::debug!("home: “{term}” not found: {e}"),
@@ -495,17 +428,10 @@ impl HomeService {
         // топ за 4 недели: GraphQL через сессию (пустой — тоже ответ: заменит история), без сессии — Web API
         let top = async {
             if let Some(session) = &session {
-                match tokio::time::timeout(
-                    SESSION_TIMEOUT,
-                    home_feed::top(&http, session, shelves::TOP_LIMIT),
-                )
-                .await
-                {
+                match tokio::time::timeout(SESSION_TIMEOUT, home_feed::top(&http, session, shelves::TOP_LIMIT)).await {
                     Ok(Ok((artists, tracks))) => {
-                        let artists: Vec<ArtistItem> =
-                            artists.iter().map(sf_api::map::artist_item).collect();
-                        let tracks: Vec<TrackItem> =
-                            tracks.iter().map(sf_api::map::track_item).collect();
+                        let artists: Vec<ArtistItem> = artists.iter().map(sf_api::map::artist_item).collect();
+                        let tracks: Vec<TrackItem> = tracks.iter().map(sf_api::map::track_item).collect();
                         self.store(generation, |d| {
                             d.top_artists = artists;
                             d.top_tracks = tracks;
@@ -519,14 +445,11 @@ impl HomeService {
             let read = async {
                 let client = api.client_for(Operation::UserData).await?;
                 let artists = client.top_artists("short_term", shelves::TOP_LIMIT).await?;
-                let tracks = client
-                    .top_tracks("short_term", shelves::TOP_LIMIT, 0)
-                    .await?;
+                let tracks = client.top_tracks("short_term", shelves::TOP_LIMIT, 0).await?;
                 Ok::<_, sf_api::ApiError>((artists, tracks))
             };
             let (artists, tracks) = web(read).await?;
-            let artists: Vec<ArtistItem> =
-                artists.items.iter().map(sf_api::map::artist_item).collect();
+            let artists: Vec<ArtistItem> = artists.items.iter().map(sf_api::map::artist_item).collect();
             let tracks: Vec<TrackItem> = tracks.items.iter().map(sf_api::map::track_item).collect();
             self.store(generation, |d| {
                 d.top_artists = artists;
@@ -542,24 +465,16 @@ impl HomeService {
                     let saved = match session.as_ref() {
                         Some(session) => podcast_session::saved_shows(session)
                             .await
-                            .inspect_err(|e| {
-                                tracing::debug!("home: saved shows via session: {e:#}")
-                            })
+                            .inspect_err(|e| tracing::debug!("home: saved shows via session: {e:#}"))
                             .ok(),
                         None => None,
                     };
                     shows = match saved {
-                        Some(saved) => saved
-                            .iter()
-                            .map(|(_, show)| sf_api::map::show_item(show))
-                            .collect(),
+                        Some(saved) => saved.iter().map(|(_, show)| sf_api::map::show_item(show)).collect(),
                         None => {
                             let client = api.client_for(Operation::UserData).await?;
                             let page = client.saved_shows(0, 50).await?;
-                            page.items
-                                .iter()
-                                .map(|s| sf_api::map::show_item(&s.show))
-                                .collect()
+                            page.items.iter().map(|s| sf_api::map::show_item(&s.show)).collect()
                         }
                     };
                 }
@@ -570,21 +485,10 @@ impl HomeService {
                 for show in shows {
                     let via_session = match session.as_ref() {
                         Some(session) => {
-                            match podcast_session::show_page(
-                                &http,
-                                session,
-                                &show.show_id,
-                                0,
-                                shelves::EPISODES_PER_SHOW,
-                            )
-                            .await
-                            {
+                            match podcast_session::show_page(&http, session, &show.show_id, 0, shelves::EPISODES_PER_SHOW).await {
                                 Ok((_, page)) => Some(page),
                                 Err(e) => {
-                                    tracing::debug!(
-                                        "home: episodes of {} via session: {e:?}",
-                                        show.show_id
-                                    );
+                                    tracing::debug!("home: episodes of {} via session: {e:?}", show.show_id);
                                     None
                                 }
                             }
@@ -598,18 +502,12 @@ impl HomeService {
                                 client = Some(api.client_for(Operation::Catalog).await?);
                             }
                             let client = client.as_ref().expect("set above");
-                            client
-                                .show_episodes(&show.show_id, 0, shelves::EPISODES_PER_SHOW)
-                                .await
+                            client.show_episodes(&show.show_id, 0, shelves::EPISODES_PER_SHOW).await
                         }
                     };
                     match page {
                         Ok(page) => {
-                            let episodes = page
-                                .items
-                                .iter()
-                                .map(|e| sf_api::map::episode_item(e, None))
-                                .collect();
+                            let episodes = page.items.iter().map(|e| sf_api::map::episode_item(e, None)).collect();
                             podcasts.push((show, episodes));
                         }
                         // полка необязательная: квота/429 — без этого шоу
@@ -657,9 +555,7 @@ impl HomeService {
 
 /// Запасной запрос Web API с таймаутом; ошибка — текстом для пользователя. Фоном: уступает страницам и не
 /// идёт в сеть, пока Web API ограничен (полки — дополнение).
-async fn web<T>(
-    read: impl std::future::Future<Output = Result<T, sf_api::ApiError>>,
-) -> Result<T, String> {
+async fn web<T>(read: impl std::future::Future<Output = Result<T, sf_api::ApiError>>) -> Result<T, String> {
     match tokio::time::timeout(WEB_TIMEOUT, sf_api::limits::background(read)).await {
         Ok(Ok(value)) => Ok(value),
         Ok(Err(error)) => Err(ServiceError::from(error).to_string()),

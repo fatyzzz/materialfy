@@ -8,9 +8,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
 
-use crate::data::session_profile;
 use md3_model::{Account, AccountId};
-use mf_platform::{SettingKey, SettingValue, SettingsStore};
+use crate::data::session_profile;
 use sf_api::{ApiError, ApiGateway, ApiSource, Operation, SessionState, TokenProvider, WebTokens};
 use sf_auth::credentials::{Error as StoreError, Grant as StoredGrant, ProxyPassword, Slot};
 use sf_auth::oauth::{self, StoredToken};
@@ -18,6 +17,7 @@ use sf_auth::{ProxyConfig, ProxyMode};
 use sf_player::{Credentials, EngineConfig, LocalPlayback, PlayerEvent, PlayerHandle};
 use tokio::runtime::Handle;
 use tokio::sync::{broadcast, watch};
+use mf_platform::{SettingKey, SettingValue, SettingsStore};
 
 use crate::lock;
 
@@ -132,12 +132,10 @@ pub struct ProxyInput {
 }
 
 const PREMIUM_NEEDED: &str = "Playing on this computer requires Spotify Premium";
-const OTHER_ACCOUNT: &str =
-    "A different Spotify account was chosen in the browser — allow playback with the same account";
+const OTHER_ACCOUNT: &str = "A different Spotify account was chosen in the browser — allow playback with the same account";
 const EXPIRED: &str = "Your Spotify sign-in has expired — sign in again";
 /// Вход через сессию librespot на Free: librespot такой аккаунт не обслуживает.
-const FREE_ACCOUNT: &str =
-    "This is a Spotify Free account — Materialfy can only play music with Premium";
+const FREE_ACCOUNT: &str = "This is a Spotify Free account — Materialfy can only play music with Premium";
 const PORT_BUSY: &str = "Port {0} is in use by another program";
 const SIGN_IN_REFUSED: &str = "Sign-in was cancelled in the browser";
 const NO_RESPONSE: &str = "Spotify isn't responding — check your proxy";
@@ -148,11 +146,7 @@ const CONNECT_DEADLINE: Duration = Duration::from_secs(90);
 /// Чей токен воспроизведения: публичный профиль отдаётся и со scope streaming.
 const ME_URL: &str = "https://api.spotify.com/v1/me";
 /// Движок упал сам (сон, сеть): повторы с сохранённым грантом, не больше этих за окно.
-const ENGINE_RETRY_DELAYS: [Duration; 3] = [
-    Duration::from_secs(5),
-    Duration::from_secs(15),
-    Duration::from_secs(60),
-];
+const ENGINE_RETRY_DELAYS: [Duration; 3] = [Duration::from_secs(5), Duration::from_secs(15), Duration::from_secs(60)];
 const ENGINE_RETRY_WINDOW: Duration = Duration::from_secs(600);
 
 /// Настройки, при смене которых движок надо перезапустить.
@@ -292,10 +286,7 @@ fn oauth_error_text(error: &anyhow::Error, port: u16) -> Option<String> {
         mf_i18n::t("The browser's response didn't match the request — try again")
     } else if lower.contains("client id") || lower.contains("application settings") {
         mf_i18n::t("Spotify didn't accept the app's Client ID")
-    } else if lower.contains("token request failed")
-        || lower.contains("answered")
-        || lower.contains("unreadable")
-    {
+    } else if lower.contains("token request failed") || lower.contains("answered") || lower.contains("unreadable") {
         mf_i18n::t(NO_RESPONSE)
     } else {
         mf_i18n::tf("Couldn't sign in: {0}", &[&text])
@@ -319,10 +310,7 @@ fn error_code(text: &str) -> &'static str {
         "accountMismatch"
     } else if is(OTHER_ACCOUNT) {
         "otherAccount"
-    } else if [oauth::WEB_REDIRECT_PORT, oauth::PLAYBACK_REDIRECT_PORT]
-        .iter()
-        .any(|port| text == mf_i18n::tf(PORT_BUSY, &[port]))
-    {
+    } else if [oauth::WEB_REDIRECT_PORT, oauth::PLAYBACK_REDIRECT_PORT].iter().any(|port| text == mf_i18n::tf(PORT_BUSY, &[port])) {
         "portBusy"
     } else if text.starts_with(&mf_i18n::t(sf_player::engine::player::AUDIO_KEY_REFUSED)) {
         "audioKey"
@@ -352,10 +340,7 @@ fn premium_of(product: Option<&str>) -> Option<bool> {
 }
 
 /// Прокси из применённых настроек (+ пароль из слота).
-pub(crate) fn settings_proxy(
-    settings: &SettingsStore,
-    password: Option<&ProxyPassword>,
-) -> ProxyConfig {
+pub(crate) fn settings_proxy(settings: &SettingsStore, password: Option<&ProxyPassword>) -> ProxyConfig {
     let mode = ProxyMode::from_setting(&settings.get_str(SettingKey::ProxyMode));
     let host = settings.get_str(SettingKey::ProxyHost);
     let port = settings.get_str(SettingKey::ProxyPort);
@@ -516,10 +501,7 @@ impl AuthService {
             }
             tracing::warn!("credential store: {error:#}");
             if let Some(service) = me.upgrade()
-                && matches!(
-                    error,
-                    StoreError::Unavailable | StoreError::Locked | StoreError::Verification
-                )
+                && matches!(error, StoreError::Unavailable | StoreError::Locked | StoreError::Verification)
             {
                 service.update(|s| s.token_storage.clear());
             }
@@ -586,16 +568,10 @@ impl AuthService {
         };
         self.install_proxy(settings_proxy(&self.settings, password.as_ref()));
 
-        let personal_id = self
-            .settings
-            .get_str(SettingKey::WebClientId)
-            .trim()
-            .to_owned();
-        self.api
-            .set_state(ApiSource::Shared, SessionState::Authorizing);
+        let personal_id = self.settings.get_str(SettingKey::WebClientId).trim().to_owned();
+        self.api.set_state(ApiSource::Shared, SessionState::Authorizing);
         if !personal_id.is_empty() {
-            self.api
-                .set_state(ApiSource::Personal, SessionState::Authorizing);
+            self.api.set_state(ApiSource::Personal, SessionState::Authorizing);
         }
         let mut verifying = false;
         let mut playback_grant = false;
@@ -627,21 +603,14 @@ impl AuthService {
                     lock(&self.inner).playback_grant = Some(credentials);
                     if let Some(username) = username {
                         // грант есть — воспроизведение разрешено (без него не будет и входа)
-                        self.settings
-                            .set(SettingKey::PlaybackAuthorized, SettingValue::Bool(true));
+                        self.settings.set(SettingKey::PlaybackAuthorized, SettingValue::Bool(true));
                         self.player.expect_local(true);
-                        self.api
-                            .set_session_account(Some(AccountId::new(username.clone())));
-                        self.show_signed_in(
-                            sf_api::map::account(&remembered_user(&username)),
-                            false,
-                        );
+                        self.api.set_session_account(Some(AccountId::new(username.clone())));
+                        self.show_signed_in(sf_api::map::account(&remembered_user(&username)), false);
                     }
                     self.resume_engine();
                 }
-                (Slot::Shared, Some(StoredGrant::Web(token)))
-                    if token.has_scopes(oauth::WEB_SCOPES) =>
-                {
+                (Slot::Shared, Some(StoredGrant::Web(token))) if token.has_scopes(oauth::WEB_SCOPES) => {
                     verifying = true;
                     self.update(|s| {
                         if s.state != AuthState::SignedIn {
@@ -649,18 +618,14 @@ impl AuthService {
                         }
                         s.web_state = "authorizing".to_owned();
                     });
-                    self.spawn(move |service| {
-                        service.verify(ApiSource::Shared, token, lease, generation)
-                    });
+                    self.spawn(move |service| service.verify(ApiSource::Shared, token, lease, generation));
                 }
                 (Slot::Personal, Some(StoredGrant::Web(token)))
                     if token.client_id == personal_id && token.has_scopes(oauth::WEB_SCOPES) =>
                 {
                     verifying = true;
                     self.update(|s| s.personal_state = "authorizing".to_owned());
-                    self.spawn(move |service| {
-                        service.verify(ApiSource::Personal, token, lease, generation)
-                    });
+                    self.spawn(move |service| service.verify(ApiSource::Personal, token, lease, generation));
                 }
                 (Slot::Shared, Some(StoredGrant::Web(_))) => {
                     self.api.clear(ApiSource::Shared);
@@ -698,30 +663,13 @@ impl AuthService {
     /// Сохранённый грант при известном аккаунте (профиль прошлой проверки того же приложения или вход
     /// воспроизведения) ставится сразу, а /me лишь подтверждает его в фоне: запуск не ждёт Web API, а
     /// лимит частоты общего ключа (429) вход не ломает. Истёкший токен всплывёт на /me или первом запросе.
-    async fn verify(
-        self: Arc<Self>,
-        source: ApiSource,
-        token: StoredToken,
-        lease: sf_auth::Lease,
-        generation: u64,
-    ) {
+    async fn verify(self: Arc<Self>, source: ApiSource, token: StoredToken, lease: sf_auth::Lease, generation: u64) {
         let client_id = token.client_id.clone();
-        let known = load_profile(source, &client_id).or_else(|| {
-            self.playback_account().map(|id| sf_api::models::User {
-                id,
-                ..Default::default()
-            })
-        });
-        let tokens = WebTokens::new(
-            self.http.clone(),
-            token,
-            lease,
-            source,
-            self.storage_notice(),
-        );
+        let known = load_profile(source, &client_id)
+            .or_else(|| self.playback_account().map(|id| sf_api::models::User { id, ..Default::default() }));
+        let tokens = WebTokens::new(self.http.clone(), token, lease, source, self.storage_notice());
         lock(&self.inner).web_tokens[source_index(source)] = Some(tokens.clone());
-        self.api
-            .begin_verification(source, TokenProvider::Web(tokens.clone()));
+        self.api.begin_verification(source, TokenProvider::Web(tokens.clone()));
         let client = self.api.verification_client(source);
         let installed = match known {
             Some(user) => {
@@ -749,14 +697,10 @@ impl AuthService {
                 }
                 Err(error @ ApiError::SignInExpired { .. }) => break Err(error),
                 Err(ApiError::RateLimited) if installed => {
-                    tracing::info!(
-                        "sign-in check: Spotify rate-limited, using the profile from the previous check"
-                    );
+                    tracing::info!("sign-in check: Spotify rate-limited, using the profile from the previous check");
                     return;
                 }
-                Err(error) if error.status().is_some_and(|status| status < 500) => {
-                    break Err(error);
-                }
+                Err(error) if error.status().is_some_and(|status| status < 500) => break Err(error),
                 Err(error) => {
                     tracing::warn!("sign-in check will be retried: {error:#}");
                     if source == ApiSource::Shared && !installed {
@@ -793,11 +737,7 @@ impl AuthService {
         if !matches!(self.api.state(source), SessionState::Authorizing) {
             return;
         }
-        if self
-            .api
-            .install(source, AccountId::new(user.id.clone()))
-            .is_err()
-        {
+        if self.api.install(source, AccountId::new(user.id.clone())).is_err() {
             self.api.clear(source);
             lock(&self.inner).web_tokens[source_index(source)] = None;
             self.on_other_web_account(source);
@@ -821,8 +761,7 @@ impl AuthService {
             self.show_signed_in(account, false);
             self.on_account_checked(premium);
         }
-        let start_personal =
-            source == ApiSource::Shared && std::mem::take(&mut lock(&self.inner).personal_pending);
+        let start_personal = source == ApiSource::Shared && std::mem::take(&mut lock(&self.inner).personal_pending);
         if start_personal {
             self.begin_web(ApiSource::Personal);
         }
@@ -849,11 +788,7 @@ impl AuthService {
             ApiSource::Shared => {
                 self.player.expect_local(false);
                 self.update(|s| {
-                    s.state = if expired {
-                        AuthState::SignedOut
-                    } else {
-                        AuthState::Error
-                    };
+                    s.state = if expired { AuthState::SignedOut } else { AuthState::Error };
                     s.error_text = text;
                     s.account = None;
                     s.web_state = if expired { "none" } else { "error" }.to_owned();
@@ -861,10 +796,7 @@ impl AuthService {
             }
             ApiSource::Personal => {
                 self.update(|s| s.personal_state = "error".to_owned());
-                if !matches!(
-                    self.api.state(ApiSource::Shared),
-                    SessionState::Ready { .. }
-                ) {
+                if !matches!(self.api.state(ApiSource::Shared), SessionState::Ready { .. }) {
                     self.update(|s| {
                         if s.state != AuthState::SignedIn {
                             s.state = AuthState::SignedOut;
@@ -888,9 +820,7 @@ impl AuthService {
 
     /// Ошибка запроса любого сервиса: истёкший вход сбрасывает его грант.
     pub fn note_api_error(&self, error: &ApiError) {
-        let ApiError::SignInExpired { api_source } = error else {
-            return;
-        };
+        let ApiError::SignInExpired { api_source } = error else { return };
         let source = *api_source;
         if lock(&self.inner).web_tokens[source_index(source)].is_none() {
             return;
@@ -957,11 +887,7 @@ impl AuthService {
             let mut inner = lock(&self.inner);
             inner.attempt += 1;
             inner.waiting = Some((
-                if source == ApiSource::Shared {
-                    Waiting::Shared
-                } else {
-                    Waiting::Personal
-                },
+                if source == ApiSource::Shared { Waiting::Shared } else { Waiting::Personal },
                 cancel_tx,
             ));
             if source == ApiSource::Shared {
@@ -1042,13 +968,10 @@ impl AuthService {
                             }
                         }),
                         ApiSource::Personal => service.update(|s| {
-                            s.personal_state =
-                                if text.is_some() { "error" } else { "none" }.to_owned();
+                            s.personal_state = if text.is_some() { "error" } else { "none" }.to_owned();
                         }),
                     }
-                    if source == ApiSource::Shared
-                        && std::mem::take(&mut lock(&service.inner).personal_pending)
-                    {
+                    if source == ApiSource::Shared && std::mem::take(&mut lock(&service.inner).personal_pending) {
                         service.update(|s| s.personal_state = "none".to_owned());
                     }
                 }
@@ -1138,8 +1061,7 @@ impl AuthService {
         for slot in Slot::SPOTIFY {
             self.delete_slot(slot);
         }
-        self.settings
-            .set(SettingKey::PlaybackAuthorized, SettingValue::Bool(false));
+        self.settings.set(SettingKey::PlaybackAuthorized, SettingValue::Bool(false));
         let was_signed_in = self.snapshot.borrow().state == AuthState::SignedIn;
         self.update(|s| {
             s.state = AuthState::SignedOut;
@@ -1191,23 +1113,12 @@ impl AuthService {
             self.refresh_session_profile();
             return;
         }
-        if !matches!(
-            self.api.state(ApiSource::Shared),
-            SessionState::Ready { .. }
-        ) {
+        if !matches!(self.api.state(ApiSource::Shared), SessionState::Ready { .. }) {
             return;
         }
         let generation = self.generation();
         self.spawn(move |service| async move {
-            let result = async {
-                service
-                    .api
-                    .client_for(Operation::CanonicalAccount)
-                    .await?
-                    .me()
-                    .await
-            }
-            .await;
+            let result = async { service.api.client_for(Operation::CanonicalAccount).await?.me().await }.await;
             if !service.current(generation) {
                 return;
             }
@@ -1259,11 +1170,7 @@ impl AuthService {
         let Some(account) = self.api.web_account() else {
             return true;
         };
-        credentials
-            .username
-            .as_deref()
-            .filter(|name| !name.is_empty())
-            .is_some_and(|name| account.as_str() == name)
+        credentials.username.as_deref().filter(|name| !name.is_empty()).is_some_and(|name| account.as_str() == name)
     }
 
     /// Поднять движок с сохранёнными кредами, если воспроизведение разрешено.
@@ -1336,11 +1243,7 @@ impl AuthService {
         let config = crate::glue::engine_config(&self.settings, proxy);
         let key = EngineKey::of(&config);
         self.spawn(move |service| async move {
-            let result = tokio::time::timeout(
-                CONNECT_DEADLINE,
-                service.player.connect_local(credentials, config),
-            )
-            .await;
+            let result = tokio::time::timeout(CONNECT_DEADLINE, service.player.connect_local(credentials, config)).await;
             let stale = {
                 let mut inner = lock(&service.inner);
                 let stale = inner.engine_epoch != epoch || inner.generation != generation;
@@ -1369,10 +1272,7 @@ impl AuthService {
                             return;
                         }
                         lock(&service.inner).playback_grant = Some(reusable.clone());
-                        let pending = service
-                            .store
-                            .lease(Slot::Playback)
-                            .save(StoredGrant::Playback(reusable));
+                        let pending = service.store.lease(Slot::Playback).save(StoredGrant::Playback(reusable));
                         let notice = service.storage_notice();
                         service.rt.spawn(async move {
                             if let Err(error) = pending.await {
@@ -1381,9 +1281,7 @@ impl AuthService {
                         });
                     }
                     lock(&service.inner).engine_running = Some(key);
-                    service
-                        .settings
-                        .set(SettingKey::PlaybackAuthorized, SettingValue::Bool(true));
+                    service.settings.set(SettingKey::PlaybackAuthorized, SettingValue::Bool(true));
                     service.update(|s| {
                         s.playback = PlaybackAuthState::Ready;
                         s.playback_error.clear();
@@ -1397,8 +1295,7 @@ impl AuthService {
                     // прежний движок (если был) host.connect уже остановил
                     lock(&service.inner).engine_running = None;
                     let lower = error.to_lowercase();
-                    let rejected =
-                        lower.contains("badcredentials") || lower.contains("bad credentials");
+                    let rejected = lower.contains("badcredentials") || lower.contains("bad credentials");
                     if rejected {
                         lock(&service.inner).playback_grant = None;
                         let _ = service.store.revoke(Slot::Playback);
@@ -1407,18 +1304,11 @@ impl AuthService {
                     }
                     let premium = lower.contains("premium");
                     service.update(|s| {
-                        s.playback = if premium {
-                            PlaybackAuthState::PremiumRequired
-                        } else {
-                            PlaybackAuthState::Error
-                        };
+                        s.playback =
+                            if premium { PlaybackAuthState::PremiumRequired } else { PlaybackAuthState::Error };
                         s.playback_error = connect_error_text(&error);
                     });
-                    service.session_login_failed(&if premium {
-                        mf_i18n::t(FREE_ACCOUNT)
-                    } else {
-                        connect_error_text(&error)
-                    });
+                    service.session_login_failed(&if premium { mf_i18n::t(FREE_ACCOUNT) } else { connect_error_text(&error) });
                     if !rejected && !premium {
                         service.continue_engine_retries();
                     }
@@ -1487,10 +1377,7 @@ impl AuthService {
                 return;
             }
             let now = Instant::now();
-            if inner
-                .engine_retry_at
-                .is_none_or(|at| now.duration_since(at) > ENGINE_RETRY_WINDOW)
-            {
+            if inner.engine_retry_at.is_none_or(|at| now.duration_since(at) > ENGINE_RETRY_WINDOW) {
                 inner.engine_retries = 0;
             }
             let Some(delay) = ENGINE_RETRY_DELAYS.get(inner.engine_retries).copied() else {
@@ -1504,10 +1391,7 @@ impl AuthService {
             tokio::time::sleep(delay).await;
             {
                 let inner = lock(&service.inner);
-                if inner.engine_epoch != epoch
-                    || inner.generation != generation
-                    || inner.engine_running.is_some()
-                {
+                if inner.engine_epoch != epoch || inner.generation != generation || inner.engine_running.is_some() {
                     return;
                 }
             }
@@ -1522,10 +1406,7 @@ impl AuthService {
     fn continue_engine_retries(&self) {
         let chained = {
             let inner = lock(&self.inner);
-            inner.engine_retries > 0
-                && inner
-                    .engine_retry_at
-                    .is_some_and(|at| at.elapsed() <= ENGINE_RETRY_WINDOW)
+            inner.engine_retries > 0 && inner.engine_retry_at.is_some_and(|at| at.elapsed() <= ENGINE_RETRY_WINDOW)
         };
         if chained {
             self.schedule_engine_retry();
@@ -1635,8 +1516,7 @@ impl AuthService {
             match result {
                 Ok(token) => {
                     // librespot на Free завершает процесс: тип аккаунта — до его запуска (spclient, не Web API)
-                    let product =
-                        session_profile::product_of_token(&http, &token.access_token).await;
+                    let product = session_profile::product_of_token(&http, &token.access_token).await;
                     if !service.current(generation) {
                         return;
                     }
@@ -1644,10 +1524,7 @@ impl AuthService {
                     if product.is_some() || web.is_none() {
                         sf_player::engine::player::note_account_product(product.as_deref());
                     }
-                    if product
-                        .as_deref()
-                        .is_some_and(|product| product != "premium")
-                    {
+                    if product.as_deref().is_some_and(|product| product != "premium") {
                         service.on_free_session_login();
                         return;
                     }
@@ -1727,8 +1604,7 @@ impl AuthService {
             .or_else(|| self.player.session().map(|session| session.username()))
             .filter(|name| !name.is_empty());
         let Some(username) = username else { return };
-        self.api
-            .set_session_account(Some(AccountId::new(username.clone())));
+        self.api.set_session_account(Some(AccountId::new(username.clone())));
         if self.snapshot.borrow().state != AuthState::SignedIn {
             self.show_signed_in(sf_api::map::account(&remembered_user(&username)), false);
         }
@@ -1756,20 +1632,14 @@ impl AuthService {
 
     /// Профиль из сессии librespot (имя, аватар, тип аккаунта, страна) — без Web API.
     fn refresh_session_profile(&self) {
-        let Some(session) = self.player.session() else {
-            return;
-        };
+        let Some(session) = self.player.session() else { return };
         let generation = self.generation();
         self.spawn(move |service| async move {
             let mut user = session_profile::fetch(&session).await;
             if !service.current(generation) || user.id.is_empty() {
                 return;
             }
-            if service
-                .api
-                .session_account()
-                .is_some_and(|account| account.as_str() != user.id)
-            {
+            if service.api.session_account().is_some_and(|account| account.as_str() != user.id) {
                 return;
             }
             // сессия librespot работает только с Premium
@@ -1832,11 +1702,7 @@ impl AuthService {
     /// /me ответил для уже вставшего Web API: другой аккаунт — снять его, иначе обновить профиль и Premium.
     fn on_confirmed(&self, source: ApiSource, user: sf_api::models::User) {
         let installed = self.api.state(source).account().cloned();
-        if user.id.is_empty()
-            || installed
-                .as_ref()
-                .is_some_and(|account| account.as_str() != user.id)
-        {
+        if user.id.is_empty() || installed.as_ref().is_some_and(|account| account.as_str() != user.id) {
             tracing::warn!("Web API answered for a different Spotify account");
             self.api.clear(source);
             lock(&self.inner).web_tokens[source_index(source)] = None;
@@ -1886,14 +1752,10 @@ impl AuthService {
             tracing::warn!("playback permission revocation: {error:#}");
         }
         self.delete_slot(Slot::Playback);
-        self.settings
-            .set(SettingKey::PlaybackAuthorized, SettingValue::Bool(false));
+        self.settings.set(SettingKey::PlaybackAuthorized, SettingValue::Bool(false));
         self.update(|s| {
-            s.playback = if premium == Some(false) {
-                PlaybackAuthState::PremiumRequired
-            } else {
-                PlaybackAuthState::None
-            };
+            s.playback =
+                if premium == Some(false) { PlaybackAuthState::PremiumRequired } else { PlaybackAuthState::None };
             s.playback_error.clear();
             if waiting == Some(Waiting::Playback) {
                 s.auth_url.clear();
@@ -1936,9 +1798,7 @@ impl AuthService {
             (inner.engine_running.clone(), inner.proxy.clone())
         };
         let pending = match running {
-            Some(running) => {
-                EngineKey::of(&crate::glue::engine_config(&self.settings, proxy)) != running
-            }
+            Some(running) => EngineKey::of(&crate::glue::engine_config(&self.settings, proxy)) != running,
             None => false,
         };
         self.update(|s| s.engine_restart_pending = pending);
@@ -1948,9 +1808,7 @@ impl AuthService {
 
     /// Личный Client ID: Some — PKCE личного приложения; None — удалить.
     pub fn set_personal_client_id(&self, client_id: Option<String>) {
-        let client_id = client_id
-            .map(|id| id.trim().to_owned())
-            .filter(|id| !id.is_empty());
+        let client_id = client_id.map(|id| id.trim().to_owned()).filter(|id| !id.is_empty());
         let waiting = lock(&self.inner).waiting.as_ref().map(|(kind, _)| *kind);
         if waiting == Some(Waiting::Personal) {
             self.cancel_waiting();
@@ -1961,19 +1819,11 @@ impl AuthService {
         self.delete_slot(Slot::Personal);
         lock(&self.inner).web_tokens[1] = None;
         self.api.clear(ApiSource::Personal);
-        self.settings.set(
-            SettingKey::WebClientId,
-            SettingValue::Str(client_id.clone().unwrap_or_default()),
-        );
+        self.settings.set(SettingKey::WebClientId, SettingValue::Str(client_id.clone().unwrap_or_default()));
         let id = client_id.clone().unwrap_or_default();
         self.update(|s| {
             s.personal_client_id = id;
-            s.personal_state = if client_id.is_some() {
-                "authorizing"
-            } else {
-                "none"
-            }
-            .to_owned();
+            s.personal_state = if client_id.is_some() { "authorizing" } else { "none" }.to_owned();
             if waiting == Some(Waiting::Personal) {
                 s.auth_url.clear();
                 s.auth_port = 0;
@@ -2030,15 +1880,10 @@ impl AuthService {
                 return fail(mf_i18n::t("Unknown proxy mode"));
             }
             let mode = ProxyMode::from_setting(&mode_name);
-            let (host, port, username) = (
-                input.host.trim().to_owned(),
-                input.port.trim().to_owned(),
-                input.username.trim().to_owned(),
-            );
+            let (host, port, username) =
+                (input.host.trim().to_owned(), input.port.trim().to_owned(), input.username.trim().to_owned());
             let mut password = input.password.clone();
-            if mode.is_manual()
-                && password.is_empty()
-                && !username.is_empty()
+            if mode.is_manual() && password.is_empty() && !username.is_empty()
                 && let Ok(loaded) = service.store.lease(Slot::Proxy).load().await
                 && let Some(StoredGrant::Proxy(saved)) = loaded.grant
                 && saved.host == host
@@ -2056,43 +1901,17 @@ impl AuthService {
                 Err(text) => return fail(mf_i18n::tf("Proxy rejected: {0}", &[&text])),
             };
             let settings = &service.settings;
-            settings.set(
-                SettingKey::ProxyMode,
-                SettingValue::Str(mode.as_str().to_owned()),
-            );
-            settings.set(
-                SettingKey::ProxyHost,
-                SettingValue::Str(if mode.is_manual() {
-                    host
-                } else {
-                    String::new()
-                }),
-            );
-            settings.set(
-                SettingKey::ProxyPort,
-                SettingValue::Str(if mode.is_manual() {
-                    port
-                } else {
-                    String::new()
-                }),
-            );
+            settings.set(SettingKey::ProxyMode, SettingValue::Str(mode.as_str().to_owned()));
+            settings.set(SettingKey::ProxyHost, SettingValue::Str(if mode.is_manual() { host } else { String::new() }));
+            settings.set(SettingKey::ProxyPort, SettingValue::Str(if mode.is_manual() { port } else { String::new() }));
             settings.set(
                 SettingKey::ProxyUsername,
-                SettingValue::Str(if mode.is_manual() {
-                    username
-                } else {
-                    String::new()
-                }),
+                SettingValue::Str(if mode.is_manual() { username } else { String::new() }),
             );
             if mode.is_manual() {
                 if let Some(record) = config.password_record() {
                     service.store.invalidate(Slot::Proxy);
-                    if let Err(error) = service
-                        .store
-                        .lease(Slot::Proxy)
-                        .save(StoredGrant::Proxy(record))
-                        .await
-                    {
+                    if let Err(error) = service.store.lease(Slot::Proxy).save(StoredGrant::Proxy(record)).await {
                         tracing::warn!("proxy password not saved: {error:#}");
                     }
                 } else {
@@ -2125,11 +1944,7 @@ impl AuthService {
     }
 
     pub fn is_premium(&self) -> bool {
-        self.snapshot
-            .borrow()
-            .account
-            .as_ref()
-            .is_some_and(|a| a.premium)
+        self.snapshot.borrow().account.as_ref().is_some_and(|a| a.premium)
     }
 
     pub fn account(&self) -> Option<Account> {
@@ -2178,13 +1993,7 @@ impl AuthService {
 
 /// id аккаунта, которому принадлежит токен (GET /v1/me); None — проверить не удалось.
 async fn token_owner(http: &reqwest::Client, token: &str) -> Option<String> {
-    let response = match http
-        .get(ME_URL)
-        .bearer_auth(token)
-        .timeout(Duration::from_secs(15))
-        .send()
-        .await
-    {
+    let response = match http.get(ME_URL).bearer_auth(token).timeout(Duration::from_secs(15)).send().await {
         Ok(response) => response,
         Err(error) => {
             tracing::warn!("playback token owner not verified: {}", error.without_url());
@@ -2200,12 +2009,9 @@ async fn token_owner(http: &reqwest::Client, token: &str) -> Option<String> {
 
 fn owner_id(body: &str) -> Option<String> {
     let value: serde_json::Value = serde_json::from_str(body).ok()?;
-    value
-        .get("id")?
-        .as_str()
-        .filter(|id| !id.is_empty())
-        .map(str::to_owned)
+    value.get("id")?.as_str().filter(|id| !id.is_empty()).map(str::to_owned)
 }
+
 
 /// Профиль последней удачной проверки входа (state/profile-<источник>.json), привязан к Client ID.
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -2239,11 +2045,7 @@ fn session_profile_file() -> PathBuf {
 /// Аккаунт сессии для карточки до ответа самой сессии: профиль прошлого входа этого аккаунта
 /// (сессия, затем Web API); нет — только id.
 fn remembered_user(username: &str) -> sf_api::models::User {
-    let paths = [
-        session_profile_file(),
-        profile_file(ApiSource::Shared),
-        profile_file(ApiSource::Personal),
-    ];
+    let paths = [session_profile_file(), profile_file(ApiSource::Shared), profile_file(ApiSource::Personal)];
     remembered_user_in(&paths, username)
 }
 
@@ -2253,10 +2055,7 @@ fn remembered_user_in(paths: &[PathBuf], username: &str) -> sf_api::models::User
         .filter_map(|path| read_profile(path))
         .map(|remembered| remembered.user)
         .find(|user| user.id == username)
-        .unwrap_or_else(|| sf_api::models::User {
-            id: username.to_owned(),
-            ..Default::default()
-        });
+        .unwrap_or_else(|| sf_api::models::User { id: username.to_owned(), ..Default::default() });
     // вход воспроизведения librespot выдаёт только Premium
     user.product.get_or_insert_with(|| "premium".to_owned());
     user
@@ -2274,11 +2073,7 @@ fn merge_account(mut fresh: Account, current: Option<&Account>) -> Account {
             fresh.avatar = current.avatar.clone();
         }
     }
-    for (field, old) in [
-        (&mut fresh.email, &current.email),
-        (&mut fresh.country, &current.country),
-        (&mut fresh.uri, &current.uri),
-    ] {
+    for (field, old) in [(&mut fresh.email, &current.email), (&mut fresh.country, &current.country), (&mut fresh.uri, &current.uri)] {
         if field.is_empty() {
             *field = old.clone();
         }
@@ -2299,10 +2094,7 @@ fn save_profile(source: ApiSource, client_id: &str, user: &sf_api::models::User)
 }
 
 fn write_profile(path: &std::path::Path, client_id: &str, user: &sf_api::models::User) {
-    let remembered = RememberedProfile {
-        client_id: client_id.to_owned(),
-        user: user.clone(),
-    };
+    let remembered = RememberedProfile { client_id: client_id.to_owned(), user: user.clone() };
     let written = serde_json::to_string(&remembered)
         .map_err(std::io::Error::other)
         .and_then(|text| {
@@ -2322,18 +2114,14 @@ mod tests {
 
     #[test]
     fn token_owner_is_the_profile_id() {
-        assert_eq!(
-            owner_id(r#"{"id":"alice","display_name":"A"}"#).as_deref(),
-            Some("alice")
-        );
+        assert_eq!(owner_id(r#"{"id":"alice","display_name":"A"}"#).as_deref(), Some("alice"));
         assert_eq!(owner_id(r#"{"id":""}"#), None);
         assert_eq!(owner_id("not json"), None);
     }
 
     #[test]
     fn error_codes_survive_translation() {
-        let busy =
-            oauth_error_text(&anyhow::anyhow!("unable to listen on 127.0.0.1:8898"), 8898).unwrap();
+        let busy = oauth_error_text(&anyhow::anyhow!("unable to listen on 127.0.0.1:8898"), 8898).unwrap();
         assert_eq!(error_code(&busy), "portBusy");
         assert_eq!(error_code(&mf_i18n::t(FREE_ACCOUNT)), "free");
         assert_eq!(error_code(&mf_i18n::t(OTHER_ACCOUNT)), "otherAccount");
@@ -2344,16 +2132,10 @@ mod tests {
     #[test]
     fn browser_errors_become_user_text() {
         let busy = anyhow::anyhow!("unable to listen on 127.0.0.1:8989 for the Spotify redirect");
-        assert_eq!(
-            oauth_error_text(&busy, 8989).unwrap(),
-            "Port 8989 is in use by another program"
-        );
+        assert_eq!(oauth_error_text(&busy, 8989).unwrap(), "Port 8989 is in use by another program");
         assert!(oauth_error_text(&anyhow::anyhow!("sign-in cancelled"), 8989).is_none());
         let refused = anyhow::anyhow!("Spotify refused the sign-in. Try again.");
-        assert_eq!(
-            oauth_error_text(&refused, 8989).unwrap(),
-            "Sign-in was cancelled in the browser"
-        );
+        assert_eq!(oauth_error_text(&refused, 8989).unwrap(), "Sign-in was cancelled in the browser");
         assert_eq!(connect_error_text("needs Premium"), PREMIUM_NEEDED);
     }
 
@@ -2365,45 +2147,22 @@ mod tests {
     }
 
     fn account(id: &str, name: &str, avatar: &str) -> Account {
-        Account {
-            id: id.into(),
-            display_name: name.into(),
-            avatar: avatar.into(),
-            ..Default::default()
-        }
+        Account { id: id.into(), display_name: name.into(), avatar: avatar.into(), ..Default::default() }
     }
 
     #[test]
     fn a_fresh_card_keeps_what_the_old_one_knew() {
-        let old = Account {
-            country: "IN".into(),
-            product: "premium".into(),
-            premium: true,
-            ..account("me", "Fatyzzz", "face")
-        };
+        let old = Account { country: "IN".into(), product: "premium".into(), premium: true, ..account("me", "Fatyzzz", "face") };
         // профиль сессии не ответил: имя = id — имя и аватар прежние, тип аккаунта тоже
         let bare = merge_account(account("me", "me", ""), Some(&old));
-        assert_eq!(
-            (
-                bare.display_name.as_str(),
-                bare.avatar.as_str(),
-                bare.country.as_str()
-            ),
-            ("Fatyzzz", "face", "IN")
-        );
+        assert_eq!((bare.display_name.as_str(), bare.avatar.as_str(), bare.country.as_str()), ("Fatyzzz", "face", "IN"));
         assert!(bare.premium);
         // ответил: аватар сняли — так и показываем
         let fresh = merge_account(account("me", "New", ""), Some(&old));
-        assert_eq!(
-            (fresh.display_name.as_str(), fresh.avatar.as_str()),
-            ("New", "")
-        );
+        assert_eq!((fresh.display_name.as_str(), fresh.avatar.as_str()), ("New", ""));
         // другой аккаунт — ничего не переносится
         let other = merge_account(account("you", "you", ""), Some(&old));
-        assert_eq!(
-            (other.display_name.as_str(), other.country.as_str()),
-            ("you", "")
-        );
+        assert_eq!((other.display_name.as_str(), other.country.as_str()), ("you", ""));
     }
 
     #[test]
@@ -2418,39 +2177,22 @@ mod tests {
             product: product.map(str::to_owned),
             ..Default::default()
         };
-        write_profile(
-            &shared,
-            "web-client",
-            &user("me", "From web", Some("premium")),
-        );
+        write_profile(&shared, "web-client", &user("me", "From web", Some("premium")));
         let paths = [session.clone(), shared.clone()];
-        assert_eq!(
-            remembered_user_in(&paths, "me").display_name.as_deref(),
-            Some("From web")
-        );
+        assert_eq!(remembered_user_in(&paths, "me").display_name.as_deref(), Some("From web"));
         write_profile(&session, "librespot", &user("me", "From session", None));
         let remembered = remembered_user_in(&paths, "me");
         assert_eq!(remembered.display_name.as_deref(), Some("From session"));
-        assert_eq!(
-            remembered.product.as_deref(),
-            Some("premium"),
-            "a playback sign-in is Premium"
-        );
+        assert_eq!(remembered.product.as_deref(), Some("premium"), "a playback sign-in is Premium");
         // чужой профиль не берётся: только id
         let stranger = remembered_user_in(&paths, "other");
-        assert_eq!(
-            (stranger.id.as_str(), stranger.display_name.as_deref()),
-            ("other", None)
-        );
+        assert_eq!((stranger.id.as_str(), stranger.display_name.as_deref()), ("other", None));
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn states_name_like_qml() {
         assert_eq!(AuthState::AwaitingBrowser.as_str(), "awaitingBrowser");
-        assert_eq!(
-            PlaybackAuthState::PremiumRequired.as_str(),
-            "premiumRequired"
-        );
+        assert_eq!(PlaybackAuthState::PremiumRequired.as_str(), "premiumRequired");
     }
 }
