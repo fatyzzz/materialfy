@@ -87,8 +87,9 @@ mkdir -p "$APPDIR/usr/plugins"
 for d in iconengines multimedia wayland-graphics-integration-client wayland-decoration-client wayland-shell-integration; do
     [ -d "$QTDIR/plugins/$d" ] && cp -r "$QTDIR/plugins/$d" "$APPDIR/usr/plugins/"
 done
-# Canvas video: the FFmpeg backend only, GStreamer would need the system's gst libraries
-rm -f "$APPDIR"/usr/plugins/multimedia/libgstreamermediaplugin.so
+# Canvas video: the FFmpeg backend only. plugin-qt deploys every multimedia plugin it finds, and GStreamer
+# would need the system's gst libraries, so take it out of this (CI-only) Qt
+rm -f "$QTDIR"/plugins/multimedia/libgstreamermediaplugin.so "$APPDIR"/usr/plugins/multimedia/libgstreamermediaplugin.so
 
 "linuxdeploy-$ARCH.AppImage" --appdir "$APPDIR" \
     --executable "$APPDIR/usr/bin/materialfy" \
