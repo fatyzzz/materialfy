@@ -76,6 +76,8 @@
   "Bottom": "Embaixo",
   "Free": "Livre",
   "Or drag the island along the edge. 0 is the center of the edge": "Ou arraste a ilha ao longo da borda. 0 é o centro da borda",
+  "Island size": "Tamanho da ilha",
+  "{0}% of the default size": "{0}% do tamanho padrão",
   "Island position": "Posição da ilha",
   "Hide over maximized windows": "Esconder com janelas maximizadas",
   "The island steps aside while a maximized window fills its monitor": "A ilha sai do caminho enquanto uma janela maximizada ocupa o monitor dela"

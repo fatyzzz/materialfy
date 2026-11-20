@@ -162,6 +162,7 @@ pub enum SettingKey {
     FloatingHideFullscreen,
     FloatingHideMaximized,
     FloatingOffsetX,
+    FloatingScale,
     FloatingEdge,
     FloatingFreeX,
     FloatingFreeY,
@@ -197,7 +198,7 @@ pub enum SettingType {
 }
 
 impl SettingKey {
-    pub const ALL: [SettingKey; 91] = [
+    pub const ALL: [SettingKey; 92] = [
         SettingKey::ThemeMode,
         SettingKey::SchemeVariant,
         SettingKey::AccentFromCover,
@@ -280,6 +281,7 @@ impl SettingKey {
         SettingKey::FloatingHideFullscreen,
         SettingKey::FloatingHideMaximized,
         SettingKey::FloatingOffsetX,
+        SettingKey::FloatingScale,
         SettingKey::FloatingEdge,
         SettingKey::FloatingFreeX,
         SettingKey::FloatingFreeY,
@@ -377,6 +379,7 @@ impl SettingKey {
             FloatingHideFullscreen => "floatingHideFullscreen",
             FloatingHideMaximized => "floatingHideMaximized",
             FloatingOffsetX => "floatingOffsetX",
+            FloatingScale => "floatingScale",
             FloatingEdge => "floatingEdge",
             FloatingFreeX => "floatingFreeX",
             FloatingFreeY => "floatingFreeY",
@@ -488,6 +491,7 @@ impl SettingKey {
             FloatingHideFullscreen => Bool(true),
             FloatingHideMaximized => Bool(false),
             FloatingOffsetX => Int(0),
+            FloatingScale => Int(100),
             FloatingEdge => Str("top".into()),
             FloatingFreeX => Int(WINDOW_POS_UNSET),
             FloatingFreeY => Int(WINDOW_POS_UNSET),
@@ -552,6 +556,7 @@ impl SettingKey {
             (SettingKey::LyricsSyncMs, SettingValue::Int(ms)) => {
                 SettingValue::Int(ms.clamp(-500, 500))
             }
+            (SettingKey::FloatingScale, SettingValue::Int(percent)) => SettingValue::Int(percent.clamp(70, 200)),
             (SettingKey::UiScale, SettingValue::Int(percent)) => {
                 // пресеты из настроек; значение из конфига вне пресетов — ближайший
                 let percent = percent.clamp(50, 250);
@@ -1247,7 +1252,7 @@ mod tests {
 
     #[test]
     fn schema() {
-        assert_eq!(SettingKey::ALL.len(), 91);
+        assert_eq!(SettingKey::ALL.len(), 92);
         for key in SettingKey::ALL {
             assert_eq!(SettingKey::from_name(key.name()), Some(key));
             assert_eq!(key.default_value().value_type(), key.value_type());
@@ -1265,6 +1270,9 @@ mod tests {
         assert_eq!(SettingKey::PlaybackSpeed.normalize(Float(f64::NAN)), Float(1.0));
         assert_eq!(SettingKey::Crossfade.normalize(Int(-3)), Int(0));
         assert_eq!(SettingKey::Crossfade.normalize(Int(40)), Int(CROSSFADE_MAX_S));
+        assert_eq!(SettingKey::FloatingScale.normalize(Int(10)), Int(70));
+        assert_eq!(SettingKey::FloatingScale.normalize(Int(130)), Int(130));
+        assert_eq!(SettingKey::FloatingScale.normalize(Int(900)), Int(200));
         assert_eq!(SettingKey::UiScale.normalize(Int(100)), Int(100));
         assert_eq!(SettingKey::UiScale.normalize(Int(110)), Int(100));
         assert_eq!(SettingKey::UiScale.normalize(Int(120)), Int(125));
@@ -1596,7 +1604,7 @@ mod tests {
             "lyricsLineSpacing", "lyricsAnimate", "lyricsShowSource", "lyricsSyncMs",
             "animations", "lowPowerMode", "gpuPreference", "rightPanelOpen", "rightPanelTab", "sidebarCollapsed", "windowWidth",
             "windowHeight", "windowX", "windowY", "windowMaximized", "closeToTray", "wheelStep", "floatingPlayer", "floatingPlayerStyle",
-            "taskbarWidgetPos", "floatingKeyHints", "floatingHideFullscreen", "floatingHideMaximized", "floatingOffsetX", "floatingEdge", "floatingFreeX", "floatingFreeY", "libraryView",
+            "taskbarWidgetPos", "floatingKeyHints", "floatingHideFullscreen", "floatingHideMaximized", "floatingOffsetX", "floatingScale", "floatingEdge", "floatingFreeX", "floatingFreeY", "libraryView",
             "librarySort", "homeHidden", "homeRadioHidden", "sidebarLibrary", "bitrate", "normalisation", "gapless", "autoplay", "volume", "audioDevice",
             "audioCache", "audioCacheMb", "playbackAuthorized", "deviceName", "webClientId", "apiLimitTipDismissed", "proxyMode", "proxyHost",
             "proxyPort", "proxyUsername", "coversBypassProxy", "pins", "hiddenTracks", "radioSeeds", "language", "uiScale", "autoUpdateCheck",

@@ -54,8 +54,11 @@ void floating_taskbar_detach(QObject* window);
 // а вызывают у window QML-функцию floatingKey(code): 1 ←, 2 →, 3 ↑, 4 ↓, 5 пробел. Windows — низкоуровневый
 // хук клавиатуры (WH_KEYBOARD_LL) только на время наведения: on — поставить, false — снять. Курсор ушёл с окна
 // или лежит без движения дольше 6 с (мышь бросили у края и печатают) — клавиши снова идут как обычно.
-// Вне Windows — false (фокус не забираем).
+// X11 — XGrabKey на корневом окне, тоже только на время наведения (простой курсора считает QML). KDE Wayland —
+// не здесь: глобальные сочетания kglobalaccel (crates/mf-platform/src/kwin.rs). Иначе — false (фокус не забираем).
 bool floating_key_hook(QObject* window, bool on);
+// Qt работает на Wayland (то же, что видит QML через Qt.platform.pluginName)
+bool floating_is_wayland();
 
 // Пропуск кликов через окно (WS_EX_TRANSPARENT): true — клики идут в окна под ним
 void floating_set_click_through(QObject* window, bool enable);
