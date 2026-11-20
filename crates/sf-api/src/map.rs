@@ -271,6 +271,7 @@ pub fn playlist_item(playlist: &models::Playlist, me: Option<&m::AccountId>) -> 
         owner_id: playlist.owner.id.clone().unwrap_or_default(),
         can_edit: owned || playlist.collaborative,
         collaborative: playlist.collaborative,
+        blend: playlist.blend,
         public: playlist.public.unwrap_or(false),
         snapshot_id: playlist.snapshot_id.clone().unwrap_or_default(),
         pinned: false,
