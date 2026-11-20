@@ -411,6 +411,7 @@ Page {
                             visible: (page.account.avatar ?? "") !== "" && status === Image.Ready
                             source: page.account.avatar ?? ""
                             shape: "cookie9"
+                            eager: true         // скрыта до загрузки, а без eager скрытая картинка не грузится
                         }
                     }
 
