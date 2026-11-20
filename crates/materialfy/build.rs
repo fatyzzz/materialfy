@@ -111,8 +111,12 @@ END
             // floating.cpp: границы кнопок панели задач — UI Automation (COM, BSTR)
             println!("cargo::rustc-link-lib=oleaut32");
         }
-        // dlsym (display.rs: QWindowSystemInterface::handlePrimaryScreenChanged)
-        Ok("linux") => println!("cargo::rustc-link-lib=dl"),
+        Ok("linux") => {
+            // dlsym (display.rs: QWindowSystemInterface::handlePrimaryScreenChanged)
+            println!("cargo::rustc-link-lib=dl");
+            // floating.cpp: клавиши островка на X11 (XGrabKey)
+            println!("cargo::rustc-link-lib=xcb");
+        }
         Ok("macos") => println!("cargo::rustc-link-lib=framework=AppKit"),
         _ => {}
     }

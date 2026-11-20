@@ -40,14 +40,24 @@ fn playing(core: &mut Core, uri: &str) {
 }
 
 fn loaded_queue(core: &mut Core, current: &str, next: &[&str]) {
-    let fetched = FetchedQueue { current: Some(song(current)), next: next.iter().map(|uri| song(uri)).collect(), context: None };
+    let fetched = FetchedQueue {
+        current: Some(song(current)),
+        next: next.iter().map(|uri| song(uri)).collect(),
+        context: None,
+        recommended: Vec::new(),
+    };
     let current = fetched.current.clone().map(|track| QItem { uid: 1000, track });
     let next = fetched.next.iter().enumerate().map(|(i, track)| QItem { uid: 1001 + i as u64, track: track.clone() });
     core.queue = Some(QueueData { current, next: next.collect() });
 }
 
 fn fetched(current: &str, next: &[&str]) -> FetchedQueue {
-    FetchedQueue { current: Some(song(current)), next: next.iter().map(|uri| song(uri)).collect(), context: None }
+    FetchedQueue {
+        current: Some(song(current)),
+        next: next.iter().map(|uri| song(uri)).collect(),
+        context: None,
+        recommended: Vec::new(),
+    }
 }
 
 fn queue_uris(core: &Core) -> (Option<String>, Vec<String>) {
@@ -128,6 +138,32 @@ fn remote_snapshot(device: &str, uri: &str, is_playing: bool) -> RemoteSnapshot 
         },
         received_at: Instant::now(),
     }
+}
+
+/// Другое устройство забрало трек: прослушивание здесь закрывается сразу, недоигранным.
+#[test]
+fn a_takeover_ends_the_local_play_at_once_and_unfinished() {
+    let mut core = headless();
+    playing(&mut core, "spotify:track:a");
+    core.local.position_ms = 30_000;
+    core.on_now_playing_changed();
+    core.take_effects();
+    core.local.playback = Playback::Stopped;
+    core.remote = Some(remote_snapshot("phone", "spotify:track:a", true));
+    core.tick();
+    let ended: Vec<TrackEndedLite> = core
+        .take_effects()
+        .into_iter()
+        .filter_map(|effect| match effect {
+            Effect::Ended(ended) => Some(*ended),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(ended.len(), 1, "the play ends once, at the takeover");
+    assert!(ended[0].local && !ended[0].natural);
+    assert!(ended[0].played < 1.0);
+    core.tick();
+    assert!(!core.take_effects().iter().any(|effect| matches!(effect, Effect::Ended(_))));
 }
 
 // ---- Next и намерения ----------------------------------------------------------------------------
@@ -1574,6 +1610,44 @@ fn a_shuffled_list_play_switches_shuffle_on_after_loading_straight() {
 }
 
 #[test]
+fn smart_shuffle_reloads_the_playlist_with_recommendations_and_back() {
+    let mut core = headless();
+    core.local.connected = true;
+    core.play_context(PlayContext::with_uri("playlist", "spotify:playlist:p"), Some("spotify:track:a".into()), None);
+    playing(&mut core, "spotify:track:a");
+    let _ = engine_commands(&mut core);
+    assert!(core.smart_shuffle_available());
+
+    core.set_smart_shuffle(true);
+    assert!(core.smart_shuffle() && core.shuffle_wanted);
+    assert!(matches!(
+        engine_commands(&mut core).as_slice(),
+        [PlayerCommand::Load(load)] if load.context_uri.as_deref() == Some("spotify:playlist:p?spotify-apply-lenses=enhance")
+            && load.offset_uri.as_deref() == Some("spotify:track:a")
+            && load.shuffle == Some(true)
+    ));
+
+    // играет рекомендация: в обычном плейлисте её нет — с начала
+    playing(&mut core, "spotify:track:rec");
+    core.age_intent(Duration::from_secs(60));
+    let mut queue = fetched("spotify:track:rec", &["spotify:track:b"]);
+    queue.recommended = vec!["spotify:track:rec".into()];
+    answer_latest(&mut core, Ok(queue));
+    assert!(core.queue_rows()[0].recommended);
+    core.set_shuffle(false);
+    assert!(!core.smart_shuffle() && !core.smart_wanted);
+    assert!(matches!(
+        engine_commands(&mut core).as_slice(),
+        [PlayerCommand::Load(load)] if load.context_uri.as_deref() == Some("spotify:playlist:p")
+            && load.offset_uri.is_none()
+            && load.shuffle.is_none()
+    ));
+
+    core.play_context(PlayContext::with_uri("album", "spotify:album:x"), None, None);
+    assert!(!core.smart_shuffle_available());
+}
+
+#[test]
 fn one_song_is_loaded_as_a_context() {
     let one = local_load(&PlayRequest::tracks(vec!["spotify:track:a".into()]), false);
     assert_eq!(one.context_uri.as_deref(), Some("spotify:track:a"));
@@ -1888,7 +1962,7 @@ fn a_shuffled_play_does_not_start_at_track_one() {
     items[5].available = false;
     let mut starts = std::collections::HashSet::new();
     for _ in 0..40 {
-        core.shuffle_from(items.clone(), PlayContext::with_uri("playlist", "spotify:playlist:p"));
+        core.shuffle_from(items.clone(), PlayContext::with_uri("playlist", "spotify:playlist:p"), false);
         for command in engine_commands(&mut core) {
             if let PlayerCommand::Load(load) = command {
                 let start = load.offset_uri.expect("the start is named");
@@ -2431,7 +2505,7 @@ mod actor {
             let (events, receiver_events) = broadcast::channel(1024);
             let web = Arc::new(FakeWeb::default());
             *web.queue.lock().unwrap() =
-                Some(FetchedQueue { current: Some(song("spotify:track:a")), next: vec![song("spotify:track:ctx")], context: None });
+                Some(FetchedQueue { current: Some(song("spotify:track:a")), next: vec![song("spotify:track:ctx")], context: None, recommended: Vec::new() });
             let actor =
                 Actor::new(
                     Core::new(0.5, false),
@@ -2489,6 +2563,17 @@ mod actor {
             }))))
             .await
         }
+    }
+
+    #[tokio::test]
+    async fn quitting_ends_the_song_still_playing() {
+        let mut rig = Rig::new();
+        rig.ready().await;
+        rig.playing("spotify:track:a", 1).await;
+        let ended = rig.actor.shutdown().expect("the open play ends on quit");
+        assert_eq!(ended.track.uri, "spotify:track:a");
+        assert!(ended.local);
+        assert!(rig.actor.shutdown().is_none(), "a play ends once");
     }
 
     #[tokio::test]

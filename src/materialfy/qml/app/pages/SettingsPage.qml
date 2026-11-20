@@ -934,6 +934,22 @@ Page {
 
         SettingRow {
             visible: floatingPicker.visible && (Settings.floatingPlayer === "island" || Settings.floatingPlayer === "both") && Qt.platform.os !== "osx"
+            title: I18n.t("Island size")
+            description: I18n.t("{0}% of the default size", Settings.floatingScale)
+            Slider {
+                wheelEnabled: false
+                width: 220
+                from: 70
+                to: 200
+                stepSize: 5
+                value: Settings.floatingScale
+                valueText: v => Math.round(v) + " %"
+                onMoved: v => Settings.floatingScale = Math.round(v / 5) * 5
+            }
+        }
+
+        SettingRow {
+            visible: floatingPicker.visible && (Settings.floatingPlayer === "island" || Settings.floatingPlayer === "both") && Qt.platform.os !== "osx"
                 && Settings.floatingEdge !== "free"
             title: I18n.t("Island position")
             description: I18n.t("Or drag the island along the edge. 0 is the center of the edge")
@@ -1440,24 +1456,37 @@ Page {
         SettingRow {
             title: I18n.t("Musixmatch token")
             description: I18n.t("Musixmatch refuses the built-in anonymous token. Paste your own user token to get word-timed lyrics from it")
-            TextField {
-                id: mxmTokenField
-                width: page.compact ? 220 : 280
-                text: Settings.musixmatchToken
-                placeholderText: I18n.t("optional")
-                echoMode: TextInput.Password
-                function commit() {
-                    const t = text.trim()
-                    if (t !== Settings.musixmatchToken)
-                        Settings.musixmatchToken = t
-                }
-                onAccepted: commit()
-                Connections {
-                    target: mxmTokenField.inputItem
-                    function onActiveFocusChanged() {
-                        if (!mxmTokenField.inputItem.activeFocus)
-                            mxmTokenField.commit()
+            Row {
+                spacing: 8
+                // сам токен в QML не приходит: он в хранилище секретов ОС
+                TextField {
+                    id: mxmTokenField
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: page.compact ? 180 : 240
+                    placeholderText: Settings.musixmatchTokenSet ? "••••••••" : I18n.t("optional")
+                    echoMode: TextInput.Password
+                    function commit() {
+                        const t = text.trim()
+                        if (t !== "")
+                            Settings.setMusixmatchToken(t)
+                        text = ""
                     }
+                    onAccepted: commit()
+                    Connections {
+                        target: mxmTokenField.inputItem
+                        function onActiveFocusChanged() {
+                            if (!mxmTokenField.inputItem.activeFocus)
+                                mxmTokenField.commit()
+                        }
+                    }
+                }
+                Button {
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: Settings.musixmatchTokenSet
+                    text: I18n.t("Remove")
+                    style: "outlined"
+                    size: "xs"
+                    onClicked: Settings.setMusixmatchToken("")
                 }
             }
         }
@@ -1543,6 +1572,11 @@ Page {
             title: I18n.t("DJ voice")
             description: I18n.t("Spotify’s DJ talks between the songs it plays. Off: just the music")
             Switch { checked: Settings.djVoice; onToggled: c => Settings.djVoice = c }
+        }
+        SettingRow {
+            title: I18n.t("Report plays to Spotify")
+            description: I18n.t("Songs played on this computer count in Recently played, your stats and Wrapped, like in the official app. Sends Spotify one event per song. Unofficial: Spotify may ignore it")
+            Switch { checked: Settings.reportPlays; onToggled: c => Settings.reportPlays = c }
         }
         SettingRow {
             title: I18n.t("Output device")

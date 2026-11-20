@@ -29,11 +29,12 @@ pub enum Slot {
     Personal,
     Playback,
     Proxy,
+    Musixmatch,
 }
 
 impl Slot {
     pub const SPOTIFY: [Self; 3] = [Self::Shared, Self::Personal, Self::Playback];
-    pub const ALL: [Self; 4] = [Self::Shared, Self::Personal, Self::Playback, Self::Proxy];
+    pub const ALL: [Self; 5] = [Self::Shared, Self::Personal, Self::Playback, Self::Proxy, Self::Musixmatch];
 
     fn index(self) -> usize {
         self as usize
@@ -45,6 +46,7 @@ impl Slot {
             Self::Personal => "personal-web",
             Self::Playback => "playback",
             Self::Proxy => "proxy-password",
+            Self::Musixmatch => "musixmatch-token",
         }
     }
 }
@@ -55,6 +57,8 @@ pub enum Grant {
     Web(StoredToken),
     Playback(Credentials),
     Proxy(ProxyPassword),
+    /// личный usertoken Musixmatch (Settings → «Тексты»)
+    Musixmatch(String),
 }
 
 impl Grant {
@@ -66,6 +70,7 @@ impl Grant {
                 credentials.username.as_deref().is_some_and(|name| !name.is_empty()) && !credentials.auth_data.is_empty()
             }
             (Slot::Proxy, Self::Proxy(password)) => password.valid(),
+            (Slot::Musixmatch, Self::Musixmatch(token)) => !token.trim().is_empty(),
             _ => false,
         }
     }
@@ -240,7 +245,7 @@ type Job = Box<dyn FnOnce(&mut dyn ProtectedStore) + Send>;
 struct Inner {
     state_dir: PathBuf,
     profile: String,
-    generations: [AtomicU64; 4],
+    generations: [AtomicU64; 5],
     // только вокруг крошечных файлов-маркеров, никогда вокруг вызова хранилища ОС
     markers: Mutex<()>,
     jobs: mpsc::SyncSender<Job>,

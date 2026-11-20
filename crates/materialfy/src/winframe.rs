@@ -35,6 +35,7 @@ pub mod qobject {
         unsafe fn floating_taskbar_drag(window: *mut QObject, width: i32, height: i32, phase: i32) -> QString;
         unsafe fn floating_taskbar_detach(window: *mut QObject);
         unsafe fn floating_key_hook(window: *mut QObject, on: bool) -> bool;
+        fn floating_is_wayland() -> bool;
         unsafe fn floating_set_click_through(window: *mut QObject, enable: bool);
         fn floating_windhawk_active() -> bool;
     }
@@ -119,10 +120,15 @@ pub mod qobject {
         #[qinvokable]
         #[cxx_name = "taskbarDetach"]
         unsafe fn taskbar_detach(self: &WindowShell, window: *mut QObject);
-        /// Стрелки и пробел без фокуса, пока курсор над окном (Windows): QML-функция окна floatingKey(code)
+        /// Стрелки и пробел без фокуса, пока курсор над окном: QML-функция окна floatingKey(code) (Windows, X11),
+        /// на KDE Wayland — сигнал islandKey. false — здесь так нельзя (macOS, Wayland без KDE)
         #[qinvokable]
         #[cxx_name = "keyHook"]
         unsafe fn key_hook(self: &WindowShell, window: *mut QObject, on: bool) -> bool;
+        /// KDE Wayland: нажали клавишу островка, пока захвачены его клавиши (keyHook) — код как у floatingKey
+        #[qsignal]
+        #[cxx_name = "islandKey"]
+        fn island_key(self: Pin<&mut WindowShell>, code: i32);
         /// Пропуск кликов через окно: true — клики идут в окна под ним
         #[qinvokable]
         #[cxx_name = "setClickThrough"]
@@ -137,7 +143,10 @@ pub mod qobject {
 }
 
 #[derive(Default)]
-pub struct WindowShellRust;
+pub struct WindowShellRust {
+    /// KDE Wayland: окно, которое держит клавиши (keyHook), как адрес; 0 — никто
+    key_owner: std::cell::Cell<usize>,
+}
 
 impl qobject::WindowShell {
     unsafe fn minimize(&self, window: *mut cxx_qt::QObject) {
@@ -177,7 +186,11 @@ impl qobject::WindowShell {
         let title = title.to_string();
         // при выходе фоновая задача не успеет: ждём выгрузки скрипта (недолго), иначе он остаётся в KWin до перезапуска
         crate::context::ctx().rt.block_on(async move {
-            let _ = tokio::time::timeout(std::time::Duration::from_millis(500), mf_platform::kwin::release(&title)).await;
+            let _ = tokio::time::timeout(std::time::Duration::from_millis(500), async {
+                // клавиши снимаем до выгрузки скрипта: он же страхует их снятие, если процесс упадёт
+                let _ = mf_platform::kwin::keys(false).await;
+                mf_platform::kwin::release(&title).await;
+            }).await;
         });
     }
 
@@ -235,8 +248,36 @@ impl qobject::WindowShell {
     }
 
     unsafe fn key_hook(&self, window: *mut cxx_qt::QObject, on: bool) -> bool {
+        // под Xwayland (QT_QPA_PLATFORM=xcb) скрипта KWin у островка нет — некому снять клавиши, если процесс упадёт
+        let xcb = !qobject::floating_is_wayland();
+        if mf_platform::kwin::available() && !xcb {
+            return self.kwin_keys(window as usize, on);
+        }
         // SAFETY: то же; снятие хука с нулевым окном — снять любой
         unsafe { qobject::floating_key_hook(window, on) }
+    }
+
+    fn kwin_keys(&self, window: usize, on: bool) -> bool {
+        use cxx_qt::CxxQtType;
+        let owner = &self.rust().key_owner;
+        // снимает только своё окно: на двух мониторах курсор переходит с одного островка на другой
+        if !on && window != 0 && owner.get() != window {
+            return true;
+        }
+        owner.set(if on { window } else { 0 });
+        static KEYS: std::sync::Once = std::sync::Once::new();
+        KEYS.call_once(|| {
+            let thread = cxx_qt::Threading::qt_thread(self);
+            mf_platform::kwin::on_key(Box::new(move |code| {
+                let _ = thread.queue(move |shell| shell.island_key(code));
+            }));
+        });
+        crate::context::ctx().rt.spawn(async move {
+            if let Err(error) = mf_platform::kwin::keys(on).await {
+                tracing::warn!("island keys via kglobalaccel: {error}");
+            }
+        });
+        true
     }
 
     unsafe fn taskbar_detach(&self, window: *mut cxx_qt::QObject) {

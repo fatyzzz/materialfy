@@ -122,6 +122,14 @@ Item {
                     color: Theme.surfaceContainerHighest
                     Label { anchors.centerIn: parent; text: "E"; type: "labelSmall"; color: Theme.fgSurfaceVariant }
                 }
+                // рекомендация Smart Shuffle
+                Icon {
+                    visible: root.track.recommended === true
+                    name: "auto_awesome"
+                    size: 16
+                    fill: 1
+                    color: Theme.primary
+                }
                 Item { Layout.fillWidth: true }
             }
             ArtistLinks {

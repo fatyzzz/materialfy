@@ -210,6 +210,18 @@ mod tests {
     }
 
     #[test]
+    fn a_history_saved_before_played_time_still_loads() {
+        let dir = std::env::temp_dir().join(format!("sf-history-{:016x}", rand::random::<u64>()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("history.json");
+        std::fs::write(&path, r#"[{"track":{"uri":"spotify:track:a"},"playedAt":"2026-09-01T09:00:00Z"}]"#).unwrap();
+        let read = Journal::load(&path);
+        assert_eq!(read.plays().len(), 1);
+        assert_eq!(read.plays()[0].played_ms, 0);
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
     fn a_saved_history_reads_back_and_a_failed_save_keeps_it_dirty() {
         let dir = std::env::temp_dir().join(format!("sf-history-{:016x}", rand::random::<u64>()));
         std::fs::create_dir_all(&dir).unwrap();
