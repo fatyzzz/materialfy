@@ -130,6 +130,32 @@ fn remote_snapshot(device: &str, uri: &str, is_playing: bool) -> RemoteSnapshot 
     }
 }
 
+/// Другое устройство забрало трек: прослушивание здесь закрывается сразу, недоигранным.
+#[test]
+fn a_takeover_ends_the_local_play_at_once_and_unfinished() {
+    let mut core = headless();
+    playing(&mut core, "spotify:track:a");
+    core.local.position_ms = 30_000;
+    core.on_now_playing_changed();
+    core.take_effects();
+    core.local.playback = Playback::Stopped;
+    core.remote = Some(remote_snapshot("phone", "spotify:track:a", true));
+    core.tick();
+    let ended: Vec<TrackEndedLite> = core
+        .take_effects()
+        .into_iter()
+        .filter_map(|effect| match effect {
+            Effect::Ended(ended) => Some(*ended),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(ended.len(), 1, "the play ends once, at the takeover");
+    assert!(ended[0].local && !ended[0].natural);
+    assert!(ended[0].played < 1.0);
+    core.tick();
+    assert!(!core.take_effects().iter().any(|effect| matches!(effect, Effect::Ended(_))));
+}
+
 // ---- Next и намерения ----------------------------------------------------------------------------
 
 /// Next сразу делает голову очереди текущей.

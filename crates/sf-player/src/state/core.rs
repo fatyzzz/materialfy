@@ -1273,6 +1273,13 @@ impl Core {
     /// Учёт прослушивания: только подтверждённое воспроизведение.
     fn note_listening(&mut self) {
         let live = self.now_playing_live();
+        // воспроизведение забрало другое устройство: прослушивание на этом ПК кончилось сейчас,
+        // а не когда там сменится трек (иначе время там засчиталось бы здесь)
+        if self.listening.as_ref().is_some_and(|listening| listening.local) && live.as_ref().is_some_and(|live| !live.local)
+        {
+            self.finish_listening(false);
+            return;
+        }
         let Some(listening) = &mut self.listening else {
             return;
         };
