@@ -1679,7 +1679,7 @@ impl LibraryService {
         };
         let snapshot = header.snapshot_id.clone().unwrap_or_default();
         let total = header.track_total();
-        let collaborative = header.collaborative;
+        let collaborative = header.collaborative || header.blend;
         let up_to_date = {
             let mut state = lock(&service.state);
             if !read_is_current(&state, &id, generation, page_generation) {

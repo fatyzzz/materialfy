@@ -150,7 +150,7 @@ pub const TRACK_KEYS: &[&str] = &[
 ];
 pub const PLAYLIST_KEYS: &[&str] = &[
     "playlistId", "uri", "title", "description", "trackCount", "cover", "owner", "ownerId", "canEdit", "collaborative",
-    "public", "snapshotId", "pinned",
+    "blend", "public", "snapshotId", "pinned",
 ];
 pub const ALBUM_KEYS: &[&str] = &[
     "albumId", "uri", "title", "version", "artists", "artistRefs", "year", "kind", "trackCount", "cover", "coverLarge",
@@ -166,8 +166,9 @@ pub const EPISODE_KEYS: &[&str] = &[
 pub const DEVICE_KEYS: &[&str] =
     &["id", "name", "type", "isActive", "isThisComputer", "isRestricted", "supportsVolume", "volume", "source"];
 pub const QUEUE_KEYS: &[&str] = &[
-    "section", "uid", "trackId", "albumId", "title", "version", "artists", "artistRefs", "album", "cover", "coverLarge",
-    "durationMs", "explicit", "available", "uri", "isEpisode", "showId", "addedAt", "addedBy", "playCount",
+    "section", "uid", "recommended", "trackId", "albumId", "title", "version", "artists", "artistRefs", "album",
+    "cover", "coverLarge", "durationMs", "explicit", "available", "uri", "isEpisode", "showId", "addedAt", "addedBy",
+    "playCount",
 ];
 pub const LIBRARY_KEYS: &[&str] = &[
     "kind", "id", "uri", "title", "subtitle", "cover", "covers", "owner", "ownerId", "canEdit", "readOnly", "pinned",

@@ -18,7 +18,7 @@ use crate::state::host::EngineHost;
 use crate::state::session::SessionData;
 use crate::{
     Credentials, EngineStarted, LocalPlayback, PlayerConfig, PlayerError, PlayerEvent, PlayerSnapshot,
-    PlayerSubscription, Repeat, Session,
+    PlayerSubscription, Repeat, Session, TrackEnded,
 };
 
 /// Clone — дешёвый.
@@ -161,8 +161,8 @@ impl PlayerHandle {
     }
 
     /// «Перемешать»: shuffle on и старт со случайного доступного трека.
-    pub fn shuffle_from(&self, items: Vec<TrackItem>, context: PlayContext) {
-        self.send(Command::ShuffleFrom { items, context });
+    pub fn shuffle_from(&self, items: Vec<TrackItem>, context: PlayContext, smart: bool) {
+        self.send(Command::ShuffleFrom { items, context, smart });
     }
 
     /// Контекст по URI (плейлист/альбом/артист/шоу/станция), с трека offset_uri или с начала.
@@ -282,6 +282,11 @@ impl PlayerHandle {
         self.send(Command::SetShuffle(value));
     }
 
+    /// Smart Shuffle (только локально и у плейлистов; иначе не действует).
+    pub fn set_smart_shuffle(&self, value: bool) {
+        self.send(Command::SetSmartShuffle(value));
+    }
+
     /// 0..1; при перетаскивании — VolumePreview, через ~150 мс тишины — Volume (удалённо — PUT volume).
     pub fn set_volume(&self, value: f64) {
         self.send(Command::SetVolume(value.clamp(0.0, 1.0)));
@@ -337,12 +342,15 @@ impl PlayerHandle {
         self.send(Command::ExpectLocal(expected));
     }
 
-    /// Выход: сохранить сессию, остановить движок. Блокирует ≤ 2 с.
-    pub fn shutdown(&self) {
+    /// Выход: сохранить сессию, остановить движок. Блокирует ≤ 2 с. Some — трек, который ещё играл:
+    /// его конец (TrackEnded) по подписке уже не придёт.
+    pub fn shutdown(&self) -> Option<TrackEnded> {
         let (done, wait) = std::sync::mpsc::channel();
-        if self.inner.tx.send(Msg::Shutdown(done)).is_ok() {
-            let _ = wait.recv_timeout(Duration::from_millis(1500));
-        }
+        let ended = match self.inner.tx.send(Msg::Shutdown(done)) {
+            Ok(()) => wait.recv_timeout(Duration::from_millis(1500)).ok().flatten(),
+            Err(_) => None,
+        };
         self.inner.host.shutdown();
+        ended
     }
 }

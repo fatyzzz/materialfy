@@ -434,7 +434,17 @@ Item {
                             if (Player.isEpisode)
                                 Player.seekRelative(-10000)
                             else
-                                Player.shuffle = !Player.shuffle
+                                Player.cycleShuffle()
+                        }
+                        // Smart Shuffle — искра вместо кончика стрелки, как у Spotify (подложка цвета кнопки прячет кончик)
+                        Rectangle {
+                            visible: !Player.isEpisode && Player.smartShuffle
+                            width: parent.iconSize * 0.6; height: width; radius: width / 2
+                            color: parent.containerColor
+                            anchors.centerIn: parent
+                            anchors.horizontalCenterOffset: parent.iconSize * 0.42
+                            anchors.verticalCenterOffset: -parent.iconSize * 0.42
+                            Icon { anchors.centerIn: parent; name: "auto_awesome"; size: parent.width * 0.85; fill: 1; color: parent.parent.iconColor }
                         }
                     }
                     IconButton { icon: "skip_previous"; size: "m"; iconColor: Theme.fgSurface; onClicked: Player.previous() }
