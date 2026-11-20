@@ -310,7 +310,6 @@ impl HomeService {
         route::account_session(&self.auth.api(), &self.player)
     }
 
-    /// Сессия, подождав её до SESSION_WAIT: после входа движок librespot поднимается не сразу.
     /// Топ аккаунта за период ("SHORT_TERM" — 4 недели, "MEDIUM_TERM" — 6 месяцев, "LONG_TERM" — год), как
     /// статистика в телефоне: GraphQL через сессию, без неё или при сбое — Web API.
     pub async fn account_top(&self, time_range: &str, limit: u32) -> Result<(Vec<ArtistItem>, Vec<TrackItem>), String> {
@@ -342,6 +341,7 @@ impl HomeService {
         ))
     }
 
+    /// Сессия, подождав её до SESSION_WAIT: после входа движок librespot поднимается не сразу.
     async fn wait_session(&self) -> Option<Session> {
         let started = Instant::now();
         loop {

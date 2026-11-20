@@ -74,7 +74,7 @@ ColumnLayout {
         Total { seconds: root.stats.month ?? 0; label: I18n.t("This month") }
         Total {
             seconds: root.stats.total ?? 0
-            label: root.stats.since ? I18n.t("Since {0}", root.dateOf(root.stats.since).toLocaleDateString(Qt.locale(), "d MMM yyyy")) : ""
+            label: root.stats.since ? I18n.t("Since {0}", I18n.date(root.dateOf(root.stats.since))) : ""
         }
     }
 

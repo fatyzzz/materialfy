@@ -231,6 +231,8 @@ pub struct LibraryRust {
     pages_total: i32,
     history_revision: i32,
     account_top: QVariantMap,
+    /// последний запрошенный период: опоздавший ответ за прежний не затирает новый
+    account_top_wanted: String,
 }
 
 impl Default for LibraryRust {
@@ -261,6 +263,7 @@ impl Default for LibraryRust {
             pages_total: 0,
             history_revision: 0,
             account_top: QVariantMap::default(),
+            account_top_wanted: String::new(),
         }
     }
 }
@@ -406,8 +409,10 @@ impl qobject::Library {
         to_qmap(&ctx().services.history.listening_stats(days.clamp(1, 366) as usize))
     }
 
-    fn load_account_top(self: Pin<&mut Self>, range: &QString) {
+    fn load_account_top(mut self: Pin<&mut Self>, range: &QString) {
         let range = range.to_string();
+        self.as_mut().rust_mut().get_mut().account_top_wanted = range.clone();
+        let wanted = range.clone();
         let thread = self.qt_thread();
         ctx().rt.spawn(async move {
             // строки в форме TopEntry локальной статистики: одна разметка списка на оба источника
@@ -425,6 +430,9 @@ impl qobject::Library {
                 Err(error) => serde_json::json!({ "range": range, "ok": false, "error": error }),
             };
             let _ = thread.queue(move |mut library| {
+                if library.account_top_wanted != wanted {
+                    return;
+                }
                 library.as_mut().rust_mut().get_mut().account_top = to_qmap(&answer);
                 library.account_top_changed();
             });
