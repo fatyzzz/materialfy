@@ -31,12 +31,13 @@ TrackListPage {
     readonly property bool canEdit: _rev >= 0 && playlistId !== "" && Library.canEdit(playlistId)
     readonly property bool own: (info.ownerId ?? "") !== "" && info.ownerId === myId
     readonly property bool collaborative: info.collaborative === true
+    readonly property bool blend: info.blend === true
     readonly property string uri: (info.uri ?? "") !== "" ? info.uri : (playlistId !== "" ? "spotify:playlist:" + playlistId : "")
     property bool panelOpen: false
     readonly property bool compactPanel: width < 760
 
     title: (info.title ?? "") !== "" ? info.title : playlistTitle
-    overline: collaborative ? I18n.t("COLLABORATIVE PLAYLIST") : I18n.t("PLAYLIST")
+    overline: blend ? I18n.t("BLEND") : collaborative ? I18n.t("COLLABORATIVE PLAYLIST") : I18n.t("PLAYLIST")
     description: info.description ?? ""
     heroImage: (info.cover ?? "") !== "" ? info.cover : cover
     // Модель треков: стабильный экземпляр по id + счётчик владельцев у моста. playlistTracks зовём
@@ -79,7 +80,7 @@ TrackListPage {
     emptyIcon: "queue_music"
     emptyTitle: I18n.t("This playlist has no tracks")
     emptyText: canEdit ? I18n.t("Tap “Edit playlist” to add tracks") : ""
-    addedColumn: collaborative ? "by" : (model && model.count > 0 && (model.get(0).addedAt ?? "") !== "" ? "at" : "")
+    addedColumn: collaborative || blend ? "by" : (model && model.count > 0 && (model.get(0).addedAt ?? "") !== "" ? "at" : "")
     contentRightInset: editing && panelOpen && !compactPanel ? addPanel.panelWidth + 8 : 0
     onEditingChanged: if (!editing) panelOpen = false
     onCanEditChanged: if (!canEdit) editing = false
