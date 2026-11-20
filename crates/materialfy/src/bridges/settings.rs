@@ -138,6 +138,8 @@ pub mod qobject {
         #[qproperty(bool, engine_restart_pending, cxx_name = "engineRestartPending", READ, NOTIFY = engine_restart_pending_changed)]
         #[qproperty(QString, proxy_state, cxx_name = "proxyState", READ, NOTIFY = proxy_state_changed)]
         #[qproperty(QString, proxy_error, cxx_name = "proxyError", READ, NOTIFY = proxy_state_changed)]
+        /// свой токен Musixmatch сохранён (сам токен в QML не попадает)
+        #[qproperty(bool, musixmatch_token_set, cxx_name = "musixmatchTokenSet", READ, NOTIFY = musixmatch_token_set_changed)]
         /// «Web API ограничен…» (429/QUOTA_EXCEEDED); пусто — ограничений нет.
         #[qproperty(QString, web_api_limit, cxx_name = "webApiLimit", READ, NOTIFY = web_api_limit_changed)]
         #[qproperty(bool, system_reduced_motion, cxx_name = "systemReducedMotion", READ, CONSTANT)]
@@ -501,6 +503,9 @@ pub mod qobject {
         #[cxx_name = "proxyStateChanged"]
         fn proxy_state_changed(self: Pin<&mut Settings>);
         #[qsignal]
+        #[cxx_name = "musixmatchTokenSetChanged"]
+        fn musixmatch_token_set_changed(self: Pin<&mut Settings>);
+        #[qsignal]
         #[cxx_name = "webApiLimitChanged"]
         fn web_api_limit_changed(self: Pin<&mut Settings>);
 
@@ -533,6 +538,9 @@ pub mod qobject {
         #[cxx_name = "uiScaleAtLaunch"]
         fn ui_scale_at_launch(self: &Settings) -> i32;
         /// Применить прокси (пароль — в хранилище секретов, не в настройки).
+        #[qinvokable]
+        #[cxx_name = "setMusixmatchToken"]
+        fn set_musixmatch_token(self: Pin<&mut Settings>, token: &QString);
         #[qinvokable]
         #[cxx_name = "applyProxy"]
         fn apply_proxy(self: Pin<&mut Settings>, mode: &QString, host: &QString, port: &QString, username: &QString, password: &QString);
@@ -604,6 +612,7 @@ macro_rules! settings {
             engine_restart_pending: bool,
             proxy_state: QString,
             proxy_error: QString,
+            musixmatch_token_set: bool,
             web_api_limit: QString,
             system_reduced_motion: bool,
             system_taskbar_theme: QString,
@@ -620,6 +629,7 @@ macro_rules! settings {
                     engine_restart_pending: false,
                     proxy_state: QString::default(),
                     proxy_error: QString::default(),
+                    musixmatch_token_set: false,
                     web_api_limit: QString::default(),
                     system_reduced_motion: mf_platform::system::reduced_motion(),
                     system_taskbar_theme: QString::from(match mf_platform::system::taskbar_dark() {
@@ -874,6 +884,10 @@ impl qobject::Settings {
         crate::qt::ffi::ffi::post_quit();
     }
 
+    fn set_musixmatch_token(self: Pin<&mut Self>, token: &QString) {
+        ctx().services.auth.set_musixmatch_token(&token.to_string());
+    }
+
     fn apply_proxy(
         self: Pin<&mut Self>,
         mode: &QString,
@@ -903,6 +917,10 @@ impl qobject::Settings {
             self.as_mut().rust_mut().proxy_state = state;
             self.as_mut().rust_mut().proxy_error = error;
             self.as_mut().proxy_state_changed();
+        }
+        if self.musixmatch_token_set != snapshot.musixmatch_token_set {
+            self.as_mut().rust_mut().musixmatch_token_set = snapshot.musixmatch_token_set;
+            self.as_mut().musixmatch_token_set_changed();
         }
     }
 

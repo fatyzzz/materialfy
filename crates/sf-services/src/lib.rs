@@ -167,7 +167,9 @@ impl Services {
         // тексты — через общий клиент: тот же прокси, что у Web API, смена применяется сразу
         let fetcher = {
             let http = http.clone();
+            let token = auth.musixmatch_token.clone();
             mf_lyrics::LyricsFetcher::with_source(mf_platform::dirs::cache_subdir("lyrics"), move || http.client())
+                .with_mxm_user_token(move || token.read().map(|t| t.clone()).unwrap_or_default())
         };
         let lyrics = LyricsService::new(rt.clone(), player.clone(), fetcher);
         let devices = DevicesService::new(rt.clone(), auth.clone(), player.clone(), settings.clone());

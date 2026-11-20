@@ -1453,6 +1453,44 @@ Page {
             }
         }
 
+        SettingRow {
+            title: I18n.t("Musixmatch token")
+            description: I18n.t("Musixmatch refuses the built-in anonymous token. Paste your own user token to get word-timed lyrics from it")
+            Row {
+                spacing: 8
+                // сам токен в QML не приходит: он в хранилище секретов ОС
+                TextField {
+                    id: mxmTokenField
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: page.compact ? 180 : 240
+                    placeholderText: Settings.musixmatchTokenSet ? "••••••••" : I18n.t("optional")
+                    echoMode: TextInput.Password
+                    function commit() {
+                        const t = text.trim()
+                        if (t !== "")
+                            Settings.setMusixmatchToken(t)
+                        text = ""
+                    }
+                    onAccepted: commit()
+                    Connections {
+                        target: mxmTokenField.inputItem
+                        function onActiveFocusChanged() {
+                            if (!mxmTokenField.inputItem.activeFocus)
+                                mxmTokenField.commit()
+                        }
+                    }
+                }
+                Button {
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: Settings.musixmatchTokenSet
+                    text: I18n.t("Remove")
+                    style: "outlined"
+                    size: "xs"
+                    onClicked: Settings.setMusixmatchToken("")
+                }
+            }
+        }
+
     }
 
     // ================= Воспроизведение =================

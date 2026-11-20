@@ -92,11 +92,11 @@ async fn http_text(build: impl Fn() -> reqwest::RequestBuilder) -> Result<String
                 } else {
                     match resp.bytes().await {
                         Ok(body) => return Ok(String::from_utf8_lossy(&body).into_owned()),
-                        Err(e) => HttpError::Net(error_chain(&e)),
+                        Err(e) => HttpError::Net(error_chain(&e.without_url())),
                     }
                 }
             }
-            Err(e) => HttpError::Net(error_chain(&e)),
+            Err(e) => HttpError::Net(error_chain(&e.without_url())),
         };
         if attempt == RETRIES {
             return Err(err);
