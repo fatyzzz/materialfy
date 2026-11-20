@@ -1,6 +1,6 @@
 //! Главная (исполнитель «services-extra»): полки как spotifast/src/ui/home.rs + App::load_home —
 //! «Быстрый доступ» (Любимые + 5 плейлистов), «Недавно прослушанное» (история: сессия/Web API + локальная),
-//! «Сделано для вас» и личные разделы главной Spotify с их заголовками («Рекомендуемые станции»…),
+//! «Сделано для вас» и разделы главной Spotify с их заголовками («Рекомендуемые станции»…),
 //! «Новинки» (ReleasesService), «Продолжить подкасты», «Топ-исполнители», «Топ-треки».
 //! Главная, «Для тебя» и топ читаются через сессию librespot (data::home_feed: GraphQL и spclient) — без квоты
 //! Web API. Web API — только запасной путь без сессии, с таймаутом: 429 не держит и не роняет главную. Пустой
@@ -56,7 +56,7 @@ struct HomeData {
     /// сессия встала во время обновления без неё — по его окончании обновить ещё раз
     session_pending: bool,
     made_for_you: Vec<LibraryEntry>,
-    /// личные разделы главной Spotify — полками после «Сделано для вас»
+    /// разделы главной Spotify — полками после «Сделано для вас»
     feed: Vec<HomeShelf>,
     /// «Любимые исполнители» главной Spotify — запасной топ
     favorite_artists: Vec<ArtistItem>,
@@ -246,14 +246,22 @@ impl HomeService {
                         let liked = self.library.liked().len() as i64;
                         vec![shelves::shelf(key, &shelves::quick_tiles(&liked_uri, liked, &playlists))]
                     }
-                    shelves::RECENT => vec![shelves::shelf(key, &shelves::recent_tiles(self.plays(), &playlists))],
-                    // за «Сделано для вас» — личные разделы главной Spotify
+                    // свои недавние обновляются сразу после прослушивания, полка Spotify — раз в 10 минут
+                    shelves::RECENT => {
+                        let local = shelves::recent_tiles(self.plays(), &playlists);
+                        match data.feed.iter().find(|s| s.key == feed::RECENTLY_PLAYED_SHELF) {
+                            Some(spotify) if local.is_empty() => vec![spotify.clone()],
+                            _ => vec![shelves::shelf(key, &local)],
+                        }
+                    }
+                    // за «Сделано для вас» — разделы главной Spotify
                     shelves::MADE_FOR_YOU => std::iter::once(shelves::shelf(key, &data.made_for_you))
-                        .chain(data.feed.iter().filter(|s| !hidden.contains(&s.key)).cloned())
+                        .chain(data.feed.iter().filter(|s| !hidden.contains(&s.key) && s.key != feed::RECENTLY_PLAYED_SHELF).cloned())
                         .collect(),
                     shelves::NEW_RELEASES => {
                         vec![shelves::shelf(key, &shelves::new_release_tiles(fresh.radar.as_ref(), &fresh.releases))]
                     }
+                    shelves::UPCOMING => vec![shelves::shelf(key, &shelves::upcoming_tiles(&fresh.upcoming))],
                     shelves::PODCASTS => vec![shelves::shelf(key, &data.podcasts)],
                     shelves::TOP_ARTISTS if !data.top_artists.is_empty() => vec![shelves::shelf(key, &data.top_artists)],
                     shelves::TOP_ARTISTS if !data.favorite_artists.is_empty() => {
@@ -300,6 +308,37 @@ impl HomeService {
 
     fn session(&self) -> Option<Session> {
         route::account_session(&self.auth.api(), &self.player)
+    }
+
+    /// Топ аккаунта за период ("SHORT_TERM" — 4 недели, "MEDIUM_TERM" — 6 месяцев, "LONG_TERM" — год), как
+    /// статистика в телефоне: GraphQL через сессию, без неё или при сбое — Web API.
+    pub async fn account_top(&self, time_range: &str, limit: u32) -> Result<(Vec<ArtistItem>, Vec<TrackItem>), String> {
+        let api = self.auth.api();
+        let http = api.http();
+        if let Some(session) = self.wait_session().await {
+            match tokio::time::timeout(SESSION_TIMEOUT, home_feed::top(&http, &session, limit, time_range)).await {
+                Ok(Ok((artists, tracks))) => {
+                    return Ok((
+                        artists.iter().map(sf_api::map::artist_item).collect(),
+                        tracks.iter().map(sf_api::map::track_item).collect(),
+                    ));
+                }
+                Ok(Err(error)) => tracing::debug!("account top via session: {error:#}"),
+                Err(_) => tracing::debug!("account top via session: timeout"),
+            }
+        }
+        let range = time_range.to_lowercase();
+        let read = async {
+            let client = api.client_for(Operation::UserData).await?;
+            let artists = client.top_artists(&range, limit).await?;
+            let tracks = client.top_tracks(&range, limit, 0).await?;
+            Ok::<_, sf_api::ApiError>((artists, tracks))
+        };
+        let (artists, tracks) = web(read).await?;
+        Ok((
+            artists.items.iter().map(sf_api::map::artist_item).collect(),
+            tracks.items.iter().map(sf_api::map::track_item).collect(),
+        ))
     }
 
     /// Сессия, подождав её до SESSION_WAIT: после входа движок librespot поднимается не сразу.
@@ -420,7 +459,7 @@ impl HomeService {
         // топ за 4 недели: GraphQL через сессию (пустой — тоже ответ: заменит история), без сессии — Web API
         let top = async {
             if let Some(session) = &session {
-                match tokio::time::timeout(SESSION_TIMEOUT, home_feed::top(&http, session, shelves::TOP_LIMIT)).await {
+                match tokio::time::timeout(SESSION_TIMEOUT, home_feed::top(&http, session, shelves::TOP_LIMIT, "SHORT_TERM")).await {
                     Ok(Ok((artists, tracks))) => {
                         let artists: Vec<ArtistItem> = artists.iter().map(sf_api::map::artist_item).collect();
                         let tracks: Vec<TrackItem> = tracks.iter().map(sf_api::map::track_item).collect();

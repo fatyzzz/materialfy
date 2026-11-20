@@ -106,7 +106,7 @@ pub struct ArtistItem {
     pub followers: i64,
 }
 
-/// PLAYLIST_KEYS: playlistId, uri, title, description, trackCount, cover, owner, ownerId, canEdit, collaborative,
+/// PLAYLIST_KEYS: playlistId, uri, title, description, trackCount, cover, owner, ownerId, canEdit, collaborative, blend,
 /// public, snapshotId, pinned.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
@@ -123,6 +123,7 @@ pub struct PlaylistItem {
     /// свой, совместный или по приглашению (права из rootlist librespot)
     pub can_edit: bool,
     pub collaborative: bool,
+    pub blend: bool,
     pub public: bool,
     pub snapshot_id: String,
     /// закреплён локально
@@ -286,13 +287,15 @@ pub enum QueueSection {
     Context,
 }
 
-/// Строка Player.queue (QUEUE_KEYS): section, uid + все ключи трека.
+/// Строка Player.queue (QUEUE_KEYS): section, uid, recommended + все ключи трека.
 #[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct QueueRow {
     pub section: QueueSection,
     /// уникален у каждого вхождения (дубликаты разрешены); стабилен, пока строка в очереди
     pub uid: u64,
+    /// рекомендация Smart Shuffle, а не трек самого плейлиста
+    pub recommended: bool,
     #[serde(flatten)]
     pub track: TrackItem,
 }

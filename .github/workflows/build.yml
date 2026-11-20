@@ -39,7 +39,7 @@ permissions:
 
 env:
   QT_VERSION: "6.12.0"
-  QT_ADDONS: "qtshadertools qtimageformats"
+  QT_ADDONS: "qtshadertools qtimageformats qtmultimedia"
   CARGO_TERM_COLOR: always
   CARGO_INCREMENTAL: "0"
   RUST_BACKTRACE: "1"

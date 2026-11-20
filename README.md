@@ -298,7 +298,7 @@ It does not ask for access to your email.
 Common requirements:
 
 - Rust 1.98 or later ([rustup](https://rustup.rs); on Windows the `stable-x86_64-pc-windows-msvc` toolchain).
-- Qt 6.12 with the qtdeclarative, qtsvg, qtshadertools and qtimageformats modules. It can be installed with the
+- Qt 6.12 with the qtdeclarative, qtsvg, qtshadertools, qtimageformats and qtmultimedia (Canvas videos) modules. It can be installed with the
   Qt Online Installer or with [`install_qt.py`](.github/scripts/install_qt.py), the script CI uses: it downloads
   archives from download.qt.io and verifies checksums.
 - Python 3 for `install_qt.py`.

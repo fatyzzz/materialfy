@@ -106,6 +106,8 @@ pub struct AuthSnapshot {
     /// применение прокси: "" | "applying" | "ok" | "error"
     pub proxy_state: String,
     pub proxy_error: String,
+    /// личный токен Musixmatch сохранён (сам токен — только в хранилище секретов и в musixmatch_token)
+    pub musixmatch_token_set: bool,
     /// параметры движка в настройках (glue::engine_config) отличаются от запущенного; сброс — в restart_engine
     pub engine_restart_pending: bool,
 }
@@ -251,6 +253,8 @@ pub struct AuthService {
     events: broadcast::Sender<AuthEvent>,
     /// действующий прокси — для оболочки (QNetworkAccessManager картинок QML)
     proxy: watch::Sender<ProxyConfig>,
+    /// личный токен Musixmatch для текстов ("" — анонимный); читает LyricsFetcher
+    pub musixmatch_token: Arc<std::sync::RwLock<String>>,
     inner: Mutex<Inner>,
     me: Weak<AuthService>,
 }
@@ -387,6 +391,7 @@ impl AuthService {
             snapshot: watch::channel(snapshot).0,
             events: broadcast::channel(64).0,
             proxy: watch::channel(proxy.clone()).0,
+            musixmatch_token: Arc::default(),
             inner: Mutex::new(Inner {
                 started: false,
                 generation: 0,
@@ -567,6 +572,15 @@ impl AuthService {
             }
         };
         self.install_proxy(settings_proxy(&self.settings, password.as_ref()));
+        match self.store.lease(Slot::Musixmatch).load().await {
+            Ok(loaded) => {
+                if let Some(StoredGrant::Musixmatch(token)) = loaded.grant {
+                    *self.musixmatch_token.write().unwrap_or_else(|e| e.into_inner()) = token;
+                    self.update(|s| s.musixmatch_token_set = true);
+                }
+            }
+            Err(error) => tracing::warn!("musixmatch token not read: {error:#}"),
+        }
 
         let personal_id = self.settings.get_str(SettingKey::WebClientId).trim().to_owned();
         self.api.set_state(ApiSource::Shared, SessionState::Authorizing);
@@ -1858,6 +1872,26 @@ impl AuthService {
                 });
             }
         }
+    }
+
+    /// Свой токен Musixmatch: "" — удалить. Применяется сразу, хранится в хранилище секретов ОС.
+    pub fn set_musixmatch_token(&self, token: &str) {
+        let token = token.trim().to_owned();
+        *self.musixmatch_token.write().unwrap_or_else(|e| e.into_inner()) = token.clone();
+        self.update(|s| s.musixmatch_token_set = !token.is_empty());
+        if token.is_empty() {
+            let _ = self.store.revoke(Slot::Musixmatch);
+            self.delete_slot(Slot::Musixmatch);
+            return;
+        }
+        self.store.invalidate(Slot::Musixmatch);
+        let pending = self.store.lease(Slot::Musixmatch).save(StoredGrant::Musixmatch(token));
+        let notice = self.storage_notice();
+        self.rt.spawn(async move {
+            if let Err(error) = pending.await {
+                notice(error);
+            }
+        });
     }
 
     /// Применить прокси: проверить поля; только после успешной проверки записать ProxyMode/Host/Port/Username

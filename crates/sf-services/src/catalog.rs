@@ -147,6 +147,8 @@ enum Cached {
     Show(ShowPage),
     Episode(EpisodePage),
     Track(TrackItem),
+    /// ссылка на Canvas; None — у трека его нет
+    Canvas(Option<String>),
 }
 
 pub struct CatalogService {
@@ -892,10 +894,18 @@ impl CatalogService {
 
     /// Canvas трека — ссылка на зацикленное видео; None — его нет или сессия не ответила.
     pub async fn canvas(&self, track_id: &str) -> Option<String> {
+        // плеер и островок спрашивают один трек при каждом открытии — ответ, и «нет Canvas» тоже, держим в кэше
+        let key = format!("canvas:{track_id}");
+        if let Some(Cached::Canvas(url)) = self.cached(&key) {
+            return url;
+        }
         let session = route::account_session(&self.auth.api(), &self.player)?;
         let http = self.auth.api().http();
         match tokio::time::timeout(DETAILS_DEADLINE, canvas::canvas_url(&http, &session, track_id)).await {
-            Ok(Ok(url)) => url,
+            Ok(Ok(url)) => {
+                self.store(key, Cached::Canvas(url.clone()));
+                url
+            }
             Ok(Err(error)) => {
                 tracing::debug!("canvas {track_id}: {error:#}");
                 None

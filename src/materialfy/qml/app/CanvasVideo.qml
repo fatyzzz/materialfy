@@ -29,5 +29,4 @@ Item {
         fillMode: VideoOutput.PreserveAspectCrop
     }
     onRunningChanged: running ? player.play() : player.pause()
-    Component.onCompleted: if (running) player.play()
 }

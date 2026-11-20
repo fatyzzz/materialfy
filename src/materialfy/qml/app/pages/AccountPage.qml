@@ -411,6 +411,7 @@ Page {
                             visible: (page.account.avatar ?? "") !== "" && status === Image.Ready
                             source: page.account.avatar ?? ""
                             shape: "cookie9"
+                            eager: true         // скрыта до загрузки, а без eager скрытая картинка не грузится
                         }
                     }
 
@@ -475,6 +476,11 @@ Page {
                         StatCard { icon: "album"; value: Library.albums ? Library.albums.count : 0; label: I18n.t("Albums"); onClicked: page._go("library", { kind: "albums" }) }
                         StatCard { icon: "person"; value: Library.artists ? Library.artists.count : 0; label: I18n.t("Artists"); onClicked: page._go("library", { kind: "artists" }) }
                     }
+                }
+
+                ListeningStats {
+                    Layout.fillWidth: true
+                    narrow: acc.narrow
                 }
 
                 // Этот компьютер: звук и где лежат ключи входа

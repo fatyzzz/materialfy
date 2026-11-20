@@ -794,9 +794,29 @@ floating_key_hook(QObject* object, bool on)
   return key_hook != nullptr;
 }
 
+bool
+floating_is_wayland()
+{
+  return false;
+}
+
 } // namespace mf
 
 #else
+
+#if !defined(__APPLE__) && QT_CONFIG(xcb)
+#include <QtCore/QAbstractNativeEventFilter>
+#include <QtCore/QCoreApplication>
+#include <QtCore/QMetaObject>
+#include <QtCore/QPointer>
+#include <QtCore/QVariant>
+#include <QtGui/qguiapplication_platform.h>
+
+#include <array>
+#include <cstdlib>
+
+#include <xcb/xcb.h>
+#endif
 
 namespace mf {
 
@@ -886,12 +906,141 @@ floating_taskbar_detach(QObject* window)
   (void)window;
 }
 
+#if !defined(__APPLE__) && QT_CONFIG(xcb)
+namespace {
+// X11: пока курсор над островком, ← → ↑ ↓ и пробел захвачены на корневом окне (XGrabKey): фокус не нужен, с Ctrl,
+// Alt и Super клавиши идут как обычно. Процесс упал — захват снимает сам X-сервер
+class X11Keys : public QAbstractNativeEventFilter
+{
+public:
+  QPointer<QWindow> window;
+  xcb_connection_t* conn = nullptr;
+  xcb_window_t root = 0;
+  std::array<xcb_keycode_t, 6> codes{}; // [1..5] — коды floatingKey
+  std::array<bool, 6> down{};
+  bool grabbed = false;
+  // автоповтор без XKB detectable — пара «отпустил + нажал» с одним временем
+  xcb_keycode_t released = 0;
+  xcb_timestamp_t released_at = 0;
+
+  bool nativeEventFilter(const QByteArray& type, void* message, qintptr*) override
+  {
+    if (!grabbed || type != "xcb_generic_event_t")
+      return false;
+    auto* event = static_cast<xcb_generic_event_t*>(message);
+    const uint8_t kind = event->response_type & 0x7f;
+    if (kind != XCB_KEY_PRESS && kind != XCB_KEY_RELEASE)
+      return false;
+    auto* key = reinterpret_cast<xcb_key_press_event_t*>(event);
+    if (key->event != root)
+      return false;
+    int k = 1;
+    while (k <= 5 && codes[k] != key->detail)
+      ++k;
+    if (k > 5)
+      return false;
+    if (kind == XCB_KEY_RELEASE) {
+      down[k] = false;
+      released = key->detail;
+      released_at = key->time;
+      return true;
+    }
+    // громкость идёт шагами дальше, трек и пауза — один раз на нажатие
+    const bool repeat = down[k] || (released == key->detail && released_at == key->time);
+    down[k] = true;
+    if (window && (!repeat || k == 3 || k == 4))
+      QMetaObject::invokeMethod(window.data(), "floatingKey", Qt::QueuedConnection, Q_ARG(QVariant, QVariant(k)));
+    return true;
+  }
+
+  // NumLock (Mod2) и CapsLock (Lock) — тоже без модификаторов для пользователя
+  void grab(bool on)
+  {
+    static constexpr uint16_t mods[] = { 0, XCB_MOD_MASK_LOCK, XCB_MOD_MASK_2, XCB_MOD_MASK_LOCK | XCB_MOD_MASK_2 };
+    bool any = false;
+    for (int k = 1; k <= 5; ++k) {
+      if (!codes[k])
+        continue;
+      for (const uint16_t m : mods) {
+        if (!on) {
+          xcb_ungrab_key(conn, codes[k], root, m);
+          continue;
+        }
+        // занято другой программой (BadAccess) — эта клавиша идёт как обычно
+        if (xcb_generic_error_t* error = xcb_request_check(
+              conn, xcb_grab_key_checked(conn, 0, root, m, codes[k], XCB_GRAB_MODE_ASYNC, XCB_GRAB_MODE_ASYNC)))
+          free(error);
+        else
+          any = true;
+      }
+    }
+    xcb_flush(conn);
+    grabbed = on && any;
+    down = {};
+  }
+
+  // коды клавиш — по раскладке сервера, а не числами evdev
+  void read_codes()
+  {
+    const xcb_setup_t* setup = xcb_get_setup(conn);
+    const int count = setup->max_keycode - setup->min_keycode + 1;
+    xcb_get_keyboard_mapping_reply_t* reply =
+      xcb_get_keyboard_mapping_reply(conn, xcb_get_keyboard_mapping(conn, setup->min_keycode, count), nullptr);
+    if (!reply)
+      return;
+    static constexpr xcb_keysym_t syms[] = { 0, 0xff51, 0xff53, 0xff52, 0xff54, 0x20 }; // ← → ↑ ↓ пробел
+    const xcb_keysym_t* map = xcb_get_keyboard_mapping_keysyms(reply);
+    const int per = reply->keysyms_per_keycode;
+    for (int i = 0; per > 0 && i < count; ++i)
+      for (int k = 1; k <= 5; ++k)
+        if (!codes[k] && map[i * per] == syms[k])
+          codes[k] = static_cast<xcb_keycode_t>(setup->min_keycode + i);
+    free(reply);
+  }
+};
+} // namespace
+
+bool
+floating_key_hook(QObject* object, bool on)
+{
+  static X11Keys keys;
+  auto* window = qobject_cast<QWindow*>(object);
+  if (!on) {
+    // снимает только своё окно: на двух мониторах курсор переходит с одного островка на другой
+    if (keys.grabbed && (!window || window == keys.window.data() || !keys.window))
+      keys.grab(false);
+    if (!window || window == keys.window.data())
+      keys.window = nullptr;
+    return true;
+  }
+  auto* x11 = qGuiApp ? qGuiApp->nativeInterface<QNativeInterface::QX11Application>() : nullptr;
+  if (!window || !x11 || !x11->connection())
+    return false;
+  if (!keys.conn) {
+    keys.conn = x11->connection();
+    keys.root = xcb_setup_roots_iterator(xcb_get_setup(keys.conn)).data->root;
+    keys.read_codes();
+    QCoreApplication::instance()->installNativeEventFilter(&keys);
+  }
+  keys.window = window;
+  if (!keys.grabbed)
+    keys.grab(true);
+  return keys.grabbed;
+}
+#else
 bool
 floating_key_hook(QObject* window, bool on)
 {
   (void)window;
   (void)on;
   return false;
+}
+#endif
+
+bool
+floating_is_wayland()
+{
+  return QGuiApplication::platformName().startsWith(QLatin1String("wayland"));
 }
 
 void

@@ -17,6 +17,9 @@ Item {
     property bool opticalCenter: true
     // true — ширина по видимому контуру глифа (для иконок рядом с текстом: ровные отступы)
     property bool tight: false
+    // Предок растянут через scale (островок): нативный глиф растеризуется в своём размере и при растяжении
+    // мылится, поэтому рисуем его сразу в итоговом размере и сжимаем обратно
+    property real renderScale: 1
     readonly property real inkWidth: _ink.width > 0 ? _ink.width : size
     readonly property real inkHeight: _ink.height > 0 ? _ink.height : size
 
@@ -34,11 +37,13 @@ Item {
         textFormat: Text.PlainText
         renderType: Text.NativeRendering  // distance-field (QtRendering) дырявит заливку вариативного шрифта
         font.family: Theme.iconFamily
-        font.pixelSize: root.size
+        font.pixelSize: root.size * root.renderScale
         font.variableAxes: ({ "FILL": root.fill, "wght": root.weight, "GRAD": root.grade, "opsz": Math.max(20, Math.min(48, root.size)) })
+        scale: 1 / root.renderScale
+        transformOrigin: Item.TopLeft
 
         // Целые пиксели: нативный растеризатор иначе размывает края.
-        x: Math.round((root.width - implicitWidth) / 2 - root._ink.x)
-        y: Math.round((root.height - implicitHeight) / 2 - root._ink.y)
+        x: Math.round(((root.width - implicitWidth / root.renderScale) / 2 - root._ink.x) * root.renderScale) / root.renderScale
+        y: Math.round(((root.height - implicitHeight / root.renderScale) / 2 - root._ink.y) * root.renderScale) / root.renderScale
     }
 }

@@ -82,9 +82,9 @@ if [ ${#wayland[@]} -gt 0 ]; then
 fi
 
 # plugin-qt does not deploy these: without graphics-integration GL cannot be created on Wayland (crash),
-# without iconengines the SVG window and tray icons do not load; linuxdeploy collects their dependencies
+# without iconengines the SVG window and tray icons do not load, without multimedia Canvas videos do not play; linuxdeploy collects their dependencies
 mkdir -p "$APPDIR/usr/plugins"
-for d in iconengines wayland-graphics-integration-client wayland-decoration-client wayland-shell-integration; do
+for d in iconengines multimedia wayland-graphics-integration-client wayland-decoration-client wayland-shell-integration; do
     [ -d "$QTDIR/plugins/$d" ] && cp -r "$QTDIR/plugins/$d" "$APPDIR/usr/plugins/"
 done
 

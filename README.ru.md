@@ -297,7 +297,7 @@ Spotify выдаёт два отдельных разрешения, и прог
 Общие требования:
 
 - Rust 1.98 или новее ([rustup](https://rustup.rs); в Windows toolchain `stable-x86_64-pc-windows-msvc`).
-- Qt 6.12 с модулями qtdeclarative, qtsvg, qtshadertools и qtimageformats. Его можно поставить через
+- Qt 6.12 с модулями qtdeclarative, qtsvg, qtshadertools, qtimageformats и qtmultimedia (видео Canvas). Его можно поставить через
   Qt Online Installer или скриптом [`install_qt.py`](.github/scripts/install_qt.py), которым пользуется CI:
   он качает архивы с download.qt.io и проверяет контрольные суммы.
 - Python 3 для `install_qt.py`.

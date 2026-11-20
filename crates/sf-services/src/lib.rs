@@ -167,7 +167,9 @@ impl Services {
         // тексты — через общий клиент: тот же прокси, что у Web API, смена применяется сразу
         let fetcher = {
             let http = http.clone();
+            let token = auth.musixmatch_token.clone();
             mf_lyrics::LyricsFetcher::with_source(mf_platform::dirs::cache_subdir("lyrics"), move || http.client())
+                .with_mxm_user_token(move || token.read().map(|t| t.clone()).unwrap_or_default())
         };
         let lyrics = LyricsService::new(rt.clone(), player.clone(), fetcher);
         let devices = DevicesService::new(rt.clone(), auth.clone(), player.clone(), settings.clone());
@@ -209,7 +211,10 @@ impl Services {
     /// При выходе (из GUI-потока после exec): сохранить сессию и историю, остановить движок и медиаклавиши.
     /// Блокирует ≤ 2 с.
     pub fn shutdown(&self) {
-        self.player.shutdown();
+        // последний трек сессии: его конец приходит только отсюда
+        if let Some(ended) = self.player.shutdown().filter(|ended| ended.local) {
+            self.history.note_played(ended.track, ended.context, ended.played);
+        }
         self.history.flush();
         if let Some(stop) = lock(&self.media).take() {
             stop.stop(Duration::from_millis(500));

@@ -15,7 +15,7 @@ const ALBUM_KEYS: &[&str] = &[
 const ARTIST_KEYS: &[&str] = &["artistId", "uri", "name", "cover", "coverLarge", "genres", "followers"];
 const PLAYLIST_KEYS: &[&str] = &[
     "playlistId", "uri", "title", "description", "trackCount", "cover", "owner", "ownerId", "canEdit", "collaborative",
-    "public", "snapshotId", "pinned",
+    "blend", "public", "snapshotId", "pinned",
 ];
 const SHOW_KEYS: &[&str] =
     &["showId", "uri", "name", "publisher", "description", "cover", "coverLarge", "totalEpisodes", "saved", "explicit"];
@@ -171,8 +171,8 @@ fn device_keys() {
 
 #[test]
 fn queue_row_is_flat_track() {
-    assert_eq!(keys(&QueueRow::default()), expected(&[&["section", "uid"], TRACK_KEYS]));
-    let row = QueueRow { section: QueueSection::Manual, uid: 7, track: track() };
+    assert_eq!(keys(&QueueRow::default()), expected(&[&["section", "uid", "recommended"], TRACK_KEYS]));
+    let row = QueueRow { section: QueueSection::Manual, uid: 7, recommended: false, track: track() };
     let value = serde_json::to_value(&row).unwrap();
     assert_eq!(value["section"], json!("manual"));
     assert_eq!(value["uid"], json!(7));

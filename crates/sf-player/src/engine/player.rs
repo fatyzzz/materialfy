@@ -763,10 +763,9 @@ impl Engine {
             PlayerCommand::Transfer => spirc.transfer(None)?,
             PlayerCommand::Preload(uri) => self.player.preload(SpotifyUri::from_uri(&uri)?),
             PlayerCommand::Load(spec) => {
-                let playing_track = spec
-                    .offset_uri
-                    .clone()
-                    .map(PlayingTrack::Uri)
+                let playing_track = same_row_uid(&spirc.playback_state().borrow(), &spec)
+                    .map(PlayingTrack::Uid)
+                    .or_else(|| spec.offset_uri.clone().map(PlayingTrack::Uri))
                     .or_else(|| spec.offset_index.map(PlayingTrack::Index));
                 // A load resets librespot's options, including repeat. Pass
                 // the user's preference even when shuffle is off.
@@ -791,6 +790,24 @@ impl Engine {
         }
         Ok(())
     }
+}
+
+/// The playing row's uid when `spec` reloads the playing context from the
+/// playing track with Smart Shuffle's lens switched on or off. Spotify can
+/// give a track another id (relinking) in the other form of the context, so
+/// the uri may be missing there, while the playlist row keeps its uid.
+fn same_row_uid(
+    state: &Option<Arc<librespot_protocol::player::PlayerState>>,
+    spec: &LoadSpec,
+) -> Option<String> {
+    let state = state.as_ref()?;
+    let context = spec.context_uri.as_deref()?;
+    let base = |uri: &str| uri.split('?').next().unwrap_or_default().to_owned();
+    (context != state.context_uri
+        && base(context) == base(&state.context_uri)
+        && spec.offset_uri.as_deref() == Some(state.track.uri.as_str())
+        && !state.track.uid.is_empty())
+    .then(|| state.track.uid.clone())
 }
 
 fn command_interrupts_audio(state: &LocalState, command: &PlayerCommand) -> bool {
@@ -1297,6 +1314,29 @@ fn decode_folder_name(encoded: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn switching_smart_shuffle_finds_the_playing_row_by_uid() {
+        let mut state = librespot_protocol::player::PlayerState {
+            context_uri: "spotify:playlist:p".into(),
+            ..Default::default()
+        };
+        let track = state.track.mut_or_insert_default();
+        track.uri = "spotify:track:relinked".into();
+        track.uid = "row1".into();
+        let state = Some(Arc::new(state));
+        let mut spec = LoadSpec {
+            context_uri: Some("spotify:playlist:p?spotify-apply-lenses=enhance".into()),
+            offset_uri: Some("spotify:track:relinked".into()),
+            ..LoadSpec::default()
+        };
+        assert_eq!(same_row_uid(&state, &spec).as_deref(), Some("row1"));
+        // the same context again, or another one, goes by the uri
+        spec.context_uri = Some("spotify:playlist:p".into());
+        assert_eq!(same_row_uid(&state, &spec), None);
+        spec.context_uri = Some("spotify:playlist:q?spotify-apply-lenses=enhance".into());
+        assert_eq!(same_row_uid(&state, &spec), None);
+    }
+
     #[test]
     fn loading_another_song_keeps_repeat_with_or_without_shuffle() {
         for shuffle in [None, Some(false), Some(true)] {

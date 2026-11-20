@@ -330,6 +330,7 @@ Window {
                             episode: Qt.resolvedUrl("app/pages/EpisodePage.qml"),
                             radio: Qt.resolvedUrl("app/pages/RadioPage.qml"),
                             releases: Qt.resolvedUrl("app/pages/ReleasesPage.qml"),
+                            recents: Qt.resolvedUrl("app/pages/RecentsPage.qml"),
                             settings: Qt.resolvedUrl("app/pages/SettingsPage.qml"),
                             account: Qt.resolvedUrl("app/pages/AccountPage.qml"),
                             playback: Qt.resolvedUrl("app/pages/PlaybackSetupPage.qml")
@@ -477,7 +478,7 @@ Window {
     Binding {
         target: Player
         property: "levelsWanted"
-        value: nowPlaying.wantsLevels || (islandWindow.object !== null && islandWindow.object.wantsLevels)
+        value: nowPlaying.wantsLevels || win._islandWantsLevels
             || (taskbarWindow.object !== null && taskbarWindow.object.wantsLevels)
     }
 
@@ -505,6 +506,16 @@ Window {
         const count = screens ? screens.length : 1
         // macOS: на всех экранах, а покажется только тот, где есть вырез (FloatingIsland.qml)
         return win.screenIndicesFromSetting(Qt.platform.os === "osx" ? "all" : Settings.floatingIslandScreens, count)
+    }
+
+    // островков по одному на монитор: object — только первый, а виден (и рисует полоски) может быть другой
+    readonly property bool _islandWantsLevels: {
+        for (let i = 0; i < islandWindow.count; ++i) {
+            const island = islandWindow.objectAt(i)
+            if (island && island.wantsLevels)
+                return true
+        }
+        return false
     }
 
     readonly property var activeTaskbarScreens: {

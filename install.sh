@@ -147,7 +147,7 @@ if [ -z "$QMAKE" ]; then
     QT_PRIVATE="$DIR/qt/$QT_VERSION/$QT_ARCH"
     say "Qt $QT_VERSION is not installed on the system, downloading it into $QT_PRIVATE (about 250 MB)"
     QMAKE="$(python3 "$DIR/.github/scripts/install_qt.py" --host "$QT_HOST" --version "$QT_VERSION" \
-        --addons qtshadertools qtimageformats --out "$QT_PRIVATE" | tail -n1)"
+        --addons qtshadertools qtimageformats qtmultimedia --out "$QT_PRIVATE" | tail -n1)"
 fi
 qt_ok "$QMAKE" || fail "Qt ${QT_VERSION%.*}+ not found ($QMAKE). Point to your own: MATERIALFY_QMAKE=/path/to/qmake6"
 say "Qt $("$QMAKE" -query QT_VERSION): $QMAKE"

@@ -103,6 +103,7 @@ pub mod qobject {
         #[qproperty(f64, playback_speed, cxx_name = "playbackSpeed", READ, WRITE = set_playback_speed, NOTIFY = playback_speed_changed)]
         #[qproperty(i32, crossfade, READ, WRITE = set_crossfade, NOTIFY = crossfade_changed)]
         #[qproperty(bool, dj_voice, cxx_name = "djVoice", READ, WRITE = set_dj_voice, NOTIFY = dj_voice_changed)]
+        #[qproperty(bool, report_plays, cxx_name = "reportPlays", READ, WRITE = set_report_plays, NOTIFY = report_plays_changed)]
         #[qproperty(QString, device_name, cxx_name = "deviceName", READ, WRITE = set_device_name, NOTIFY = device_name_changed)]
         #[qproperty(QString, web_client_id, cxx_name = "webClientId", READ, WRITE = set_web_client_id, NOTIFY = web_client_id_changed)]
         /// окно «Web API ограничен» с инструкцией больше не показывать
@@ -129,6 +130,7 @@ pub mod qobject {
         #[qproperty(QString, floating_edge, cxx_name = "floatingEdge", READ, WRITE = set_floating_edge, NOTIFY = floating_edge_changed)]
         #[qproperty(i32, floating_free_x, cxx_name = "floatingFreeX", READ, WRITE = set_floating_free_x, NOTIFY = floating_free_x_changed)]
         #[qproperty(i32, floating_free_y, cxx_name = "floatingFreeY", READ, WRITE = set_floating_free_y, NOTIFY = floating_free_y_changed)]
+        #[qproperty(i32, floating_scale, cxx_name = "floatingScale", READ, WRITE = set_floating_scale, NOTIFY = floating_scale_changed)]
         #[qproperty(i32, floating_offset_x, cxx_name = "floatingOffsetX", READ, WRITE = set_floating_offset_x, NOTIFY = floating_offset_x_changed)]
         #[qproperty(bool, floating_hide_maximized, cxx_name = "floatingHideMaximized", READ, WRITE = set_floating_hide_maximized, NOTIFY = floating_hide_maximized_changed)]
         #[qproperty(QString, floating_island_screens, cxx_name = "floatingIslandScreens", READ, WRITE = set_floating_island_screens, NOTIFY = floating_island_screens_changed)]
@@ -139,6 +141,8 @@ pub mod qobject {
         #[qproperty(bool, engine_restart_pending, cxx_name = "engineRestartPending", READ, NOTIFY = engine_restart_pending_changed)]
         #[qproperty(QString, proxy_state, cxx_name = "proxyState", READ, NOTIFY = proxy_state_changed)]
         #[qproperty(QString, proxy_error, cxx_name = "proxyError", READ, NOTIFY = proxy_state_changed)]
+        /// свой токен Musixmatch сохранён (сам токен в QML не попадает)
+        #[qproperty(bool, musixmatch_token_set, cxx_name = "musixmatchTokenSet", READ, NOTIFY = musixmatch_token_set_changed)]
         /// «Web API ограничен…» (429/QUOTA_EXCEEDED); пусто — ограничений нет.
         #[qproperty(QString, web_api_limit, cxx_name = "webApiLimit", READ, NOTIFY = web_api_limit_changed)]
         #[qproperty(bool, system_reduced_motion, cxx_name = "systemReducedMotion", READ, CONSTANT)]
@@ -212,6 +216,7 @@ pub mod qobject {
         fn set_playback_speed(self: Pin<&mut Settings>, value: f64);
         fn set_crossfade(self: Pin<&mut Settings>, value: i32);
         fn set_dj_voice(self: Pin<&mut Settings>, value: bool);
+        fn set_report_plays(self: Pin<&mut Settings>, value: bool);
         fn set_device_name(self: Pin<&mut Settings>, value: QString);
         fn set_web_client_id(self: Pin<&mut Settings>, value: QString);
         fn set_api_limit_tip_dismissed(self: Pin<&mut Settings>, value: bool);
@@ -225,6 +230,7 @@ pub mod qobject {
         fn set_floating_hide_fullscreen(self: Pin<&mut Settings>, value: bool);
         fn set_floating_hide_maximized(self: Pin<&mut Settings>, value: bool);
         fn set_floating_offset_x(self: Pin<&mut Settings>, value: i32);
+        fn set_floating_scale(self: Pin<&mut Settings>, value: i32);
         fn set_floating_edge(self: Pin<&mut Settings>, value: QString);
         fn set_floating_free_x(self: Pin<&mut Settings>, value: i32);
         fn set_floating_free_y(self: Pin<&mut Settings>, value: i32);
@@ -425,6 +431,9 @@ pub mod qobject {
         #[cxx_name = "djVoiceChanged"]
         fn dj_voice_changed(self: Pin<&mut Settings>);
         #[qsignal]
+        #[cxx_name = "reportPlaysChanged"]
+        fn report_plays_changed(self: Pin<&mut Settings>);
+        #[qsignal]
         #[cxx_name = "deviceNameChanged"]
         fn device_name_changed(self: Pin<&mut Settings>);
         #[qsignal]
@@ -473,6 +482,9 @@ pub mod qobject {
         #[cxx_name = "floatingHideMaximizedChanged"]
         fn floating_hide_maximized_changed(self: Pin<&mut Settings>);
         #[qsignal]
+        #[cxx_name = "floatingScaleChanged"]
+        fn floating_scale_changed(self: Pin<&mut Settings>);
+        #[qsignal]
         #[cxx_name = "floatingOffsetXChanged"]
         fn floating_offset_x_changed(self: Pin<&mut Settings>);
         #[qsignal]
@@ -506,6 +518,9 @@ pub mod qobject {
         #[cxx_name = "proxyStateChanged"]
         fn proxy_state_changed(self: Pin<&mut Settings>);
         #[qsignal]
+        #[cxx_name = "musixmatchTokenSetChanged"]
+        fn musixmatch_token_set_changed(self: Pin<&mut Settings>);
+        #[qsignal]
         #[cxx_name = "webApiLimitChanged"]
         fn web_api_limit_changed(self: Pin<&mut Settings>);
 
@@ -538,6 +553,9 @@ pub mod qobject {
         #[cxx_name = "uiScaleAtLaunch"]
         fn ui_scale_at_launch(self: &Settings) -> i32;
         /// Применить прокси (пароль — в хранилище секретов, не в настройки).
+        #[qinvokable]
+        #[cxx_name = "setMusixmatchToken"]
+        fn set_musixmatch_token(self: Pin<&mut Settings>, token: &QString);
         #[qinvokable]
         #[cxx_name = "applyProxy"]
         fn apply_proxy(self: Pin<&mut Settings>, mode: &QString, host: &QString, port: &QString, username: &QString, password: &QString);
@@ -609,6 +627,7 @@ macro_rules! settings {
             engine_restart_pending: bool,
             proxy_state: QString,
             proxy_error: QString,
+            musixmatch_token_set: bool,
             web_api_limit: QString,
             system_reduced_motion: bool,
             system_taskbar_theme: QString,
@@ -625,6 +644,7 @@ macro_rules! settings {
                     engine_restart_pending: false,
                     proxy_state: QString::default(),
                     proxy_error: QString::default(),
+                    musixmatch_token_set: false,
                     web_api_limit: QString::default(),
                     system_reduced_motion: mf_platform::system::reduced_motion(),
                     system_taskbar_theme: QString::from(match mf_platform::system::taskbar_dark() {
@@ -742,6 +762,7 @@ settings! {
     playback_speed: f64 = PlaybackSpeed, set_playback_speed, playback_speed_changed;
     crossfade: i32 = Crossfade, set_crossfade, crossfade_changed;
     dj_voice: bool = DjVoice, set_dj_voice, dj_voice_changed;
+    report_plays: bool = ReportPlays, set_report_plays, report_plays_changed;
     device_name: QString = DeviceName, set_device_name, device_name_changed;
     web_client_id: QString = WebClientId, set_web_client_id, web_client_id_changed;
     api_limit_tip_dismissed: bool = ApiLimitTipDismissed, set_api_limit_tip_dismissed, api_limit_tip_dismissed_changed;
@@ -755,6 +776,7 @@ settings! {
     floating_hide_fullscreen: bool = FloatingHideFullscreen, set_floating_hide_fullscreen, floating_hide_fullscreen_changed;
     floating_hide_maximized: bool = FloatingHideMaximized, set_floating_hide_maximized, floating_hide_maximized_changed;
     floating_offset_x: i32 = FloatingOffsetX, set_floating_offset_x, floating_offset_x_changed;
+    floating_scale: i32 = FloatingScale, set_floating_scale, floating_scale_changed;
     floating_edge: QString = FloatingEdge, set_floating_edge, floating_edge_changed;
     floating_free_x: i32 = FloatingFreeX, set_floating_free_x, floating_free_x_changed;
     floating_free_y: i32 = FloatingFreeY, set_floating_free_y, floating_free_y_changed;
@@ -880,6 +902,10 @@ impl qobject::Settings {
         crate::qt::ffi::ffi::post_quit();
     }
 
+    fn set_musixmatch_token(self: Pin<&mut Self>, token: &QString) {
+        ctx().services.auth.set_musixmatch_token(&token.to_string());
+    }
+
     fn apply_proxy(
         self: Pin<&mut Self>,
         mode: &QString,
@@ -909,6 +935,10 @@ impl qobject::Settings {
             self.as_mut().rust_mut().proxy_state = state;
             self.as_mut().rust_mut().proxy_error = error;
             self.as_mut().proxy_state_changed();
+        }
+        if self.musixmatch_token_set != snapshot.musixmatch_token_set {
+            self.as_mut().rust_mut().musixmatch_token_set = snapshot.musixmatch_token_set;
+            self.as_mut().musixmatch_token_set_changed();
         }
     }
 
