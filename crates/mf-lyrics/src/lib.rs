@@ -25,7 +25,8 @@ use crate::text::{is_meta_line, is_placeholder};
 /// 6 — LRCLIB: нечёткое название и разметка, с которой согласно большинство записей;
 /// 7 — Spotify первым, id трека — base62 Spotify;
 /// 8 — Spotify SYLLABLE_SYNCED: время слов из слогов ответа вместо интерполяции
-pub const CACHE_VERSION: u32 = 9;
+/// 10 — слова NetEase/Musixmatch поверх строк Spotify сдвинуты к времени этих строк
+pub const CACHE_VERSION: u32 = 10;
 /// «Не найдено» перепроверяется через 6 часов
 pub const NOT_FOUND_TTL_SECS: u64 = 6 * 3600;
 /// Таймаут HTTP источников, с (2 повтора на 5xx/сеть с паузой 0,7·(n+1) с)
@@ -378,7 +379,9 @@ impl LyricsFetcher {
             // один запрос: по таймауту он не перезапускается, а дорабатывает в фоне
             let me = self.clone();
             let q = query.clone();
-            let mut task = tokio::spawn(async move { me.word_result(&q).await });
+            let reference = result.lines.clone();
+            let mut task =
+                tokio::spawn(async move { me.word_result(&q).await.and_then(|word| align_to(word, &reference)) });
             match tokio::time::timeout(Duration::from_millis(1500), &mut task).await {
                 Ok(Ok(Some(word))) => result = word,
                 Ok(_) => {}
@@ -503,6 +506,69 @@ impl LyricsFetcher {
     }
 }
 
+/// Слова NetEase/Musixmatch, сдвинутые к строкам Spotify. Сторонний источник нередко размечал
+/// другую версию записи (другое вступление, ремастер), и весь текст едет на постоянную величину:
+/// у «Lose Yourself» YRC идёт на 1,2 с раньше. Сдвиг — медиана расхождения одинаковых строк.
+/// None — расхождение по песне гуляет больше секунды, это другая версия, остаются строки Spotify.
+fn align_to(mut word: LyricsResult, reference: &[Line]) -> Option<LyricsResult> {
+    let mut deltas = matched_deltas(&word.lines, reference);
+    if deltas.len() < 3 {
+        // текст не сопоставить (другая запись слов) — сверить нечем, как раньше
+        return Some(word);
+    }
+    deltas.sort_by(f64::total_cmp);
+    let at = |q: f64| deltas[((deltas.len() - 1) as f64 * q).round() as usize];
+    if at(0.9) - at(0.1) > 1.0 {
+        tracing::debug!("lyrics: {} words fit another cut, keeping the Spotify lines", word.source);
+        return None;
+    }
+    let shift = at(0.5);
+    tracing::debug!("lyrics: {} words shifted {shift:+.3}s onto {} Spotify lines", word.source, deltas.len());
+    let moved = |t: f64| round3((t + shift).max(0.0));
+    for line in &mut word.lines {
+        match line {
+            Line::Gap { t, e, .. } => (*t, *e) = (moved(*t), moved(*e)),
+            Line::Words { t, e, w, .. } => {
+                (*t, *e) = (moved(*t), moved(*e));
+                for word in w {
+                    (word.s, word.e) = (moved(word.s), moved(word.e));
+                    for part in word.p.iter_mut().flatten() {
+                        (part.1, part.2) = (moved(part.1), moved(part.2));
+                    }
+                }
+            }
+        }
+    }
+    Some(word)
+}
+
+/// Насколько строка Spotify позже такой же строки источника, по каждой паре. Повторы (припев)
+/// сопоставляются с ближайшей по времени ещё не занятой строкой.
+fn matched_deltas(lines: &[Line], reference: &[Line]) -> Vec<f64> {
+    let texts = |lines: &[Line]| -> Vec<(f64, String)> {
+        lines.iter().filter(|l| matches!(l, Line::Words { .. })).map(|l| (l.start(), text::norm(&l.text()))).collect()
+    };
+    let reference = texts(reference);
+    let mut used = vec![false; reference.len()];
+    let mut deltas = Vec::new();
+    for (t, x) in texts(lines) {
+        // короткие «oh», «yeah» повторяются по всей песне
+        if x.chars().count() < 4 {
+            continue;
+        }
+        let nearest = reference
+            .iter()
+            .enumerate()
+            .filter(|(i, (_, y))| !used[*i] && *y == x)
+            .min_by(|a, b| (a.1.0 - t).abs().total_cmp(&(b.1.0 - t).abs()));
+        if let Some((i, (u, _))) = nearest {
+            used[i] = true;
+            deltas.push(u - t);
+        }
+    }
+    deltas
+}
+
 /// str(song["id"]) Python
 fn py_id(id: &serde_json::Value) -> String {
     match id {
@@ -549,6 +615,38 @@ mod tests {
         assert_eq!(serde_json::from_str::<LyricsResult>(&r.to_python_json()).unwrap(), r);
         let nf = LyricsResult::not_found(vec!["lrclib: HTTP Error 503: Service Unavailable".into()]);
         assert_eq!(serde_json::from_str::<LyricsResult>(&serde_json::to_string(&nf).unwrap()).unwrap(), nf);
+    }
+
+    fn line_at(t: f64, text: &str) -> Line {
+        let w = text.split(' ').enumerate().map(|(i, x)| Word { x: format!("{x} "), s: t + i as f64 * 0.5, e: t + i as f64 * 0.5 + 0.4, p: None });
+        Line::words(t, t + 2.0, w.collect(), false)
+    }
+
+    fn song(starts: &[f64]) -> Vec<Line> {
+        let texts = ["first line here", "second line here", "third line here", "fourth line here"];
+        starts.iter().zip(texts).map(|(t, x)| line_at(*t, x)).collect()
+    }
+
+    #[test]
+    fn word_timings_move_onto_the_spotify_lines() {
+        let word = LyricsResult::found("NetEase", "word", song(&[8.8, 18.8, 28.8, 38.8]));
+        let aligned = align_to(word, &song(&[10.0, 20.0, 30.0, 40.0])).unwrap();
+        assert_eq!(aligned.lines.iter().map(Line::start).collect::<Vec<_>>(), [10.0, 20.0, 30.0, 40.0]);
+        let Line::Words { w, .. } = &aligned.lines[0] else { panic!() };
+        assert_eq!((w[1].s, w[1].e), (10.5, 10.9));
+    }
+
+    #[test]
+    fn another_cut_of_the_song_keeps_the_spotify_lines() {
+        let word = LyricsResult::found("NetEase", "word", song(&[10.0, 20.0, 30.0, 40.0]));
+        assert!(align_to(word, &song(&[10.0, 20.0, 33.0, 43.0])).is_none());
+    }
+
+    #[test]
+    fn lines_that_cannot_be_matched_stay_as_they_are() {
+        let word = LyricsResult::found("NetEase", "word", song(&[8.8, 18.8]));
+        let aligned = align_to(word.clone(), &song(&[10.0, 20.0])).unwrap();
+        assert_eq!(aligned, word);
     }
 
     #[test]

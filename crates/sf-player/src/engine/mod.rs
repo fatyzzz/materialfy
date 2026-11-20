@@ -8,6 +8,8 @@ pub mod limiter;
 /// «Новинки» через сессию: «Радар новинок», подписки, релизы исполнителей
 pub mod new_releases;
 pub mod player;
+/// отчёт о прослушивании в Spotify (gabo RawCoreStream), по настройке reportPlays
+pub mod play_report;
 pub mod resample;
 /// коллекция аккаунта через сессию: любимые треки, альбомы, подписки (collection v2)
 pub mod session_collection;
