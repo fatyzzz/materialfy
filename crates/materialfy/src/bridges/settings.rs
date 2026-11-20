@@ -100,6 +100,7 @@ pub mod qobject {
         #[qproperty(f64, playback_speed, cxx_name = "playbackSpeed", READ, WRITE = set_playback_speed, NOTIFY = playback_speed_changed)]
         #[qproperty(i32, crossfade, READ, WRITE = set_crossfade, NOTIFY = crossfade_changed)]
         #[qproperty(bool, dj_voice, cxx_name = "djVoice", READ, WRITE = set_dj_voice, NOTIFY = dj_voice_changed)]
+        #[qproperty(bool, report_plays, cxx_name = "reportPlays", READ, WRITE = set_report_plays, NOTIFY = report_plays_changed)]
         #[qproperty(QString, device_name, cxx_name = "deviceName", READ, WRITE = set_device_name, NOTIFY = device_name_changed)]
         #[qproperty(QString, web_client_id, cxx_name = "webClientId", READ, WRITE = set_web_client_id, NOTIFY = web_client_id_changed)]
         /// окно «Web API ограничен» с инструкцией больше не показывать
@@ -206,6 +207,7 @@ pub mod qobject {
         fn set_playback_speed(self: Pin<&mut Settings>, value: f64);
         fn set_crossfade(self: Pin<&mut Settings>, value: i32);
         fn set_dj_voice(self: Pin<&mut Settings>, value: bool);
+        fn set_report_plays(self: Pin<&mut Settings>, value: bool);
         fn set_device_name(self: Pin<&mut Settings>, value: QString);
         fn set_web_client_id(self: Pin<&mut Settings>, value: QString);
         fn set_api_limit_tip_dismissed(self: Pin<&mut Settings>, value: bool);
@@ -409,6 +411,9 @@ pub mod qobject {
         #[qsignal]
         #[cxx_name = "djVoiceChanged"]
         fn dj_voice_changed(self: Pin<&mut Settings>);
+        #[qsignal]
+        #[cxx_name = "reportPlaysChanged"]
+        fn report_plays_changed(self: Pin<&mut Settings>);
         #[qsignal]
         #[cxx_name = "deviceNameChanged"]
         fn device_name_changed(self: Pin<&mut Settings>);
@@ -724,6 +729,7 @@ settings! {
     playback_speed: f64 = PlaybackSpeed, set_playback_speed, playback_speed_changed;
     crossfade: i32 = Crossfade, set_crossfade, crossfade_changed;
     dj_voice: bool = DjVoice, set_dj_voice, dj_voice_changed;
+    report_plays: bool = ReportPlays, set_report_plays, report_plays_changed;
     device_name: QString = DeviceName, set_device_name, device_name_changed;
     web_client_id: QString = WebClientId, set_web_client_id, web_client_id_changed;
     api_limit_tip_dismissed: bool = ApiLimitTipDismissed, set_api_limit_tip_dismissed, api_limit_tip_dismissed_changed;

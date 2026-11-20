@@ -32,7 +32,8 @@ Page {
             return I18n.t("Today")
         if (diff === 1)
             return I18n.t("Yesterday")
-        return day.toLocaleDateString(Qt.locale(), diff < 7 ? "dddd" : "d MMM yyyy")
+        // язык приложения, не системы
+        return diff < 7 ? day.toLocaleDateString(Qt.locale(I18n.lang), "dddd") : I18n.date(day)
     }
     function kindLabel(kind) {
         return ({ playlist: I18n.t("Playlist"), album: I18n.t("Album"), artist: I18n.t("Artist"),

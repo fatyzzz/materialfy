@@ -15,7 +15,7 @@ const ALBUM_KEYS: &[&str] = &[
 const ARTIST_KEYS: &[&str] = &["artistId", "uri", "name", "cover", "coverLarge", "genres", "followers"];
 const PLAYLIST_KEYS: &[&str] = &[
     "playlistId", "uri", "title", "description", "trackCount", "cover", "owner", "ownerId", "canEdit", "collaborative",
-    "public", "snapshotId", "pinned",
+    "blend", "public", "snapshotId", "pinned",
 ];
 const SHOW_KEYS: &[&str] =
     &["showId", "uri", "name", "publisher", "description", "cover", "coverLarge", "totalEpisodes", "saved", "explicit"];

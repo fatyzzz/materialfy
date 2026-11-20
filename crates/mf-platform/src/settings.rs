@@ -124,6 +124,8 @@ pub enum SettingKey {
     Crossfade,
     /// the DJ's spoken lines between its tracks; changes on the fly
     DjVoice,
+    /// сообщать Spotify о прослушиваниях на этом ПК (gabo RawCoreStream), как официальный клиент; по умолчанию выкл.
+    ReportPlays,
     // Spotify Connect и сеть
     /// имя Connect-устройства; "" — «Materialfy · <имя ПК>»
     DeviceName,
@@ -195,7 +197,7 @@ pub enum SettingType {
 }
 
 impl SettingKey {
-    pub const ALL: [SettingKey; 90] = [
+    pub const ALL: [SettingKey; 91] = [
         SettingKey::ThemeMode,
         SettingKey::SchemeVariant,
         SettingKey::AccentFromCover,
@@ -257,6 +259,7 @@ impl SettingKey {
         SettingKey::PlaybackSpeed,
         SettingKey::Crossfade,
         SettingKey::DjVoice,
+        SettingKey::ReportPlays,
         SettingKey::DeviceName,
         SettingKey::WebClientId,
         SettingKey::ApiLimitTipDismissed,
@@ -353,6 +356,7 @@ impl SettingKey {
             PlaybackSpeed => "playbackSpeed",
             Crossfade => "crossfade",
             DjVoice => "djVoice",
+            ReportPlays => "reportPlays",
             DeviceName => "deviceName",
             WebClientId => "webClientId",
             ApiLimitTipDismissed => "apiLimitTipDismissed",
@@ -463,6 +467,7 @@ impl SettingKey {
             PlaybackSpeed => Float(1.0),
             Crossfade => Int(0),
             DjVoice => Bool(true),
+            ReportPlays => Bool(false),
             DeviceName => Str(String::new()),
             WebClientId => Str(String::new()),
             ApiLimitTipDismissed => Bool(false),
@@ -1242,7 +1247,7 @@ mod tests {
 
     #[test]
     fn schema() {
-        assert_eq!(SettingKey::ALL.len(), 90);
+        assert_eq!(SettingKey::ALL.len(), 91);
         for key in SettingKey::ALL {
             assert_eq!(SettingKey::from_name(key.name()), Some(key));
             assert_eq!(key.default_value().value_type(), key.value_type());
@@ -1595,7 +1600,7 @@ mod tests {
             "librarySort", "homeHidden", "homeRadioHidden", "sidebarLibrary", "bitrate", "normalisation", "gapless", "autoplay", "volume", "audioDevice",
             "audioCache", "audioCacheMb", "playbackAuthorized", "deviceName", "webClientId", "apiLimitTipDismissed", "proxyMode", "proxyHost",
             "proxyPort", "proxyUsername", "coversBypassProxy", "pins", "hiddenTracks", "radioSeeds", "language", "uiScale", "autoUpdateCheck",
-            "updateChannel", "skippedVersion",
+            "updateChannel", "skippedVersion", "reportPlays",
         ] {
             assert!(names.contains(&name), "{name}");
         }
@@ -1605,6 +1610,7 @@ mod tests {
         assert_eq!(SettingKey::ProxyPort.value_type(), SettingType::Str);
         assert_eq!(SettingKey::AudioCacheMb.value_type(), SettingType::Int);
         assert_eq!(SettingKey::Normalisation.value_type(), SettingType::Bool);
+        assert_eq!(SettingKey::ReportPlays.default_value(), SettingValue::Bool(false));
         assert_eq!(SettingKey::LyricsScrollMs.default_value(), SettingValue::Int(-1));
         assert_eq!(SettingKey::LyricsStaggerMs.default_value(), SettingValue::Int(-1));
         assert_eq!(SettingKey::LyricsIdleScale.default_value(), SettingValue::Float(0.0));

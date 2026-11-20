@@ -9,13 +9,14 @@ use std::sync::{Arc, Mutex, Weak};
 
 use md3_model::{PlayContext, TrackItem, contexts};
 use sf_api::Operation;
+use sf_player::engine::play_report;
 use sf_player::{PlayerEvent, PlayerHandle};
 use tokio::runtime::Handle;
 use tokio::sync::broadcast;
 
 use crate::auth::{AuthEvent, AuthService};
 use crate::data::journal::{self, Journal};
-use crate::data::{home_feed, known, route};
+use crate::data::{home_feed, known, route, stats};
 use crate::extra::feed;
 use crate::lock;
 
@@ -35,6 +36,8 @@ pub struct PlayRecord {
     pub context: PlayContext,
     /// ISO-время
     pub played_at: String,
+    /// сколько реально слушали, мс; 0 — неизвестно (старая история, записи Spotify)
+    pub played_ms: i64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -106,13 +109,22 @@ impl HistoryService {
         let mut player = self.player.subscribe().events;
         let me = self.me.clone();
         self.rt.spawn(async move {
+            // прошлый трек доигран сам — следующий начался по trackdone
+            let mut previous_natural = false;
             loop {
                 match player.recv().await {
                     Ok(PlayerEvent::TrackEnded(ended)) => {
                         let Some(service) = me.upgrade() else { return };
                         if ended.local {
+                            if play_report::enabled() {
+                                service.report_play(&ended, previous_natural);
+                            }
+                            previous_natural = ended.natural;
                             service.note_played(ended.track, ended.context, ended.played);
-                            // доигранное здесь появляется в истории Spotify через несколько секунд
+                            // отправленное в Spotify появляется в его истории через несколько секунд
+                            if !play_report::enabled() {
+                                continue;
+                            }
                             let me = me.clone();
                             tokio::spawn(async move {
                                 tokio::time::sleep(REMOTE_AFTER_PLAY).await;
@@ -171,10 +183,46 @@ impl HistoryService {
         let started = jiff::Timestamp::now()
             .checked_sub(jiff::SignedDuration::from_secs_f64(played.max(0.0)))
             .unwrap_or_else(|_| jiff::Timestamp::now());
-        let record = PlayRecord { track, context, played_at: started.to_string() };
+        let played_ms = (played.max(0.0) * 1000.0) as i64;
+        let record = PlayRecord { track, context, played_at: started.to_string(), played_ms };
         lock(&self.state).journal.record(record);
         self.save_later();
         let _ = self.events.send(HistoryEvent::Changed);
+    }
+
+    /// Отчёт о прослушивании в Spotify (настройка reportPlays): одна попытка фоном, ошибка — только в лог.
+    fn report_play(&self, ended: &sf_player::TrackEnded, previous_natural: bool) {
+        let ms_played = (ended.played.max(0.0) * 1000.0) as u32;
+        if ms_played == 0 || ended.track.play_uri().ends_with(':') {
+            return;
+        }
+        let Some(session) = route::account_session(&self.auth.api(), &self.player) else { return };
+        let ended_ms = jiff::Timestamp::now().as_millisecond();
+        let snapshot = self.player.snapshot();
+        let play = play_report::Play {
+            uri: ended.track.play_uri(),
+            context_uri: ended.context.context_uri.clone().unwrap_or_default(),
+            ms_played,
+            started_ms: ended_ms - i64::from(ms_played),
+            ended_ms,
+            reason_start: play_report::reason_start(previous_natural),
+            reason_end: play_report::reason_end(ended.natural),
+            duration_ms: ended.track.duration_ms,
+            bitrate_kbps: snapshot.codec.trim_start_matches("OGG ").parse().unwrap_or(0),
+            speed: f64::from(sf_player::engine::fx::speed()),
+            shuffle: snapshot.shuffle,
+            repeat_track: snapshot.repeat == sf_player::Repeat::One,
+            repeat_context: snapshot.repeat == sf_player::Repeat::All,
+            player_session_id: session.session_id(),
+        };
+        let http = self.auth.api().http();
+        self.rt.spawn(async move {
+            let sent = async { play_report::report(&session, &http.client().map_err(anyhow::Error::msg)?, &play).await };
+            match sent.await {
+                Ok(()) => tracing::info!("play reported: {} ({} ms)", play.uri, play.ms_played),
+                Err(error) => tracing::warn!("play not reported: {error:#}"),
+            }
+        });
     }
 
     fn save_later(&self) {
@@ -207,6 +255,11 @@ impl HistoryService {
         };
         crate::data::recents::fill_tracks(&mut days, &tracks, &zone);
         days
+    }
+
+    /// Статистика прослушиваний этого ПК (только локальная история: у Spotify нет времени прослушивания).
+    pub fn listening_stats(&self, days: usize) -> stats::ListeningStats {
+        stats::listening(lock(&self.state).journal.plays(), &jiff::Zoned::now(), days)
     }
 
     /// Недавние уникальные контексты (для сидов радио и «Недавно прослушанное»).
@@ -304,9 +357,13 @@ impl HistoryService {
             None => None,
         };
         let via_session = from_session.is_some();
-        // по трекам (что именно играло в плейлисте) знает только Web API: недавнее сессии — контексты
+        // по трекам (что именно играло в плейлисте) знает только Web API: недавнее сессии — контексты.
+        // Общий Client ID быстро ловит 429 — с сессией спрашиваем Web API только при своём ключе
         let (records, tracks) = match from_session {
-            Some(records) => (records, self.web_recent().await.unwrap_or_default()),
+            Some(records) => {
+                let tracks = if api.personal_ready() { self.web_recent().await.unwrap_or_default() } else { Vec::new() };
+                (records, tracks)
+            }
             None => {
                 let records = self.web_recent().await?;
                 (records.clone(), records)
@@ -406,6 +463,7 @@ fn play_records(items: &[sf_api::models::PlayHistory]) -> Vec<PlayRecord> {
                 .map(|context| PlayContext::with_uri(context_kind(&context.kind), context.uri.clone()))
                 .unwrap_or_else(|| PlayContext::new(contexts::TRACKS)),
             played_at: play.played_at.clone().unwrap_or_default(),
+            ..Default::default()
         })
         .collect();
     // у недавнего сессии треки неполные — в реестр только ответ Web API
