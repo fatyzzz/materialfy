@@ -18,7 +18,7 @@ use crate::state::host::EngineHost;
 use crate::state::session::SessionData;
 use crate::{
     Credentials, EngineStarted, LocalPlayback, PlayerConfig, PlayerError, PlayerEvent, PlayerSnapshot,
-    PlayerSubscription, Repeat, Session,
+    PlayerSubscription, Repeat, Session, TrackEnded,
 };
 
 /// Clone — дешёвый.
@@ -337,12 +337,15 @@ impl PlayerHandle {
         self.send(Command::ExpectLocal(expected));
     }
 
-    /// Выход: сохранить сессию, остановить движок. Блокирует ≤ 2 с.
-    pub fn shutdown(&self) {
+    /// Выход: сохранить сессию, остановить движок. Блокирует ≤ 2 с. Some — трек, который ещё играл:
+    /// его конец (TrackEnded) по подписке уже не придёт.
+    pub fn shutdown(&self) -> Option<TrackEnded> {
         let (done, wait) = std::sync::mpsc::channel();
-        if self.inner.tx.send(Msg::Shutdown(done)).is_ok() {
-            let _ = wait.recv_timeout(Duration::from_millis(1500));
-        }
+        let ended = match self.inner.tx.send(Msg::Shutdown(done)) {
+            Ok(()) => wait.recv_timeout(Duration::from_millis(1500)).ok().flatten(),
+            Err(_) => None,
+        };
         self.inner.host.shutdown();
+        ended
     }
 }

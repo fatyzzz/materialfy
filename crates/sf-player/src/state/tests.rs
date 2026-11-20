@@ -2492,6 +2492,17 @@ mod actor {
     }
 
     #[tokio::test]
+    async fn quitting_ends_the_song_still_playing() {
+        let mut rig = Rig::new();
+        rig.ready().await;
+        rig.playing("spotify:track:a", 1).await;
+        let ended = rig.actor.shutdown().expect("the open play ends on quit");
+        assert_eq!(ended.track.uri, "spotify:track:a");
+        assert!(ended.local);
+        assert!(rig.actor.shutdown().is_none(), "a play ends once");
+    }
+
+    #[tokio::test]
     async fn the_snapshot_and_its_events_follow_playback() {
         let mut rig = Rig::new();
         rig.ready().await;

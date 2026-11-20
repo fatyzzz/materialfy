@@ -1250,7 +1250,7 @@ impl Core {
         })));
     }
 
-    fn finish_listening(&mut self, _closing: bool) {
+    pub(crate) fn finish_listening(&mut self, _closing: bool) {
         let Some(mut listening) = self.listening.take() else {
             return;
         };
