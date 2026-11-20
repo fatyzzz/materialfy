@@ -5,6 +5,8 @@
 pub mod album_overview;
 /// исполнитель через GraphQL-шлюз (queryArtistOverview): подписчики, слушатели, похожие, биография
 pub mod artist_overview;
+/// Canvas трека через GraphQL-шлюз (сохранённый запрос canvas)
+pub mod canvas;
 /// коллекция через сессию: «Любимые треки», альбомы, подписки, сохранение и проверка
 pub mod collection_session;
 /// атомарная запись файлов

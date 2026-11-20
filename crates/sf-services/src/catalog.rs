@@ -17,7 +17,7 @@ use sf_player::engine::session_reads;
 use tokio::sync::Semaphore;
 
 use crate::auth::AuthService;
-use crate::data::{album_overview, artist_overview, known, pathfinder, podcast_session, route};
+use crate::data::{album_overview, artist_overview, canvas, known, pathfinder, podcast_session, route};
 use crate::{ServiceError, lock};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -147,6 +147,8 @@ enum Cached {
     Show(ShowPage),
     Episode(EpisodePage),
     Track(TrackItem),
+    /// ссылка на Canvas; None — у трека его нет
+    Canvas(Option<String>),
 }
 
 pub struct CatalogService {
@@ -888,6 +890,28 @@ impl CatalogService {
             return Err(ServiceError::Other(mf_i18n::t("Couldn't load")));
         }
         Ok(track_details(track_id, track.as_ref(), overview.as_ref(), page.as_ref()))
+    }
+
+    /// Canvas трека — ссылка на зацикленное видео; None — его нет или сессия не ответила.
+    pub async fn canvas(&self, track_id: &str) -> Option<String> {
+        // плеер и островок спрашивают один трек при каждом открытии — ответ, и «нет Canvas» тоже, держим в кэше
+        let key = format!("canvas:{track_id}");
+        if let Some(Cached::Canvas(url)) = self.cached(&key) {
+            return url;
+        }
+        let session = route::account_session(&self.auth.api(), &self.player)?;
+        let http = self.auth.api().http();
+        match tokio::time::timeout(DETAILS_DEADLINE, canvas::canvas_url(&http, &session, track_id)).await {
+            Ok(Ok(url)) => {
+                self.store(key, Cached::Canvas(url.clone()));
+                url
+            }
+            Ok(Err(error)) => {
+                tracing::debug!("canvas {track_id}: {error:#}");
+                None
+            }
+            Err(_) => None,
+        }
     }
 
     /// Плеер, с которым создан каталог.

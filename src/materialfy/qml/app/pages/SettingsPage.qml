@@ -820,6 +820,29 @@ Page {
         }
 
         SettingRow {
+            title: I18n.t("Canvas")
+            description: I18n.t("The track's looping video behind the player, when it has one")
+            Switch { checked: Settings.canvas; onToggled: c => Settings.canvas = c }
+        }
+
+        SettingRow {
+            title: I18n.t("Canvas opacity")
+            enabled: Settings.canvas
+            opacity: enabled ? 1 : 0.5
+            description: I18n.t("Lower it to read lyrics and the queue over the video")
+            Slider {
+                wheelEnabled: false     // колесо прокручивает страницу, а не меняет настройку
+                width: 220
+                from: 0.1
+                to: 1
+                stepSize: 0.05
+                value: Settings.canvasOpacity
+                valueText: v => Math.round(v * 100) + " %"
+                onMoved: v => Settings.canvasOpacity = Math.round(v * 20) / 20
+            }
+        }
+
+        SettingRow {
             title: I18n.t("Blur drift")
             description: Settings.nowPlayingDrift > 0
                 ? I18n.t("Background colors slowly shift while music plays")
@@ -915,6 +938,13 @@ Page {
             title: I18n.t("Hide over maximized windows")
             description: I18n.t("The island steps aside while a maximized window fills its monitor")
             Switch { checked: Settings.floatingHideMaximized; onToggled: c => Settings.floatingHideMaximized = c }
+        }
+
+        SettingRow {
+            visible: floatingPicker.visible && (Settings.floatingPlayer === "island" || Settings.floatingPlayer === "both") && Settings.canvas
+            title: I18n.t("Canvas in the island")
+            description: I18n.t("Play the track's looping video behind the island")
+            Switch { checked: Settings.floatingCanvas; onToggled: c => Settings.floatingCanvas = c }
         }
 
         SettingRow {

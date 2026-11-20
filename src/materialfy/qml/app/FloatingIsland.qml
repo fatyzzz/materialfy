@@ -47,6 +47,26 @@ Window {
     readonly property bool colorMode: Settings.floatingPlayerStyle === "color" && !mac  // на Mac тело сливается с вырезом
     // цветной: размытая обложка под тёмным стеклом (текст светлый) или, пока обложки нет, тональный контейнер
     readonly property bool _onCover: colorMode && Player.cover !== ""
+    // Canvas трека и тут (Settings.floatingCanvas): видео поверх той же размытой обложки, в любом стиле
+    property string canvasUrl: ""
+    readonly property bool _canvasWanted: visible && Settings.canvas && Settings.floatingCanvas && Player.trackId !== "" && !Player.isEpisode
+    function _askCanvas() {
+        canvasUrl = ""
+        if (_canvasWanted)
+            Catalog.requestCanvas(Player.trackId)
+    }
+    on_CanvasWantedChanged: _askCanvas()
+    Connections {
+        target: Player
+        function onTrackChanged() { root._askCanvas() }
+    }
+    Connections {
+        target: Catalog
+        function onCanvasReady(trackId, url) {
+            if (root._canvasWanted && trackId === Player.trackId)
+                root.canvasUrl = url
+        }
+    }
     readonly property color body: colorMode ? Theme.primaryContainer : "#000000"
     readonly property color ink: colorMode && !_onCover ? Theme.fgPrimaryContainer : "#ffffff"
     readonly property color inkDim: Qt.alpha(ink, 0.72)
@@ -527,7 +547,7 @@ Window {
                 Item {
                     id: coverFill
                     anchors.fill: parent
-                    visible: root._onCover && root.mode !== "idle"
+                    visible: (root._onCover || (islandCanvas.item && islandCanvas.item.ready)) && root.mode !== "idle"
                     layer.enabled: visible
                     layer.textureSize: Qt.size(width * root.k * Screen.devicePixelRatio, height * root.k * Screen.devicePixelRatio)
                     layer.effect: MultiEffect {
@@ -547,9 +567,19 @@ Window {
                         // меняется вместе с цветами — под шторкой islandWipe, как фон окна приложения
                         followTheme: Settings.accentFromCover
                     }
+                    Loader {
+                        id: islandCanvas
+                        anchors.fill: parent
+                        active: root.canvasUrl !== "" && root.mode !== "idle" && root.motion
+                        source: "CanvasVideo.qml"
+                        onLoaded: item.source = Qt.binding(() => root.canvasUrl)
+                    }
+                    Binding { target: islandCanvas.item; property: "running"; value: Player.playing; when: islandCanvas.status === Loader.Ready }
+                    Binding { target: islandCanvas.item; property: "strength"; value: Settings.canvasOpacity; when: islandCanvas.status === Loader.Ready }
                     Rectangle {
                         anchors.fill: parent
-                        color: Qt.rgba(0, 0, 0, 0.42)
+                        // под видео стекло тоньше, но текст ещё читается
+                        color: Qt.rgba(0, 0, 0, islandCanvas.item && islandCanvas.item.ready ? 0.3 : 0.42)
                     }
                 }
                 Rectangle {

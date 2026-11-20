@@ -34,6 +34,9 @@ pub mod qobject {
         #[qproperty(f64, now_playing_blur, cxx_name = "nowPlayingBlur", READ, WRITE = set_now_playing_blur, NOTIFY = now_playing_blur_changed)]
         #[qproperty(f64, now_playing_drift, cxx_name = "nowPlayingDrift", READ, WRITE = set_now_playing_drift, NOTIFY = now_playing_drift_changed)]
         #[qproperty(bool, ambient_background, cxx_name = "ambientBackground", READ, WRITE = set_ambient_background, NOTIFY = ambient_background_changed)]
+        #[qproperty(bool, canvas, READ, WRITE = set_canvas, NOTIFY = canvas_changed)]
+        #[qproperty(f64, canvas_opacity, cxx_name = "canvasOpacity", READ, WRITE = set_canvas_opacity, NOTIFY = canvas_opacity_changed)]
+        #[qproperty(bool, floating_canvas, cxx_name = "floatingCanvas", READ, WRITE = set_floating_canvas, NOTIFY = floating_canvas_changed)]
         #[qproperty(bool, cover_spin, cxx_name = "coverSpin", READ, WRITE = set_cover_spin, NOTIFY = cover_spin_changed)]
         #[qproperty(bool, cover_pulse, cxx_name = "coverPulse", READ, WRITE = set_cover_pulse, NOTIFY = cover_pulse_changed)]
         #[qproperty(bool, calm_when_inactive, cxx_name = "calmWhenInactive", READ, WRITE = set_calm_when_inactive, NOTIFY = calm_when_inactive_changed)]
@@ -159,6 +162,9 @@ pub mod qobject {
         fn set_now_playing_blur(self: Pin<&mut Settings>, value: f64);
         fn set_now_playing_drift(self: Pin<&mut Settings>, value: f64);
         fn set_ambient_background(self: Pin<&mut Settings>, value: bool);
+        fn set_canvas(self: Pin<&mut Settings>, value: bool);
+        fn set_canvas_opacity(self: Pin<&mut Settings>, value: f64);
+        fn set_floating_canvas(self: Pin<&mut Settings>, value: bool);
         fn set_cover_spin(self: Pin<&mut Settings>, value: bool);
         fn set_cover_pulse(self: Pin<&mut Settings>, value: bool);
         fn set_calm_when_inactive(self: Pin<&mut Settings>, value: bool);
@@ -262,6 +268,15 @@ pub mod qobject {
         #[qsignal]
         #[cxx_name = "ambientBackgroundChanged"]
         fn ambient_background_changed(self: Pin<&mut Settings>);
+        #[qsignal]
+        #[cxx_name = "canvasChanged"]
+        fn canvas_changed(self: Pin<&mut Settings>);
+        #[qsignal]
+        #[cxx_name = "canvasOpacityChanged"]
+        fn canvas_opacity_changed(self: Pin<&mut Settings>);
+        #[qsignal]
+        #[cxx_name = "floatingCanvasChanged"]
+        fn floating_canvas_changed(self: Pin<&mut Settings>);
         #[qsignal]
         #[cxx_name = "coverSpinChanged"]
         fn cover_spin_changed(self: Pin<&mut Settings>);
@@ -693,6 +708,9 @@ settings! {
     now_playing_blur: f64 = NowPlayingBlur, set_now_playing_blur, now_playing_blur_changed;
     now_playing_drift: f64 = NowPlayingDrift, set_now_playing_drift, now_playing_drift_changed;
     ambient_background: bool = AmbientBackground, set_ambient_background, ambient_background_changed;
+    canvas: bool = Canvas, set_canvas, canvas_changed;
+    canvas_opacity: f64 = CanvasOpacity, set_canvas_opacity, canvas_opacity_changed;
+    floating_canvas: bool = FloatingCanvas, set_floating_canvas, floating_canvas_changed;
     cover_spin: bool = CoverSpin, set_cover_spin, cover_spin_changed;
     cover_pulse: bool = CoverPulse, set_cover_pulse, cover_pulse_changed;
     calm_when_inactive: bool = CalmWhenInactive, set_calm_when_inactive, calm_when_inactive_changed;

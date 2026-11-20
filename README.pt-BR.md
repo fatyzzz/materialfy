@@ -308,7 +308,7 @@ biblioteca, às playlists e ao controle de reprodução, e lê o seu plano (Free
 Requisitos comuns:
 
 - Rust 1.98 ou posterior ([rustup](https://rustup.rs); no Windows, a toolchain `stable-x86_64-pc-windows-msvc`).
-- Qt 6.12 com os módulos qtdeclarative, qtsvg, qtshadertools e qtimageformats. Pode ser instalado com o
+- Qt 6.12 com os módulos qtdeclarative, qtsvg, qtshadertools, qtimageformats e qtmultimedia (vídeos do Canvas). Pode ser instalado com o
   Qt Online Installer ou com o [`install_qt.py`](.github/scripts/install_qt.py), o script que o CI usa: ele baixa
   arquivos de download.qt.io e verifica os checksums.
 - Python 3 para o `install_qt.py`.

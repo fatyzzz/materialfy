@@ -80,5 +80,11 @@
   "{0}% of the default size": "{0}% do tamanho padrão",
   "Island position": "Posição da ilha",
   "Hide over maximized windows": "Esconder com janelas maximizadas",
-  "The island steps aside while a maximized window fills its monitor": "A ilha sai do caminho enquanto uma janela maximizada ocupa o monitor dela"
+  "The island steps aside while a maximized window fills its monitor": "A ilha sai do caminho enquanto uma janela maximizada ocupa o monitor dela",
+  "Canvas": "Canvas",
+  "The track's looping video behind the player, when it has one": "O vídeo em loop da faixa atrás do player, quando ela tiver",
+  "Canvas opacity": "Opacidade do Canvas",
+  "Canvas in the island": "Canvas na ilha",
+  "Play the track's looping video behind the island": "Toca o vídeo em loop da faixa atrás da ilha",
+  "Lower it to read lyrics and the queue over the video": "Diminua para ler a letra e a fila por cima do vídeo"
 }

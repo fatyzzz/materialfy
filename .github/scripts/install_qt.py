@@ -6,7 +6,7 @@ read Updates.xml ourselves: take the qt.qt6.<ver>.<arch> package plus the reques
 all of their DownloadableArchives, verify SHA-1 and extract the 7z archives into one prefix. Qt 6
 archives are relocatable, so no qt.conf or path patching is needed.
 
-    python3 install_qt.py --out ~/Qt/6.12.0/gcc_64 --addons qtshadertools qtimageformats
+    python3 install_qt.py --out ~/Qt/6.12.0/gcc_64 --addons qtshadertools qtimageformats qtmultimedia
 
 Only the qmake path goes to stdout (the log goes to stderr). --github appends QTDIR/QMAKE to
 $GITHUB_ENV and bin/ to $GITHUB_PATH. If --out already holds the same package set (the
@@ -137,7 +137,7 @@ def main() -> int:
     ap.add_argument("--host", choices=HOSTS, default=host_default)
     ap.add_argument("--version", default="6.12.0")
     ap.add_argument("--arch", help="repository arch directory (msvc2022_64, linux_gcc_64, linux_gcc_arm64, clang_64)")
-    ap.add_argument("--addons", nargs="*", default=["qtshadertools", "qtimageformats"])
+    ap.add_argument("--addons", nargs="*", default=["qtshadertools", "qtimageformats", "qtmultimedia"])
     ap.add_argument("--out", required=True, type=Path, help="Qt prefix (will contain bin/, lib/, qml/ ...)")
     ap.add_argument("--skip", nargs="*", default=["qtdoc"], help="archive name prefixes to skip")
     ap.add_argument("--github", action="store_true", help="export QTDIR/QMAKE/PATH for GitHub Actions")
