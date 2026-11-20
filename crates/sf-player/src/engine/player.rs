@@ -1057,9 +1057,7 @@ fn apply_event(state: &mut LocalState, event: PlayerEvent) -> bool {
         }
         PlayerEvent::Seeked { position_ms, .. } => {
             state.position_ms = position_ms;
-            if state.playback == Playback::Playing {
-                state.position_at = Some(Instant::now());
-            }
+            state.position_at = (state.playback == Playback::Playing && !state.narrating).then(Instant::now);
             state.seek_sequence = state.seek_sequence.wrapping_add(1);
             true
         }
@@ -1596,6 +1594,8 @@ mod tests {
         );
         assert!(state.position_at.is_none());
 
+        apply_event(&mut state, PlayerEvent::Seeked { play_request_id: 1, track_id: uri(), position_ms: 1000 });
+        assert!(state.position_at.is_none(), "A seek must not start the song clock during narration");
         assert!(apply_event(&mut state, PlayerEvent::NarrationEnded { play_request_id: 1, track_id: uri() }));
         assert!(!state.narrating);
         assert!(state.position_at.is_some());

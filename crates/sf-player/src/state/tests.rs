@@ -34,6 +34,36 @@ fn headless() -> Core {
     core
 }
 
+#[test]
+fn dj_start_ignores_track_offsets_shuffle_and_repeat() {
+    let mut core = headless();
+    core.local.connected = true;
+    core.shuffle_wanted = true;
+    core.local.repeat = RepeatMode::Track;
+    core.play_context(PlayContext::with_uri("playlist", md3_model::context::DJ_URI), Some("spotify:track:spoiler".into()), Some(true));
+    let commands = engine_commands(&mut core);
+    let load = commands.iter().find_map(|cmd| match cmd { PlayerCommand::Load(load) => Some(load), _ => None }).expect("DJ load");
+    assert_eq!(load.context_uri.as_deref(), Some(md3_model::context::DJ_URI));
+    assert!(load.offset_uri.is_none());
+    assert!(load.offset_index.is_none());
+    assert_eq!(load.shuffle, Some(false));
+    assert_eq!(load.repeat, Some(RepeatMode::Off));
+    assert!(!core.shuffle_wanted);
+    assert_eq!(core.shown_context().kind, "dj");
+}
+
+#[test]
+fn restored_dj_context_overrides_a_stale_playlist_label() {
+    let mut core = headless();
+    playing(&mut core, "spotify:track:current");
+    let stale = PlayContext { kind: "playlist".into(), context_uri: Some(md3_model::context::DJ_URI.into()), title: "Old playlist".into(), cover: String::new() };
+    core.local.connected = true;
+    core.play_context(stale, None, None);
+    let shown = core.shown_context();
+    assert_eq!(shown.kind, "dj");
+    assert_eq!(shown.title, "DJ");
+}
+
 fn playing(core: &mut Core, uri: &str) {
     core.local.track = local_track(uri);
     core.local.playback = Playback::Playing;
