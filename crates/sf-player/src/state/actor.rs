@@ -36,7 +36,7 @@ pub(crate) enum LocalMsg {
 #[derive(Debug)]
 pub(crate) enum Command {
     PlayItems { items: Vec<TrackItem>, row: usize, context: PlayContext },
-    ShuffleFrom { items: Vec<TrackItem>, context: PlayContext },
+    ShuffleFrom { items: Vec<TrackItem>, context: PlayContext, smart: bool },
     PlayContext { context: PlayContext, offset: Option<String>, shuffle: Option<bool> },
     PlayUris { uris: Vec<String>, index: usize, context: PlayContext },
     /// Строка для оптимистичной сверки: списки присылают только URI.
@@ -62,6 +62,7 @@ pub(crate) enum Command {
     CycleRepeat,
     SetRepeat(Repeat),
     SetShuffle(bool),
+    SetSmartShuffle(bool),
     SetVolume(f64),
     SetLevelsWanted(bool),
     SetAutoplay(bool),
@@ -272,7 +273,7 @@ impl Actor {
         let core = &mut self.core;
         match command {
             Command::PlayItems { items, row, context } => core.play_items(items, row, context),
-            Command::ShuffleFrom { items, context } => core.shuffle_from(items, context),
+            Command::ShuffleFrom { items, context, smart } => core.shuffle_from(items, context, smart),
             Command::PlayContext { context, offset, shuffle } => core.play_context(context, offset, shuffle),
             Command::PlayUris { uris, index, context } => core.play_uris(uris, index, context),
             Command::Remember(item) => core.remember(&item),
@@ -328,6 +329,7 @@ impl Actor {
             }
             Command::SetRepeat(repeat) => core.set_repeat(repeat.to_engine()),
             Command::SetShuffle(value) => core.set_shuffle(value),
+            Command::SetSmartShuffle(value) => core.set_smart_shuffle(value),
             Command::SetVolume(value) => core.set_volume(crate::volume_to_u16(value)),
             Command::SetLevelsWanted(value) => {
                 core.levels_wanted = value;
@@ -439,6 +441,8 @@ impl Actor {
             duration_ms: now.as_ref().map_or(0, |now| i64::from(now.duration_ms)),
             volume: f64::from(volume) / f64::from(u16::MAX),
             shuffle: core.shuffle_wanted,
+            smart_shuffle: core.smart_shuffle(),
+            smart_shuffle_available: core.smart_shuffle_available(),
             repeat: Repeat::from_engine(now.as_ref().map_or(core.local.repeat, |now| now.repeat)),
             current_index: if queue.first().is_some_and(|row| row.section == QueueSection::Current) { 0 } else { -1 },
             error_text: core.error_text.clone(),
@@ -490,7 +494,11 @@ impl Actor {
         if old.volume != next.volume {
             events.push(PlayerEvent::VolumeChanged);
         }
-        if old.shuffle != next.shuffle || old.repeat != next.repeat {
+        if old.shuffle != next.shuffle
+            || old.smart_shuffle != next.smart_shuffle
+            || old.smart_shuffle_available != next.smart_shuffle_available
+            || old.repeat != next.repeat
+        {
             events.push(PlayerEvent::ModeChanged);
         }
         let queue_changed = !Arc::ptr_eq(&old.queue, &next.queue) && old.queue != next.queue;
