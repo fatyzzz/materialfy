@@ -8,6 +8,7 @@ pub mod data;
 pub mod devices;
 pub mod home;
 pub mod library;
+pub mod local_music;
 pub mod lyrics;
 pub mod player;
 pub mod radio;

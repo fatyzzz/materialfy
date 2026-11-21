@@ -188,7 +188,7 @@ impl Services {
         let (app_requests, _) = broadcast::channel(16);
         let update = update::UpdateService::new(rt.clone(), settings.clone(), http.clone(), app_requests.clone());
         let media = if options.enable_media {
-            glue::start_media_controls(rt, settings.clone(), player.clone(), app_requests.clone())
+            glue::start_media_controls(rt, settings.clone(), player.clone(), files.clone(), app_requests.clone())
         } else {
             None
         };

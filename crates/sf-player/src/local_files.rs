@@ -8,7 +8,7 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 use std::sync::atomic::AtomicU64;
-use std::sync::{Arc, Mutex, PoisonError, mpsc};
+use std::sync::{Arc, LazyLock, Mutex, PoisonError, mpsc};
 use std::time::{Duration, Instant};
 
 use librespot_playback::audio_backend::Sink;
@@ -18,6 +18,7 @@ use librespot_playback::decoder::AudioPacket;
 use librespot_playback::mixer::softmixer::SoftMixer;
 use librespot_playback::mixer::{Mixer, MixerConfig};
 use librespot_playback::{NUM_CHANNELS, SAMPLE_RATE};
+use md3_model::{QueueRow, TrackItem};
 use mf_local::LocalTrack;
 use rodio::Source;
 use tokio::sync::watch;
@@ -26,6 +27,7 @@ use crate::engine::eq;
 use crate::engine::resample::Resampler;
 use crate::engine::sink::{AudioControl, ErrorHook, RodioSink};
 use crate::engine::vis::{AudioTap, Tapped};
+use crate::{PlayerSnapshot, Target};
 
 /// Кадров исходника за одну запись: ~23 мс при 44,1 кГц
 const CHUNK_FRAMES: usize = 1024;
@@ -49,10 +51,53 @@ pub struct FileSnapshot {
     pub error: String,
 }
 
+/// Одна пустая очередь на все снимки файлов: мост сверяет очередь по указателю.
+static NO_QUEUE: LazyLock<Arc<Vec<QueueRow>>> = LazyLock::new(Arc::default);
+
 impl FileSnapshot {
     pub fn track(&self) -> Option<&LocalTrack> {
         self.queue.get(self.index?)
     }
+
+    /// Снимок для плеера и медиапанели, пока локально что-то выбрано: файл вместо трека Spotify.
+    /// Состояние движка берётся у Spotify, чтобы баннеры движка не мигали; очереди и режимов у файлов нет.
+    pub fn as_player(&self, spotify: &PlayerSnapshot) -> Option<PlayerSnapshot> {
+        let track = self.track()?;
+        let item = TrackItem {
+            title: track.title.clone(),
+            artists: track.artist.clone(),
+            album: track.album.clone(),
+            duration_ms: self.duration_ms,
+            available: true,
+            // trackId пустой: лайк, тексты и меню трека Spotify к файлу не относятся
+            uri: file_uri(&track.path),
+            ..TrackItem::default()
+        };
+        Some(PlayerSnapshot {
+            track: Some(item),
+            codec: self.codec.clone(),
+            playing: self.playing,
+            position_ms: self.position_ms,
+            duration_ms: self.duration_ms,
+            volume: self.volume,
+            current_index: -1,
+            error_text: self.error.clone(),
+            direction: 1,
+            queue: Arc::clone(&NO_QUEUE),
+            target: Target::Local,
+            is_local: true,
+            local: spotify.local.clone(),
+            can_control: true,
+            can_set_volume: true,
+            ..PlayerSnapshot::default()
+        })
+    }
+}
+
+// shortcut: путь без процент-кодирования (пробелы, обратные слэши Windows как есть); MPRIS кодирует id сам,
+// а url только показывается. Кодировать, если кто-то начнёт этот url открывать.
+pub fn file_uri(path: &str) -> String {
+    format!("file://{path}")
 }
 
 pub struct FileConfig {
@@ -609,6 +654,23 @@ mod tests {
         assert_eq!(neighbour(0, 3, -1), None);
         assert_eq!(neighbour(2, 3, -1), Some(1));
         assert_eq!(neighbour(0, 0, 1), None);
+    }
+
+    #[test]
+    fn a_chosen_file_stands_in_for_spotify() {
+        let spotify = PlayerSnapshot { volume: 0.9, is_local: false, ..PlayerSnapshot::default() };
+        let mut files = FileSnapshot { volume: 0.4, playing: true, duration_ms: 4000, ..FileSnapshot::default() };
+        let track = LocalTrack { path: "/m/a.flac".into(), title: "A".into(), artist: "B".into(), ..LocalTrack::default() };
+        files.queue = Arc::new(vec![track]);
+        assert!(files.as_player(&spotify).is_none(), "nothing chosen: the player shows Spotify");
+        files.index = Some(0);
+        let shown = files.as_player(&spotify).unwrap();
+        let track = shown.track.as_ref().unwrap();
+        assert_eq!((track.title.as_str(), track.artists.as_str(), track.uri.as_str()), ("A", "B", "file:///m/a.flac"));
+        assert!(track.track_id.is_empty());
+        assert!(shown.playing && shown.is_local && shown.queue.is_empty());
+        assert_eq!(shown.volume, 0.4);
+        assert!(Arc::ptr_eq(&shown.queue, &files.as_player(&spotify).unwrap().queue));
     }
 
     #[test]

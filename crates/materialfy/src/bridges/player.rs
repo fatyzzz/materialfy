@@ -14,10 +14,10 @@ use cxx::UniquePtr;
 use cxx_qt::{CxxQtType, Threading};
 use cxx_qt_lib::{QString, QStringList, QVariant};
 use md3_model::{DeviceItem, PlayContext, QueueRow, TrackItem};
-use sf_player::{LocalPlayback, PlayerEvent, PlayerSnapshot, Repeat};
+use sf_player::{FileSnapshot, LocalPlayback, PlayerEvent, PlayerSnapshot, Repeat};
 use mf_platform::{SettingKey, SettingValue};
 
-use super::{Delivery, forward_events, held, model_ptr, string_list, to_qmap, track_from_map, with_model};
+use super::{Delivery, forward_events, forward_watch, held, model_ptr, string_list, to_qmap, track_from_map, with_model};
 use crate::context::ctx;
 use crate::models::{DictListModel, ModelKind, to_row, to_rows};
 use crate::qt::{QVariantMap, json_to_qvariantmap};
@@ -351,6 +351,17 @@ impl Default for PlayerRust {
     }
 }
 
+/// Что показывать: выбранный локальный файл (своя маленькая очередь, sf_player::local_files) или Spotify.
+fn shown_snapshot() -> PlayerSnapshot {
+    let spotify = ctx().services.player.snapshot();
+    ctx().services.files.snapshot().as_player(&spotify).unwrap_or(spotify)
+}
+
+/// Кнопки плеера управляют файлом, пока он на экране.
+fn file_shown() -> bool {
+    ctx().services.files.snapshot().index.is_some()
+}
+
 /// Пауза перед записью громкости в настройки.
 const VOLUME_SAVE_DELAY: Duration = Duration::from_millis(400);
 
@@ -403,7 +414,14 @@ impl qobject::Player {
         this.volume_save += 1;
         let generation = this.volume_save;
         self.as_mut().volume_changed();
-        ctx().services.player.set_volume(value);
+        // громкость приложения одна: файл и Spotify на этом ПК звучат на ней; чужое устройство Connect не трогаем
+        let spotify = ctx().services.player.snapshot();
+        if file_shown() {
+            ctx().services.files.set_volume(value);
+        }
+        if !file_shown() || spotify.is_local || spotify.device.is_none() {
+            ctx().services.player.set_volume(value);
+        }
         self.schedule_volume_save(generation);
     }
 
@@ -423,7 +441,7 @@ impl qobject::Player {
             return;
         }
         self.as_mut().rust_mut().stale = None;
-        let s = ctx().services.player.snapshot();
+        let s = shown_snapshot();
         self.as_mut().sync(&s, false);
     }
 
@@ -443,6 +461,10 @@ impl qobject::Player {
     }
 
     fn set_shuffle(mut self: Pin<&mut Self>, value: bool) {
+        // у файлов своя очередь без перемешивания и повтора: режимы Spotify отсюда не трогаем
+        if file_shown() {
+            return;
+        }
         if value == self.shuffle {
             return;
         }
@@ -457,6 +479,10 @@ impl qobject::Player {
 
     /// Smart Shuffle включает и перемешивание; выключение оставляет обычное перемешивание.
     fn set_smart_shuffle(mut self: Pin<&mut Self>, value: bool) {
+        // у файлов своя очередь без перемешивания и повтора: режимы Spotify отсюда не трогаем
+        if file_shown() {
+            return;
+        }
         if value == self.smart_shuffle || (value && !self.smart_shuffle_available) {
             return;
         }
@@ -485,6 +511,10 @@ impl qobject::Player {
     }
 
     fn apply_repeat(mut self: Pin<&mut Self>, repeat: Repeat) {
+        // у файлов своя очередь без перемешивания и повтора: режимы Spotify отсюда не трогаем
+        if file_shown() {
+            return;
+        }
         if repeat == self.repeat_mode {
             return;
         }
@@ -552,27 +582,45 @@ impl qobject::Player {
     }
 
     fn toggle_play(&self) {
+        if file_shown() {
+            return ctx().services.files.toggle_play();
+        }
         ctx().services.player.toggle_play();
     }
 
     fn play(&self) {
+        if file_shown() {
+            return ctx().services.files.play();
+        }
         ctx().services.player.play();
     }
 
     fn pause(&self) {
+        if file_shown() {
+            return ctx().services.files.pause();
+        }
         ctx().services.player.pause();
     }
 
     fn stop(&self) {
+        if file_shown() {
+            return ctx().services.files.pause();
+        }
         ctx().services.player.stop();
     }
 
     fn next(&self) {
+        if file_shown() {
+            return ctx().services.files.next();
+        }
         ctx().services.player.next();
     }
 
     /// После 3 с — в начало трека, иначе предыдущий.
     fn previous(&self) {
+        if file_shown() {
+            return ctx().services.files.previous();
+        }
         ctx().services.player.previous();
     }
 
@@ -593,6 +641,9 @@ impl qobject::Player {
         this.position = fraction(ms, this.duration_ms);
         this.position_set_at = Some(Instant::now());
         self.position_changed();
+        if file_shown() {
+            return ctx().services.files.seek_ms(i64::from(ms));
+        }
         ctx().services.player.seek_ms(ms as i64);
     }
 
@@ -616,6 +667,9 @@ impl qobject::Player {
         this.position = fraction(ms, this.duration_ms);
         this.position_set_at = Some(Instant::now());
         self.as_mut().position_changed();
+        if file_shown() {
+            return ctx().services.files.seek_relative(i64::from(delta_ms));
+        }
         ctx().services.player.seek_relative(i64::from(delta_ms));
     }
 
@@ -716,7 +770,7 @@ impl qobject::Player {
         // только свою группу свойств — snapshot() клонируется как раньше, зато не
         // перестраиваются QString'ы и QMap'ы. Структурные события (трек, состояние,
         // очередь, устройство) редки — им остаётся полный sync().
-        let snapshot = ctx().services.player.snapshot();
+        let snapshot = shown_snapshot();
         match delivery {
             Delivery::Event(PlayerEvent::LevelChanged) => self.as_mut().sync_level(&snapshot),
             Delivery::Event(PlayerEvent::PositionChanged) => self.as_mut().sync_position(&snapshot),
@@ -943,6 +997,12 @@ impl qobject::Player {
         }
     }
 
+    /// Плеер файлов изменился: выбрал файл, сыграл дальше, отпустил экран обратно Spotify.
+    fn on_files(self: Pin<&mut Self>, _: FileSnapshot) {
+        let snapshot = shown_snapshot();
+        self.sync(&snapshot, false);
+    }
+
     fn sync_level(mut self: Pin<&mut Self>, s: &PlayerSnapshot) {
         // уровень — только пока он нужен QML
         let level = if self.levels_wanted { s.level } else { 0.0 };
@@ -957,8 +1017,9 @@ impl cxx_qt::Initialize for qobject::Player {
     fn initialize(mut self: Pin<&mut Self>) {
         let player = &ctx().services.player;
         let subscription = player.subscribe();
-        let snapshot = player.snapshot();
+        let snapshot = shown_snapshot();
         self.as_mut().sync(&snapshot, false);
         forward_events(self.qt_thread(), subscription.events, Self::on_event);
+        forward_watch(self.qt_thread(), ctx().services.files.subscribe(), Self::on_files);
     }
 }

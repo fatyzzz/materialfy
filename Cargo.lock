@@ -2593,6 +2593,7 @@ dependencies = [
  "futures",
  "md3-model",
  "mf-i18n",
+ "mf-local",
  "mf-lyrics",
  "mf-platform",
  "mf-theme",

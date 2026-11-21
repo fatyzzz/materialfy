@@ -14,6 +14,7 @@
 #include "materialfy/src/bridges/devices.cxxqt.h"
 #include "materialfy/src/bridges/home.cxxqt.h"
 #include "materialfy/src/bridges/library.cxxqt.h"
+#include "materialfy/src/bridges/local_music.cxxqt.h"
 #include "materialfy/src/bridges/lyrics.cxxqt.h"
 #include "materialfy/src/bridges/player.cxxqt.h"
 #include "materialfy/src/bridges/radio.cxxqt.h"
@@ -54,6 +55,7 @@ register_qml_types()
   singleton<Auth>("Auth");
   singleton<Library>("Library");
   singleton<Player>("Player");
+  singleton<LocalMusic>("LocalMusic");
   singleton<Devices>("Devices");
   singleton<Radio>("Radio");
   singleton<Home>("Home");

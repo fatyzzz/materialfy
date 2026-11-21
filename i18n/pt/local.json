@@ -1,3 +1,15 @@
 {
-  "Couldn't play this file": "Não foi possível tocar este arquivo"
+  "Couldn't play this file": "Não foi possível tocar este arquivo",
+  "Local files": "Arquivos locais",
+  "Choose a music folder": "Escolha uma pasta de músicas",
+  "Choose folder": "Escolher pasta",
+  "Change folder": "Trocar pasta",
+  "Choose another folder": "Escolher outra pasta",
+  "Looking for music in this folder…": "Procurando músicas nesta pasta…",
+  "Play music from your computer": "Músicas deste computador",
+  "Choose a folder with mp3, flac or ogg files. They play here, apart from your Spotify queue": "Escolha uma pasta com arquivos mp3, flac ou ogg. Eles tocam aqui, separados da sua fila do Spotify",
+  "This folder isn’t there anymore": "Esta pasta não existe mais",
+  "It was moved, renamed or is on a drive that isn’t connected": "Ela foi movida, renomeada ou está em um disco desconectado",
+  "No music in this folder": "Nenhuma música nesta pasta",
+  "Only mp3, flac and ogg files are shown, from this folder and the ones inside it": "Só aparecem arquivos mp3, flac e ogg desta pasta e das pastas dentro dela"
 }

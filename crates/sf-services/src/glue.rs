@@ -152,17 +152,18 @@ pub fn start_media_controls(
     rt: &Handle,
     settings: Arc<SettingsStore>,
     player: PlayerHandle,
+    files: FilePlayer,
     requests: broadcast::Sender<AppRequest>,
 ) -> Option<MediaStop> {
     // громкость из панели идёт в плеер; в настройки её пишет мост Player по volumeChanged
     let _ = settings;
     #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
     {
-        crate::extra::media::start(rt, player, requests).map(|media| MediaStop { media })
+        crate::extra::media::start(rt, player, files, requests).map(|media| MediaStop { media })
     }
     #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
     {
-        let _ = (rt, player, requests);
+        let _ = (rt, player, files, requests);
         None
     }
 }
