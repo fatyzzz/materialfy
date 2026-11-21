@@ -123,7 +123,11 @@ async fn run(api: Arc<ApiGateway>, call: ApiCall) -> ApiReply {
                 Ok(client) => {
                     let device = device.as_deref();
                     // перемешивание и запуск — одним упорядоченным обменом, иначе shuffle иногда проигрывает
-                    let shuffled = if shuffle { client.set_shuffle(true, device).await } else { Ok(()) };
+                    let shuffled = if shuffle || request.context_uri.as_deref() == Some(md3_model::context::DJ_URI) {
+                        client.set_shuffle(shuffle, device).await
+                    } else {
+                        Ok(())
+                    };
                     match shuffled {
                         Ok(()) => client.play(device, Some(&request)).await,
                         Err(error) => Err(error),
