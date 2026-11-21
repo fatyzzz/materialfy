@@ -8,6 +8,8 @@
 
 pub mod engine;
 pub mod handle;
+/// локальные файлы: своя очередь и поток, тот же вывод звука
+pub mod local_files;
 /// JSON pushes of the dealer (social-connect) for sf-services
 pub mod pushes;
 /// внутреннее «queue-state»
@@ -22,6 +24,7 @@ use tokio::sync::{broadcast, watch};
 pub use engine::sink::output_devices;
 pub use engine::{EngineConfig, LoadSpec, LocalState, RepeatMode, Rootlist, RootlistEntry};
 pub use handle::PlayerHandle;
+pub use local_files::{FileConfig, FilePlayer, FileSnapshot};
 pub use librespot_core::Session;
 pub use librespot_core::spclient::SpClient;
 pub use librespot_core::authentication::Credentials;

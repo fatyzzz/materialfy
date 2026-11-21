@@ -3741,6 +3741,7 @@ checksum = "e40ecf59e742e03336be6a3d53755e789fd05a059fa22dfa0ed624722319e183"
 dependencies = [
  "dasp_sample",
  "num-rational",
+ "symphonia",
 ]
 
 [[package]]
@@ -4106,6 +4107,7 @@ dependencies = [
  "md3-model",
  "mdns-sd",
  "mf-i18n",
+ "mf-local",
  "pbkdf2",
  "percent-encoding",
  "protobuf",

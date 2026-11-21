@@ -79,8 +79,9 @@ librespot-playback = { version = "0.8", default-features = false, features = ["r
 librespot-connect = { version = "0.8", default-features = false }
 librespot-metadata = { version = "0.8", default-features = false }
 librespot-protocol = { version = "0.8", default-features = false }
-# rodio даёт только микшер/очередь; устройство открывает fastframe-audio (cpal 0.18)
-rodio = { version = "0.21", default-features = false }
+# rodio даёт микшер/очередь и декодер локальных файлов (symphonia: mp3, flac, ogg/vorbis, их уже тянет librespot);
+# устройство открывает fastframe-audio (cpal 0.18)
+rodio = { version = "0.21", default-features = false, features = ["mp3", "flac", "vorbis"] }
 # fastframe: только эти два крейта, без egui. rev двигать вместе.
 fastframe-audio = { git = "https://github.com/dennisgr7/fastframe", rev = "f7dc6fbe938e8a953509d110cdba036f537e5b7e" }
 fastframe-now-playing = { git = "https://github.com/dennisgr7/fastframe", rev = "f7dc6fbe938e8a953509d110cdba036f537e5b7e" }

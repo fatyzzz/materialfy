@@ -3398,7 +3398,7 @@ fn error_is_no_device(error: Option<&str>) -> bool {
 pub(crate) const KEY_REFUSED_FOR_ACCOUNT: &str =
     "Spotify doesn't give this account the keys to play on this computer. Pick another device to play on";
 
-fn engine_error_text(error: &str) -> String {
+pub(crate) fn engine_error_text(error: &str) -> String {
     use crate::engine::{player, sink};
     if error == sink::NO_DEVICE {
         return mf_i18n::t("No playback device");

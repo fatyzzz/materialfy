@@ -32,7 +32,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use sf_api::ApiGateway;
-use sf_player::{PlayerConfig, PlayerHandle};
+use sf_player::{FileConfig, FilePlayer, PlayerConfig, PlayerHandle};
 use tokio::runtime::Handle;
 use tokio::sync::broadcast;
 use mf_platform::{SettingKey, SettingsStore};
@@ -97,6 +97,8 @@ pub struct Services {
     /// auto-update (checks start from the Updater bridge, not here)
     pub update: Arc<update::UpdateService>,
     pub player: PlayerHandle,
+    /// локальные файлы: своя очередь, мимо Spotify и Connect
+    pub files: FilePlayer,
     app_requests: broadcast::Sender<AppRequest>,
     media: Arc<Mutex<Option<glue::MediaStop>>>,
 }
@@ -139,6 +141,12 @@ impl Services {
             http: http.bypassing(covers_direct),
         };
         let player = PlayerHandle::start(rt, config, api.clone()).map_err(|e| anyhow::anyhow!("player: {e}"))?;
+        let device = settings.get_str(SettingKey::AudioDevice);
+        let files = FilePlayer::start(FileConfig {
+            volume: settings.get_f64(SettingKey::Volume).clamp(0.0, 1.0),
+            audio_device: (!device.is_empty()).then_some(device),
+            buffer_ms: sf_player::engine::sink::DEFAULT_BUFFER_MS,
+        });
         let store = sf_auth::Store::with_runtime(mf_platform::dirs::state_dir(), rt.clone());
         let auth = AuthService::new(rt.clone(), settings.clone(), api.clone(), http.clone(), player.clone(), store);
         let history = HistoryService::new(rt.clone(), auth.clone(), player.clone());
@@ -175,6 +183,7 @@ impl Services {
         let devices = DevicesService::new(rt.clone(), auth.clone(), player.clone(), settings.clone());
         let social = SocialService::new(rt.clone(), auth.clone(), player.clone());
         glue::spawn_settings_glue(rt, settings.clone(), player.clone());
+        glue::spawn_local_files_glue(rt, settings.clone(), player.clone(), files.clone());
 
         let (app_requests, _) = broadcast::channel(16);
         let update = update::UpdateService::new(rt.clone(), settings.clone(), http.clone(), app_requests.clone());
@@ -199,6 +208,7 @@ impl Services {
             social,
             update,
             player,
+            files,
             app_requests,
             media: Arc::new(Mutex::new(media)),
         })
@@ -209,8 +219,9 @@ impl Services {
     }
 
     /// При выходе (из GUI-потока после exec): сохранить сессию и историю, остановить движок и медиаклавиши.
-    /// Блокирует ≤ 2 с.
+    /// Блокирует ≤ 2,5 с.
     pub fn shutdown(&self) {
+        self.files.shutdown(Duration::from_millis(500));
         // последний трек сессии: его конец приходит только отсюда
         if let Some(ended) = self.player.shutdown().filter(|ended| ended.local) {
             self.history.note_played(ended.track, ended.context, ended.played);
