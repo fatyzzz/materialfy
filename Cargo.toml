@@ -115,13 +115,13 @@ hyper-proxy2 = { git = "https://github.com/crmne/hyper-proxy2", rev = "efca48113
 # librespot dev (после 0.8.0) + патчи Spotifast (normalisation_report, восстановление сессии, креды в памяти,
 # диапазон плейлиста, таймауты AP, стоп при отказе в ключе): ветка materialfy в github.com/fatyzzz/librespot.
 # Все крейты — из одного rev; librespot-oauth нужен как транзитивная зависимость librespot-core.
-librespot-audio = { git = "https://github.com/fatyzzz/librespot", rev = "4041835bd314969fbf8a1cb9f83e5eccba4bc36d" }
-librespot-connect = { git = "https://github.com/fatyzzz/librespot", rev = "4041835bd314969fbf8a1cb9f83e5eccba4bc36d" }
-librespot-core = { git = "https://github.com/fatyzzz/librespot", rev = "4041835bd314969fbf8a1cb9f83e5eccba4bc36d" }
-librespot-metadata = { git = "https://github.com/fatyzzz/librespot", rev = "4041835bd314969fbf8a1cb9f83e5eccba4bc36d" }
-librespot-oauth = { git = "https://github.com/fatyzzz/librespot", rev = "4041835bd314969fbf8a1cb9f83e5eccba4bc36d" }
-librespot-playback = { git = "https://github.com/fatyzzz/librespot", rev = "4041835bd314969fbf8a1cb9f83e5eccba4bc36d" }
-librespot-protocol = { git = "https://github.com/fatyzzz/librespot", rev = "4041835bd314969fbf8a1cb9f83e5eccba4bc36d" }
+librespot-audio = { git = "https://github.com/fatyzzz/librespot", rev = "2e11919ca0ab2aec377940e3a4aadaf2aa4a8367" }
+librespot-connect = { git = "https://github.com/fatyzzz/librespot", rev = "2e11919ca0ab2aec377940e3a4aadaf2aa4a8367" }
+librespot-core = { git = "https://github.com/fatyzzz/librespot", rev = "2e11919ca0ab2aec377940e3a4aadaf2aa4a8367" }
+librespot-metadata = { git = "https://github.com/fatyzzz/librespot", rev = "2e11919ca0ab2aec377940e3a4aadaf2aa4a8367" }
+librespot-oauth = { git = "https://github.com/fatyzzz/librespot", rev = "2e11919ca0ab2aec377940e3a4aadaf2aa4a8367" }
+librespot-playback = { git = "https://github.com/fatyzzz/librespot", rev = "2e11919ca0ab2aec377940e3a4aadaf2aa4a8367" }
+librespot-protocol = { git = "https://github.com/fatyzzz/librespot", rev = "2e11919ca0ab2aec377940e3a4aadaf2aa4a8367" }
 
 # Декодирование аудио на opt-level 0 слишком медленное; сам бинарник остаётся инкрементальным.
 [profile.dev.package."*"]
