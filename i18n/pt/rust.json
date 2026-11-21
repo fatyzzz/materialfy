@@ -241,5 +241,6 @@
   "“{0}” is no longer visible on the network": "“{0}” não está mais visível na rede",
   "Playback on this computer only works through an HTTP proxy — over SOCKS5 audio would bypass the proxy": "A reprodução neste computador só funciona por um proxy HTTP — via SOCKS5 o áudio ignoraria o proxy",
   "This track isn't available — moving on": "Esta faixa não está disponível — seguindo em frente",
-  "“{0}” isn't available — moving on": "“{0}” não está disponível — seguindo em frente"
+  "“{0}” isn't available — moving on": "“{0}” não está disponível — seguindo em frente",
+  "Spotify doesn't give this account the keys to play on this computer. Pick another device to play on": "O Spotify não fornece a esta conta as chaves para tocar neste computador. Escolha outro dispositivo"
 }
