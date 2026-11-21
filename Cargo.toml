@@ -8,6 +8,7 @@ members = [
     "crates/sf-services",
     "crates/mf-theme",
     "crates/mf-lyrics",
+    "crates/mf-local",
     "crates/mf-platform",
     "crates/mf-i18n",
     "crates/materialfy",
@@ -29,6 +30,7 @@ sf-player = { path = "crates/sf-player" }
 sf-services = { path = "crates/sf-services" }
 mf-theme = { path = "crates/mf-theme" }
 mf-lyrics = { path = "crates/mf-lyrics" }
+mf-local = { path = "crates/mf-local" }
 mf-platform = { path = "crates/mf-platform" }
 mf-i18n = { path = "crates/mf-i18n" }
 
