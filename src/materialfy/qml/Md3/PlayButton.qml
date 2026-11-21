@@ -19,6 +19,16 @@ Item {
 
     signal clicked()
 
+    Accessible.role: Accessible.Button
+    Accessible.name: playing || loading ? I18n.t("Pause") : I18n.t("Play")
+    Accessible.onPressAction: root.activate()
+
+    function activate() {
+        if (!enabled)
+            return
+        clicked()
+    }
+
     implicitWidth: size
     implicitHeight: size
 
@@ -70,6 +80,6 @@ Item {
         anchors.fill: parent
         hoverEnabled: true
         cursorShape: root.enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-        onClicked: root.clicked()
+        onClicked: root.activate()
     }
 }

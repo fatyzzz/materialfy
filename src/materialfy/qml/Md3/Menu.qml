@@ -15,6 +15,8 @@ Item {
 
     property var items: []
     readonly property bool opened: mainPopup.visible
+    onOpenedChanged: opened ? BackStack.push(root) : BackStack.pop(root)
+    Component.onDestruction: BackStack.pop(root)
     // Отдельным окном (Popup.Window). На Wayland по умолчанию — нет (см. CardPopup); островок KDE просит да: его окно
     // меньше меню, а где оно на экране, известно (окно ставит скрипт KWin)
     property bool windowed: !Qt.platform.pluginName.startsWith("wayland")

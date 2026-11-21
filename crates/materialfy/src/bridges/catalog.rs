@@ -444,7 +444,7 @@ impl qobject::Catalog {
         let Some(uri) = sf_api::link::parse(text) else { return false };
         if let Some(query) = sf_api::link::search_query(&uri) {
             self.as_mut().search_all(&QString::from(query.as_str()));
-            self.navigate("search", QVariantMap::default());
+            self.navigate("search", props(&[("initialQuery", Value::from(query))]));
             return true;
         }
         let (Some(kind), Some(id)) = (sf_api::util::uri_kind(&uri), sf_api::util::uri_id(&uri)) else { return false };

@@ -12,6 +12,17 @@ Item {
 
     signal clicked()
 
+    Accessible.role: Accessible.Button
+    Accessible.name: text
+    Accessible.selected: selected
+    Accessible.onPressAction: root.activate()
+
+    function activate() {
+        if (!enabled)
+            return
+        clicked()
+    }
+
     implicitHeight: 32
     // без текста — квадратный чип с одной иконкой
     readonly property bool _iconOnly: text === "" && _leading
@@ -61,6 +72,6 @@ Item {
         anchors.fill: parent
         radius: root.cornerRadius
         color: root.selected ? Theme.fgSecondaryContainer : Theme.fgSurfaceVariant
-        onClicked: root.clicked()
+        onClicked: root.activate()
     }
 }
