@@ -563,6 +563,34 @@ fn a_refused_audio_key_reconnects_the_session() {
     assert!(!core.take_effects().iter().any(|effect| matches!(effect, Effect::Reconnect)), "not twice in 30 s");
 }
 
+/// Ключ не выдан и после переподключения — говорим, что дело в аккаунте; сыгравший трек сбрасывает счёт.
+#[test]
+fn a_key_refused_again_after_a_reconnect_blames_the_account() {
+    let mut core = headless();
+    playing(&mut core, "spotify:track:honey");
+    let refuse = |core: &mut Core| {
+        let mut ok = core.local.clone();
+        ok.error = None;
+        ok.playback = Playback::Paused;
+        core.handle_local(ok.clone());
+        ok.error = Some(crate::engine::player::AUDIO_KEY_REFUSED.into());
+        core.handle_local(ok);
+        core.last_unavailable_reconnect = None; // как будто прошло 30 с
+        let shown = notices(core);
+        core.take_effects();
+        shown
+    };
+    let reconnecting = mf_i18n::t("Spotify audio dropped out. Reconnecting playback…");
+    assert!(refuse(&mut core).contains(&reconnecting));
+    assert!(refuse(&mut core).contains(&mf_i18n::t(KEY_REFUSED_FOR_ACCOUNT)));
+    let mut played = core.local.clone();
+    played.error = None;
+    played.playback = Playback::Playing;
+    core.handle_local(played);
+    core.take_effects();
+    assert!(refuse(&mut core).contains(&reconnecting), "a track that played resets the count");
+}
+
 /// Три «недоступно» за 20 с — тоже переподключение (по тексту, который движок пишет на самом деле).
 #[test]
 fn repeated_unavailable_tracks_reconnect_the_session() {

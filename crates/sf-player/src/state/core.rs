@@ -344,7 +344,9 @@ pub struct Core {
     pub(crate) local_list: Option<Vec<String>>,
     pub autoplay: bool,
     unavailable_at: Vec<Instant>,
-    last_unavailable_reconnect: Option<Instant>,
+    pub(crate) last_unavailable_reconnect: Option<Instant>,
+    /// ключ не выдан и после переподключения, а играть с тех пор так ничего и не начало
+    key_refused_reconnects: u8,
     /// громкость, которую движок ещё не подтвердил
     pub(crate) pending_local_volume: Option<(u16, Instant)>,
     pub(crate) pending_local_position: Option<(u32, Instant)>,
@@ -449,6 +451,7 @@ impl Core {
             autoplay: true,
             unavailable_at: Vec::new(),
             last_unavailable_reconnect: None,
+            key_refused_reconnects: 0,
             pending_local_volume: None,
             pending_local_position: None,
             volume: crate::volume_to_u16(volume),
@@ -1046,6 +1049,9 @@ impl Core {
         if state.seek_sequence != self.local.seek_sequence || track_changed {
             self.pending_local_position = None;
         }
+        if state.playback == Playback::Playing && !state.loading && state.error.is_none() {
+            self.key_refused_reconnects = 0;
+        }
         if let Some(error) = &state.error
             && self.local.error.as_deref() != Some(error.as_str())
         {
@@ -1079,7 +1085,16 @@ impl Core {
                     self.unavailable_at.clear();
                     self.last_unavailable_reconnect = Some(now);
                     self.effects.push(Effect::Reconnect);
-                    self.notice(mf_i18n::t("Spotify audio dropped out. Reconnecting playback…"));
+                    if key_refused && self.key_refused_reconnects >= 1 {
+                        // и новая сессия без ключа: так Spotify обходится с аккаунтами, заведёнными с 2024–2025
+                        // (librespot#1649), — переподключение не поможет, говорим как есть
+                        self.notice(mf_i18n::t(KEY_REFUSED_FOR_ACCOUNT));
+                    } else {
+                        self.notice(mf_i18n::t("Spotify audio dropped out. Reconnecting playback…"));
+                    }
+                    if key_refused {
+                        self.key_refused_reconnects = self.key_refused_reconnects.saturating_add(1);
+                    }
                 }
             }
         }
@@ -3378,6 +3393,10 @@ fn error_is_no_device(error: Option<&str>) -> bool {
 }
 
 /// Ошибка движка (LocalState.error — непереведённый английский, его сравнивает ядро) → текст интерфейса.
+/// Ключ не выдан и новой сессии.
+pub(crate) const KEY_REFUSED_FOR_ACCOUNT: &str =
+    "Spotify doesn't give this account the keys to play on this computer. Pick another device to play on";
+
 fn engine_error_text(error: &str) -> String {
     use crate::engine::{player, sink};
     if error == sink::NO_DEVICE {

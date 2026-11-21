@@ -87,9 +87,22 @@ mkdir -p "$APPDIR/usr/plugins"
 for d in iconengines multimedia wayland-graphics-integration-client wayland-decoration-client wayland-shell-integration; do
     [ -d "$QTDIR/plugins/$d" ] && cp -r "$QTDIR/plugins/$d" "$APPDIR/usr/plugins/"
 done
+# Canvas video: the FFmpeg backend only. plugin-qt deploys every multimedia plugin it finds, and GStreamer
+# would need the system's gst libraries, so take it out of this (CI-only) Qt
+rm -f "$QTDIR"/plugins/multimedia/libgstreamermediaplugin.so "$APPDIR"/usr/plugins/multimedia/libgstreamermediaplugin.so
+# linuxdeploy does not walk usr/plugins, so the FFmpeg plugin's libraries (Qt's FFmpeg and its X11 bits) go in by hand
+media_libs=()
+for lib in "$QTDIR"/lib/lib{avcodec,avformat,avutil,swresample,swscale}.so.[0-9]*; do
+    # the soname link (libavcodec.so.63): that is the name the plugin asks the loader for
+    [[ "$lib" =~ \.so\.[0-9]+$ ]] && media_libs+=(--library "$lib")
+done
+for soname in libXrandr.so.2 libXext.so.6; do
+    lib="$(ldconfig -p | awk -v n="$soname" '$1 == n { print $NF; exit }')"
+    [ -n "$lib" ] && media_libs+=(--library "$lib")
+done
 
 "linuxdeploy-$ARCH.AppImage" --appdir "$APPDIR" \
-    --executable "$APPDIR/usr/bin/materialfy" \
+    --executable "$APPDIR/usr/bin/materialfy" "${media_libs[@]}" \
     --desktop-file "$APPDIR/usr/share/applications/materialfy.desktop" \
     --icon-file "$APPDIR/usr/share/icons/hicolor/scalable/apps/materialfy.svg" \
     --plugin qt

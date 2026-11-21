@@ -120,7 +120,7 @@ mod tests {
 
     #[test]
     fn songs_in_a_row_from_one_playlist_are_one_row_per_day() {
-        let zone = TimeZone::get("America/Sao_Paulo").unwrap();
+        let zone = TimeZone::posix("<-03>3").unwrap(); // Сан-Паулу без базы поясов: в контейнере CI её нет
         let plays = [
             play("spotify:track:b", Some("spotify:playlist:r"), "2026-11-11T22:00:00Z"),
             play("spotify:track:a", Some("spotify:playlist:r"), "2026-11-11T21:55:00Z"),

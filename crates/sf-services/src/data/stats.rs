@@ -172,7 +172,8 @@ mod tests {
 
     // среда, 10 сентября 2026, по UTC
     fn now() -> Zoned {
-        "2026-09-10T20:00:00[UTC]".parse().unwrap()
+        // без базы поясов (её нет в контейнере CI)
+        "2026-09-10T20:00:00Z".parse::<jiff::Timestamp>().unwrap().to_zoned(jiff::tz::TimeZone::UTC)
     }
 
     #[test]
@@ -209,7 +210,7 @@ mod tests {
         let days: Vec<(&str, i64)> = stats.days.iter().map(|day| (day.date.as_str(), day.seconds)).collect();
         assert_eq!(days, [("2026-09-08", 0), ("2026-09-09", 30), ("2026-09-10", 60)]);
         // в Сан-Паулу (UTC−3) 01:00Z десятого — ещё девятое
-        let sao_paulo: Zoned = "2026-09-10T17:00:00[America/Sao_Paulo]".parse().unwrap();
+        let sao_paulo = now().timestamp().to_zoned(jiff::tz::TimeZone::posix("<-03>3").unwrap());
         let stats = listening(&plays, &sao_paulo, 3);
         let days: Vec<i64> = stats.days.iter().map(|day| day.seconds).collect();
         assert_eq!(days, [0, 90, 0]);
