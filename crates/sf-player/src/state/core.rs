@@ -2422,7 +2422,8 @@ impl Core {
         };
         let dj = uri == md3_model::context::DJ_URI;
         let shuffle = if dj { Some(false) } else { shuffle };
-        if dj {
+        // лишняя команда устройству (и вызов Web API для чужого) — только если повтор и правда включён
+        if dj && self.repeat() != RepeatMode::Off {
             self.set_repeat(RepeatMode::Off);
         }
         let mut request = PlayRequest::context(uri);
