@@ -17,6 +17,12 @@ Item {
     implicitHeight: content.implicitHeight + 16
 
     function play() {
+        // строка без трека играет контекст целиком (официальный клиент делает так же)
+        if ((friend.trackUri ?? "") === "") {
+            if ((friend.contextUri ?? "") !== "")
+                Player.playContext(friend.contextUri, "")
+            return
+        }
         const track = friend.trackUri ?? ""
         if (track === "")
             return
@@ -105,10 +111,11 @@ Item {
             RowLayout {
                 Layout.fillWidth: true
                 spacing: 0
+                // без трека — только то, откуда играет: название контекста вместо строки трека
                 LinkLabel {
                     Layout.maximumWidth: implicitWidth
                     Layout.fillWidth: true
-                    text: root.friend.track ?? ""
+                    text: (root.friend.track ?? "") !== "" ? root.friend.track : (root.friend.context ?? "")
                     type: "bodyMedium"
                     linkEnabled: (root.friend.albumUri ?? "") !== ""
                     onClicked: Catalog.openUri(root.friend.albumUri)
