@@ -117,7 +117,8 @@ fn apply_to_files(command: &Command, current: Option<&PlayerSnapshot>, files: &F
     }
     match command {
         Command::Play => files.play(),
-        Command::Pause | Command::Stop => files.pause(),
+        Command::Pause => files.pause(),
+        Command::Stop => files.stop(),
         Command::PlayPause => files.toggle_play(),
         Command::Next => files.next(),
         Command::Previous => files.previous(),

@@ -102,7 +102,10 @@ fn is_supported(path: &Path) -> bool {
 }
 
 fn read_tags(path: &Path) -> Option<LocalTrack> {
-    let file = lofty::read_from_path(path)
+    // файлы пользователя — чужие данные: паника lofty на битом файле не должна ронять весь скан
+    let file = std::panic::catch_unwind(|| lofty::read_from_path(path))
+        .inspect_err(|_| tracing::warn!("tag reader panicked on {}", path.display()))
+        .ok()?
         .inspect_err(|err| tracing::debug!("local file skipped {}: {err}", path.display()))
         .ok()?;
     let tag = file.primary_tag().or_else(|| file.first_tag());

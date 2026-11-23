@@ -431,7 +431,9 @@ impl Worker {
             None => {
                 self.output.stop();
                 self.decoding = None;
+                // очередь доиграна: экран и медиаклавиши снова у Spotify
                 self.state.send_modify(|s| {
+                    s.index = None;
                     s.playing = false;
                     s.position_ms = 0;
                 });

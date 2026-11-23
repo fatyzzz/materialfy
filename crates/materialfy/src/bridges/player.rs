@@ -604,7 +604,7 @@ impl qobject::Player {
 
     fn stop(&self) {
         if file_shown() {
-            return ctx().services.files.pause();
+            return ctx().services.files.stop();
         }
         ctx().services.player.stop();
     }
@@ -830,7 +830,8 @@ impl qobject::Player {
             this.is_episode = track.is_episode;
             this.codec = QString::from(s.codec.as_str());
             this.direction = s.direction;
-            if this.track_item.as_ref().map(|t| &t.track_id) != s.track.as_ref().map(|t| &t.track_id) {
+            // у файлов track_id пустой: сравниваем uri, иначе удержание позиции переезжает на следующий файл
+            if this.track_item.as_ref().map(|t| &t.uri) != s.track.as_ref().map(|t| &t.uri) {
                 this.position_set_at = None;
             }
             this.track_item = s.track.clone();
