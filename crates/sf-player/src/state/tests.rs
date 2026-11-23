@@ -2742,3 +2742,52 @@ fn pausing_during_a_switch_is_a_pause() {
     core.toggle_play();
     assert!(!core.believed_playing());
 }
+
+/// Состояние движка: играет `uri` с названием `title` (новая загрузка трека).
+fn reported(core: &Core, uri: &str, title: &str) -> LocalState {
+    let mut state = core.local.clone();
+    state.track = Some(LocalTrack { uri: uri.into(), title: title.into(), ..Default::default() });
+    state.playback = Playback::Playing;
+    state.loading = false;
+    state.track_sequence += 1;
+    state
+}
+
+#[test]
+fn switching_smart_shuffle_keeps_the_playing_track_when_the_reload_lands_on_another_row() {
+    let mut core = headless();
+    core.local.connected = true;
+    core.play_context(PlayContext::with_uri("playlist", "spotify:playlist:p"), Some("spotify:track:a".into()), None);
+    core.handle_local(reported(&core, "spotify:track:a", "Song A"));
+    core.age_intent(Duration::from_secs(60));
+    let _ = engine_commands(&mut core);
+
+    core.set_smart_shuffle(true);
+    let _ = engine_commands(&mut core);
+    // librespot не нашёл строку в контексте с рекомендациями и начал с первой
+    core.handle_local(reported(&core, "spotify:track:first", "Another song"));
+    assert!(matches!(
+        engine_commands(&mut core).as_slice(),
+        [PlayerCommand::Load(load)] if load.context_uri.as_deref() == Some("spotify:playlist:p?spotify-apply-lenses=enhance")
+            && load.offset_uri.as_deref() == Some("spotify:track:a")
+    ));
+
+    // вторая попытка тоже мимо: больше не перезагружаем
+    core.handle_local(reported(&core, "spotify:track:first", "Another song"));
+    assert!(engine_commands(&mut core).is_empty());
+}
+
+#[test]
+fn a_smart_shuffle_reload_onto_a_relinked_version_of_the_same_song_is_not_retried() {
+    let mut core = headless();
+    core.local.connected = true;
+    core.play_context(PlayContext::with_uri("playlist", "spotify:playlist:p"), Some("spotify:track:a".into()), None);
+    core.handle_local(reported(&core, "spotify:track:a", "Song A"));
+    core.age_intent(Duration::from_secs(60));
+    let _ = engine_commands(&mut core);
+
+    core.set_smart_shuffle(true);
+    let _ = engine_commands(&mut core);
+    core.handle_local(reported(&core, "spotify:track:a-relinked", "Song A"));
+    assert!(engine_commands(&mut core).is_empty());
+}

@@ -11,7 +11,7 @@ use sf_api::util::uri_kind;
 
 use super::map;
 use super::session::SessionData;
-use crate::engine::{LoadSpec, LocalState, Playback, PlayerCommand, RepeatMode};
+use crate::engine::{LoadSpec, LocalState, LocalTrack, Playback, PlayerCommand, RepeatMode};
 use crate::{
     ASSUMED_CONTEXT_HOLD_MS, INTENT_CEILING_MS, LocalPlayback, OPTIMISTIC_HOLD_MS, PLAYBACK_HOLD_MS,
     QUEUE_ADD_DEBOUNCE_MS, QUEUE_RECHECK_MS, QUEUE_STALE_RETRIES, REMOTE_POLL_ACTIVE_S, REMOTE_POLL_IDLE_S,
@@ -49,6 +49,8 @@ const LOST_AFTER_POLLS: u8 = 2;
 /// Smart Shuffle: /context-resolve с этой линзой отдаёт плейлист вместе с рекомендациями Spotify
 /// (заголовком линза в context-resolve не работает, только параметром).
 const SMART_LENS: &str = "?spotify-apply-lenses=enhance";
+/// сколько ждать, что перезагрузка контекста вернула играющий трек
+const KEPT_ROW_WINDOW: Duration = Duration::from_secs(20);
 
 pub const MAX_LIST: usize = 500;
 
@@ -268,6 +270,18 @@ pub(crate) struct TrackIntent {
     pub from_uri: Option<String>,
 }
 
+/// Перезагрузка того же контекста (Smart Shuffle вкл/выкл) с играющего трека: librespot ищет строку в новой
+/// форме контекста и, не найдя её (другой uid, строка за первой страницей), молча начинает с первой.
+#[derive(Clone, Debug)]
+pub(crate) struct KeptRow {
+    context: String,
+    uri: String,
+    title: String,
+    position_ms: u32,
+    retried: bool,
+    at: Instant,
+}
+
 #[derive(Clone, Debug)]
 pub(crate) struct QueueShufflePending {
     current_uri: Option<String>,
@@ -380,6 +394,7 @@ pub struct Core {
     pub(crate) smart_wanted: bool,
     /// рекомендации Smart Shuffle в последней прочитанной очереди
     recommended: Vec<String>,
+    kept_row: Option<KeptRow>,
     pub(crate) queued_play: Option<PlayRequest>,
     /// вход обещал поднять движок (воспроизведение на ПК разрешено): запуск до подключения ждёт его
     local_expected: Option<Instant>,
@@ -494,6 +509,7 @@ impl Core {
             queue_cleared: None,
             preloaded: None,
             queue_shuffle_pending: None,
+            kept_row: None,
             queue_reorder_pending: None,
             manual_queue: Vec::new(),
             pending_queue_adds: Vec::new(),
@@ -1042,6 +1058,9 @@ impl Core {
             self.optimistic_playing = None;
         }
         self.reconcile_local_track_intent(state.track.as_ref().map(|track| track.uri.as_str()));
+        if track_changed && !state.loading {
+            self.check_kept_row(state.track.as_ref());
+        }
         let held_volume = self.held_local_volume(state.volume);
         if held_volume.is_none() {
             self.volume = state.volume;
@@ -2214,6 +2233,7 @@ impl Core {
     pub fn play_request(&mut self, request: PlayRequest, shuffle_first: bool) {
         let mut request = request;
         self.queue_shuffle_pending = None;
+        self.kept_row = None;
         self.device_lost = false;
         self.lost = None;
         if shuffle_first {
@@ -2581,6 +2601,7 @@ impl Core {
     }
 
     pub fn next(&mut self) {
+        self.kept_row = None;
         if self.resume_only() {
             self.step_resume(true);
             return;
@@ -2598,6 +2619,7 @@ impl Core {
     }
 
     pub fn previous(&mut self) {
+        self.kept_row = None;
         if self.resume_only() {
             if i64::from(self.resume_position_ms) > RESTART_BEFORE_PREVIOUS_MS {
                 self.resume_position_ms = 0;
@@ -2797,13 +2819,41 @@ impl Core {
         let (Some(context), Some(now)) = (self.playing_context_uri(), self.now_playing()) else {
             return false;
         };
-        let mut request = PlayRequest::context(context);
+        let mut request = PlayRequest::context(context.clone());
+        let mut kept = None;
         if !self.recommended.contains(&now.track.uri) {
+            kept = Some(KeptRow {
+                context,
+                uri: now.track.uri.clone(),
+                title: now.track.title.clone(),
+                position_ms: now.position_ms,
+                retried: false,
+                at: Instant::now(),
+            });
             request = request.starting_at_uri(now.track.uri);
             request.position_ms = now.position_ms;
         }
         self.play_request(request, false);
+        self.kept_row = kept;
         true
+    }
+
+    /// После перезагрузки контекста движок должен играть тот же трек. Если он начал другой, грузим ещё раз
+    /// с того же трека: теперь контекст у движка уже этот, и строку он ищет по URI, а не по uid. Не нашёл и
+    /// тогда: оставляем как есть, перезагрузка по кругу хуже. Версия трека для другого рынка (другой URI,
+    /// то же название) считается тем же треком.
+    fn check_kept_row(&mut self, reported: Option<&LocalTrack>) {
+        let Some(reported) = reported else { return };
+        let Some(kept) = self.kept_row.take() else { return };
+        let same = reported.uri == kept.uri || (!kept.title.is_empty() && reported.title == kept.title);
+        if same || kept.retried || kept.at.elapsed() > KEPT_ROW_WINDOW || self.target() != Target::Local {
+            return;
+        }
+        tracing::debug!("reload started {} instead of {}, loading it again", reported.uri, kept.uri);
+        let mut request = PlayRequest::context(kept.context.clone()).starting_at_uri(kept.uri.clone());
+        request.position_ms = kept.position_ms;
+        self.play_request(request, false);
+        self.kept_row = Some(KeptRow { retried: true, at: Instant::now(), ..kept });
     }
 
     pub fn repeat(&self) -> RepeatMode {
