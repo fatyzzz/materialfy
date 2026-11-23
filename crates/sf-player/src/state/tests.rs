@@ -2777,6 +2777,34 @@ fn switching_smart_shuffle_keeps_the_playing_track_when_the_reload_lands_on_anot
     assert!(engine_commands(&mut core).is_empty());
 }
 
+/// Настоящий порядок событий librespot: Loading, TrackChanged ещё в загрузке, потом Playing.
+#[test]
+fn a_smart_shuffle_retry_fires_in_librespots_real_event_order() {
+    let mut core = headless();
+    core.local.connected = true;
+    core.play_context(PlayContext::with_uri("playlist", "spotify:playlist:p"), Some("spotify:track:a".into()), None);
+    core.handle_local(reported(&core, "spotify:track:a", "Song A"));
+    core.age_intent(Duration::from_secs(60));
+    let _ = engine_commands(&mut core);
+
+    core.set_smart_shuffle(true);
+    let _ = engine_commands(&mut core);
+    let mut loading = core.local.clone();
+    loading.loading = true;
+    core.handle_local(loading);
+    let mut changed = reported(&core, "spotify:track:first", "Another song");
+    changed.loading = true;
+    core.handle_local(changed);
+    assert!(engine_commands(&mut core).is_empty(), "not while still loading");
+    let mut settled = core.local.clone();
+    settled.loading = false;
+    core.handle_local(settled);
+    assert!(matches!(
+        engine_commands(&mut core).as_slice(),
+        [PlayerCommand::Load(load)] if load.offset_uri.as_deref() == Some("spotify:track:a")
+    ));
+}
+
 #[test]
 fn a_smart_shuffle_reload_onto_a_relinked_version_of_the_same_song_is_not_retried() {
     let mut core = headless();

@@ -11,7 +11,7 @@ use sf_api::util::uri_kind;
 
 use super::map;
 use super::session::SessionData;
-use crate::engine::{LoadSpec, LocalState, LocalTrack, Playback, PlayerCommand, RepeatMode};
+use crate::engine::{LoadSpec, LocalState, Playback, PlayerCommand, RepeatMode};
 use crate::{
     ASSUMED_CONTEXT_HOLD_MS, INTENT_CEILING_MS, LocalPlayback, OPTIMISTIC_HOLD_MS, PLAYBACK_HOLD_MS,
     QUEUE_ADD_DEBOUNCE_MS, QUEUE_RECHECK_MS, QUEUE_STALE_RETRIES, REMOTE_POLL_ACTIVE_S, REMOTE_POLL_IDLE_S,
@@ -280,6 +280,8 @@ pub(crate) struct KeptRow {
     position_ms: u32,
     retried: bool,
     at: Instant,
+    /// track_sequence на момент перезагрузки: сверяем первое состояние после неё
+    sequence: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -1058,9 +1060,7 @@ impl Core {
             self.optimistic_playing = None;
         }
         self.reconcile_local_track_intent(state.track.as_ref().map(|track| track.uri.as_str()));
-        if track_changed && !state.loading {
-            self.check_kept_row(state.track.as_ref());
-        }
+        self.check_kept_row(&state);
         let held_volume = self.held_local_volume(state.volume);
         if held_volume.is_none() {
             self.volume = state.volume;
@@ -2829,6 +2829,7 @@ impl Core {
                 position_ms: now.position_ms,
                 retried: false,
                 at: Instant::now(),
+                sequence: self.local.track_sequence,
             });
             request = request.starting_at_uri(now.track.uri);
             request.position_ms = now.position_ms;
@@ -2842,8 +2843,12 @@ impl Core {
     /// с того же трека: теперь контекст у движка уже этот, и строку он ищет по URI, а не по uid. Не нашёл и
     /// тогда: оставляем как есть, перезагрузка по кругу хуже. Версия трека для другого рынка (другой URI,
     /// то же название) считается тем же треком.
-    fn check_kept_row(&mut self, reported: Option<&LocalTrack>) {
-        let Some(reported) = reported else { return };
+    fn check_kept_row(&mut self, state: &LocalState) {
+        // librespot сообщает TrackChanged ещё в загрузке: ждём первое устоявшееся состояние после перезагрузки
+        if state.loading || self.kept_row.as_ref().is_none_or(|kept| kept.sequence == state.track_sequence) {
+            return;
+        }
+        let Some(reported) = state.track.as_ref() else { return };
         let Some(kept) = self.kept_row.take() else { return };
         let same = reported.uri == kept.uri || (!kept.title.is_empty() && reported.title == kept.title);
         if same || kept.retried || kept.at.elapsed() > KEPT_ROW_WINDOW || self.target() != Target::Local {
@@ -2853,7 +2858,7 @@ impl Core {
         let mut request = PlayRequest::context(kept.context.clone()).starting_at_uri(kept.uri.clone());
         request.position_ms = kept.position_ms;
         self.play_request(request, false);
-        self.kept_row = Some(KeptRow { retried: true, at: Instant::now(), ..kept });
+        self.kept_row = Some(KeptRow { retried: true, at: Instant::now(), sequence: state.track_sequence, ..kept });
     }
 
     pub fn repeat(&self) -> RepeatMode {
