@@ -19,6 +19,7 @@ sf-player.workspace = true
 sf-services.workspace = true
 mf-theme.workspace = true
 mf-lyrics.workspace = true
+mf-local.workspace = true
 mf-platform.workspace = true
 
 cxx.workspace = true

@@ -132,6 +132,8 @@ pub enum SettingKey {
     DjVoice,
     /// сообщать Spotify о прослушиваниях на этом ПК (gabo RawCoreStream), как официальный клиент; по умолчанию выкл.
     ReportPlays,
+    /// папка с локальной музыкой (страница «Локальные файлы»); пустая строка: не выбрана
+    LocalMusicFolder,
     // Spotify Connect и сеть
     /// имя Connect-устройства; "" — «Materialfy · <имя ПК>»
     DeviceName,
@@ -204,7 +206,7 @@ pub enum SettingType {
 }
 
 impl SettingKey {
-    pub const ALL: [SettingKey; 95] = [
+    pub const ALL: [SettingKey; 96] = [
         SettingKey::ThemeMode,
         SettingKey::SchemeVariant,
         SettingKey::AccentFromCover,
@@ -270,6 +272,7 @@ impl SettingKey {
         SettingKey::Crossfade,
         SettingKey::DjVoice,
         SettingKey::ReportPlays,
+        SettingKey::LocalMusicFolder,
         SettingKey::DeviceName,
         SettingKey::WebClientId,
         SettingKey::ApiLimitTipDismissed,
@@ -371,6 +374,7 @@ impl SettingKey {
             Crossfade => "crossfade",
             DjVoice => "djVoice",
             ReportPlays => "reportPlays",
+            LocalMusicFolder => "localMusicFolder",
             DeviceName => "deviceName",
             WebClientId => "webClientId",
             ApiLimitTipDismissed => "apiLimitTipDismissed",
@@ -486,6 +490,7 @@ impl SettingKey {
             Crossfade => Int(0),
             DjVoice => Bool(true),
             ReportPlays => Bool(false),
+            LocalMusicFolder => Str(String::new()),
             DeviceName => Str(String::new()),
             WebClientId => Str(String::new()),
             ApiLimitTipDismissed => Bool(false),
@@ -1267,7 +1272,7 @@ mod tests {
 
     #[test]
     fn schema() {
-        assert_eq!(SettingKey::ALL.len(), 95);
+        assert_eq!(SettingKey::ALL.len(), 96);
         for key in SettingKey::ALL {
             assert_eq!(SettingKey::from_name(key.name()), Some(key));
             assert_eq!(key.default_value().value_type(), key.value_type());

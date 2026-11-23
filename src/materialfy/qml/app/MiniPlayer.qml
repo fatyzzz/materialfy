@@ -84,7 +84,8 @@ Item {
             checkable: !Player.isEpisode
             autoToggle: false
             checked: !Player.isEpisode && Player.shuffle
-            enabled: Player.hasTrack && (Player.isEpisode || Player.source !== "radio")
+            // у локального файла (trackId пустой) нет перемешивания и повтора
+            enabled: Player.hasTrack && (Player.isEpisode || (Player.source !== "radio" && Player.trackId !== ""))
             onClicked: {
                 if (Player.isEpisode)
                     Player.seekRelative(-10000)
@@ -122,7 +123,7 @@ Item {
             checkable: !Player.isEpisode
             autoToggle: false
             checked: !Player.isEpisode && Player.repeat !== "off"
-            enabled: Player.hasTrack
+            enabled: Player.hasTrack && (Player.isEpisode || Player.trackId !== "")
             onClicked: Player.isEpisode ? Player.seekRelative(30000) : Player.cycleRepeat()
         } }
 
@@ -313,7 +314,8 @@ Item {
             iconSize: 30
             iconWeight: 700
             iconColor: enabled ? Theme.fgSurface : Qt.alpha(Theme.fgSurface, Theme.stateLayer.disabledContent)
-            enabled: Player.hasTrack
+            // у локального файла trackId пустой: меню трека Spotify к нему не относится
+            enabled: Player.hasTrack && Player.trackId !== ""
             onClicked: {
                 const p = miniMore.mapToItem(null, 0, 0)
                 Catalog.requestTrackMenuAt(Player.track, p.x, p.y, miniMore.width, miniMore.height)

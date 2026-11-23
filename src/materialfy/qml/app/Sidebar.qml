@@ -97,7 +97,8 @@ Item {
         { name: "releases", icon: "new_releases", text: I18n.t("New releases") },
         { name: "recents", icon: "history", text: I18n.t("Recents") },
         { name: "library", icon: "library_music", text: I18n.t("Library") },
-        { name: "liked", icon: "favorite", text: I18n.t("Liked Songs") }
+        { name: "liked", icon: "favorite", text: I18n.t("Liked Songs") },
+        { name: "local", icon: "folder_open", text: I18n.t("Local files") }
     ]
 
     // Плейлисты и папки верхнего уровня rootlist (порядок Spotify; закреплённые — первыми, их ставит сервис).
@@ -315,7 +316,8 @@ Item {
                 icon: modelData.icon
                 text: modelData.text
                 // до входа разделы неактивны (38 %): смотреть в них нечего; «Главная» — с приглашением войти
-                enabled: root.signedIn || modelData.name === "home"
+                // локальные файлы играют и без аккаунта
+                enabled: root.signedIn || modelData.name === "home" || modelData.name === "local"
                 opacity: enabled ? 1 : Theme.stateLayer.disabledContent
                 // «Библиотека» не подсвечена, пока внутри открыта папка — её подсвечивает пункт папки
                 selected: root.router.rootName === modelData.name

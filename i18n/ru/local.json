@@ -1,0 +1,15 @@
+{
+  "Couldn't play this file": "Не удалось воспроизвести этот файл",
+  "Local files": "Локальные файлы",
+  "Choose a music folder": "Выберите папку с музыкой",
+  "Choose folder": "Выбрать папку",
+  "Change folder": "Сменить папку",
+  "Choose another folder": "Выбрать другую папку",
+  "Looking for music in this folder…": "Ищу музыку в этой папке…",
+  "Play music from your computer": "Музыка с этого компьютера",
+  "Choose a folder with mp3, flac or ogg files. They play here, apart from your Spotify queue": "Выберите папку с файлами mp3, flac или ogg. Они играют здесь, отдельно от очереди Spotify",
+  "This folder isn’t there anymore": "Этой папки больше нет",
+  "It was moved, renamed or is on a drive that isn’t connected": "Её переместили, переименовали или она на отключённом диске",
+  "No music in this folder": "В этой папке нет музыки",
+  "Only mp3, flac and ogg files are shown, from this folder and the ones inside it": "Показываются только файлы mp3, flac и ogg из этой папки и вложенных"
+}

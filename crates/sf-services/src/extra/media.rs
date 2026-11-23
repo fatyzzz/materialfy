@@ -1,12 +1,13 @@
 //! Системная панель «Сейчас играет» и медиаклавиши через fastframe-now-playing: SMTC на Windows, Now Playing на macOS,
 //! MPRIS на Linux (org.mpris.MediaPlayer2.materialfy). Свой поток: туда приходят снимки плеера (из задачи tokio)
 //! и пробуждения «есть команды»; команды уходят в PlayerHandle, Raise/Quit — в AppRequest.
+//! Пока выбран локальный файл, панель показывает его (FileSnapshot::as_player) и команды идут плееру файлов.
 use std::path::PathBuf;
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use fastframe_now_playing::{App, Command, Controls, NowPlaying, Playback, Repeat as NpRepeat, State, Track};
-use sf_player::{PlayerHandle, PlayerSnapshot, Repeat};
+use sf_player::{FilePlayer, PlayerHandle, PlayerSnapshot, Repeat};
 use tokio::runtime::Handle;
 use tokio::sync::broadcast;
 
@@ -109,6 +110,40 @@ pub fn jumped(prev: &PlayerSnapshot, elapsed: Duration, now: &PlayerSnapshot) ->
     (now.position_ms - expected).abs() > SEEK_JUMP_MS
 }
 
+/// Команда системы → плеер файлов, если сейчас показан файл.
+fn apply_to_files(command: &Command, current: Option<&PlayerSnapshot>, files: &FilePlayer, player: &PlayerHandle) -> bool {
+    if files.snapshot().index.is_none() {
+        return false;
+    }
+    match command {
+        Command::Play => files.play(),
+        Command::Pause => files.pause(),
+        Command::Stop => files.stop(),
+        Command::PlayPause => files.toggle_play(),
+        Command::Next => files.next(),
+        Command::Previous => files.previous(),
+        Command::SeekBy(ms) => files.seek_relative(*ms),
+        Command::SetPosition { track_id: id, position } => {
+            if current.and_then(track_id).as_deref() == Some(id.as_str()) {
+                files.seek_ms(position.as_millis() as i64);
+            }
+        }
+        Command::SetVolume(volume) => {
+            let volume = volume.clamp(0.0, 1.0);
+            files.set_volume(volume);
+            // громкость приложения одна: Spotify на этом ПК следует за ней
+            let spotify = player.snapshot();
+            if spotify.device.is_none() || spotify.is_local {
+                player.set_volume(volume);
+            }
+        }
+        // у файлов нет перемешивания и повтора
+        Command::SetShuffle(_) | Command::SetRepeat(_) => {}
+        Command::OpenUri(_) | Command::Raise | Command::Quit => return false,
+    }
+    true
+}
+
 /// Команда системы → плеер / оболочка.
 pub fn apply(command: Command, current: Option<&PlayerSnapshot>, player: &PlayerHandle, requests: &broadcast::Sender<AppRequest>) {
     match command {
@@ -133,11 +168,12 @@ pub fn apply(command: Command, current: Option<&PlayerSnapshot>, player: &Player
 }
 
 /// Запустить поток медиаклавиш. None — поток не создался.
-pub fn start(rt: &Handle, player: PlayerHandle, requests: broadcast::Sender<AppRequest>) -> Option<Media> {
+pub fn start(rt: &Handle, player: PlayerHandle, files: FilePlayer, requests: broadcast::Sender<AppRequest>) -> Option<Media> {
     let (tx, rx) = mpsc::channel::<Msg>();
     let (done_tx, done_rx) = mpsc::channel();
     let wake = tx.clone();
     let commands_player = player.clone();
+    let commands_files = files.clone();
     let spawned = std::thread::Builder::new().name("now-playing".into()).spawn(move || {
         let app = App {
             desktop_entry: fastframe_now_playing::desktop_entry(DESKTOP_ENTRY),
@@ -160,7 +196,10 @@ pub fn start(rt: &Handle, player: PlayerHandle, requests: broadcast::Sender<AppR
                 }
                 Msg::Commands => {
                     for command in controls.commands() {
-                        apply(command, last.as_ref().map(|(s, _)| s), &commands_player, &requests);
+                        let current = last.as_ref().map(|(s, _)| s);
+                        if !apply_to_files(&command, current, &commands_files, &commands_player) {
+                            apply(command, current, &commands_player, &requests);
+                        }
                     }
                 }
                 Msg::Stop => break,
@@ -174,16 +213,18 @@ pub fn start(rt: &Handle, player: PlayerHandle, requests: broadcast::Sender<AppR
         return None;
     }
     let mut snapshots = player.subscribe().snapshot;
+    let mut local = files.subscribe();
     let forward = tx.clone();
     rt.spawn(async move {
-        let first = snapshots.borrow_and_update().clone();
-        if forward.send(Msg::Snapshot(Box::new(first))).is_err() {
-            return;
-        }
-        while snapshots.changed().await.is_ok() {
-            let snapshot = snapshots.borrow_and_update().clone();
-            if forward.send(Msg::Snapshot(Box::new(snapshot))).is_err() {
+        loop {
+            let spotify = snapshots.borrow_and_update().clone();
+            let shown = local.borrow_and_update().as_player(&spotify).unwrap_or(spotify);
+            if forward.send(Msg::Snapshot(Box::new(shown))).is_err() {
                 return;
+            }
+            tokio::select! {
+                changed = snapshots.changed() => if changed.is_err() { return },
+                changed = local.changed() => if changed.is_err() { return },
             }
         }
     });

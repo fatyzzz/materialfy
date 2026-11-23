@@ -5,7 +5,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use sf_auth::ProxyConfig;
-use sf_player::{EngineConfig, PlayerHandle};
+use sf_player::{EngineConfig, FilePlayer, PlayerHandle};
 use tokio::runtime::Handle;
 use tokio::sync::broadcast;
 use mf_platform::{SettingKey, SettingsStore};
@@ -29,6 +29,53 @@ pub fn spawn_settings_glue(rt: &Handle, settings: Arc<SettingsStore>, player: Pl
                     player.set_autoplay(settings.get_bool(SettingKey::Autoplay));
                     apply_audio_fx(&settings);
                     apply_report_plays(&settings);
+                }
+                Ok(_) => {}
+                Err(broadcast::error::RecvError::Closed) => return,
+            }
+        }
+    });
+}
+
+/// Локальные файлы и Spotify на этом ПК не звучат вместе: запуск файла ставит Spotify на паузу, запуск Spotify
+/// останавливает файлы совсем (очередь забывается, плеер снова показывает Spotify). Spotify на другом
+/// устройстве Connect не трогаем: он здесь не слышен. Громкость и устройство вывода файлы берут из настроек.
+pub fn spawn_local_files_glue(rt: &Handle, settings: Arc<SettingsStore>, player: PlayerHandle, files: FilePlayer) {
+    let mut local = files.subscribe();
+    let spotify = player.clone();
+    rt.spawn(async move {
+        let mut was_playing = local.borrow_and_update().playing;
+        while local.changed().await.is_ok() {
+            let playing = local.borrow_and_update().playing;
+            let heard = spotify.snapshot();
+            if playing && !was_playing && heard.is_local && heard.playing {
+                spotify.pause();
+            }
+            was_playing = playing;
+        }
+    });
+    let mut snapshots = player.subscribe().snapshot;
+    let quiet = files.clone();
+    rt.spawn(async move {
+        let heard = |s: &sf_player::PlayerSnapshot| s.is_local && s.playing;
+        let mut was_playing = heard(&snapshots.borrow_and_update());
+        while snapshots.changed().await.is_ok() {
+            let playing = heard(&snapshots.borrow_and_update());
+            if playing && !was_playing && quiet.snapshot().index.is_some() {
+                quiet.stop();
+            }
+            was_playing = playing;
+        }
+    });
+    let mut changes = settings.subscribe();
+    rt.spawn(async move {
+        loop {
+            match changes.recv().await {
+                // плеер файлов сам пропускает то, что не изменилось
+                Ok(SettingKey::Volume | SettingKey::AudioDevice) | Err(broadcast::error::RecvError::Lagged(_)) => {
+                    files.set_volume(settings.get_f64(SettingKey::Volume));
+                    let device = settings.get_str(SettingKey::AudioDevice);
+                    files.set_output_device((!device.is_empty()).then_some(device));
                 }
                 Ok(_) => {}
                 Err(broadcast::error::RecvError::Closed) => return,
@@ -105,17 +152,18 @@ pub fn start_media_controls(
     rt: &Handle,
     settings: Arc<SettingsStore>,
     player: PlayerHandle,
+    files: FilePlayer,
     requests: broadcast::Sender<AppRequest>,
 ) -> Option<MediaStop> {
     // громкость из панели идёт в плеер; в настройки её пишет мост Player по volumeChanged
     let _ = settings;
     #[cfg(any(windows, target_os = "macos", target_os = "linux"))]
     {
-        crate::extra::media::start(rt, player, requests).map(|media| MediaStop { media })
+        crate::extra::media::start(rt, player, files, requests).map(|media| MediaStop { media })
     }
     #[cfg(not(any(windows, target_os = "macos", target_os = "linux")))]
     {
-        let _ = (rt, player, requests);
+        let _ = (rt, player, files, requests);
         None
     }
 }

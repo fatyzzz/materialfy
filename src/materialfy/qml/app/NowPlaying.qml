@@ -463,7 +463,8 @@ Item {
                     IconButton {
                         icon: Player.isEpisode ? "replay_10" : "shuffle"; size: "m"
                         checkable: !Player.isEpisode; autoToggle: false; checked: !Player.isEpisode && Player.shuffle
-                        enabled: Player.isEpisode || Player.source !== "radio"
+                        // у локального файла (trackId пустой) нет перемешивания и повтора
+                        enabled: Player.isEpisode || (Player.source !== "radio" && Player.trackId !== "")
                         style: checked ? "tonal" : "standard"
                         onClicked: {
                             if (Player.isEpisode)
@@ -496,6 +497,7 @@ Item {
                     IconButton {
                         icon: Player.isEpisode ? "forward_30" : Player.repeat === "one" ? "repeat_one" : "repeat"; size: "m"
                         checkable: !Player.isEpisode; autoToggle: false; checked: !Player.isEpisode && Player.repeat !== "off"
+                        enabled: Player.isEpisode || Player.trackId !== ""
                         style: checked ? "tonal" : "standard"
                         onClicked: Player.isEpisode ? Player.seekRelative(30000) : Player.cycleRepeat()
                     }
@@ -554,7 +556,8 @@ Item {
                         icon: "more_horiz"
                         iconSize: 30
                         iconWeight: 700
-                        enabled: Player.hasTrack
+                        // у локального файла trackId пустой: меню трека Spotify к нему не относится
+                        enabled: Player.hasTrack && Player.trackId !== ""
                         onClicked: {
                             const p = bigMore.mapToItem(null, 0, 0)
                             Catalog.requestTrackMenuAt(Player.track, p.x, p.y, bigMore.width, bigMore.height)

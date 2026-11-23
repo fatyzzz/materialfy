@@ -84,10 +84,12 @@ Item {
     property bool previewMode: false
     property var previewLines: []
     property real previewPos: 0
-    readonly property var lines: previewMode ? previewLines : Lyrics.lines
+    // у локального файла текстов нет: Lyrics следит за треком Spotify
+    readonly property bool _file: Player.uri.startsWith("file:")
+    readonly property var lines: previewMode ? previewLines : _file ? [] : Lyrics.lines
     // Трек уже сменился, а текст ещё от прошлого: гасим и не обрабатываем (иначе позиция 0 запускает
     // каскад прокрутки по всем строкам старого текста — несколько тяжёлых кадров подряд).
-    readonly property bool stale: !previewMode && Lyrics.trackId !== Player.trackId
+    readonly property bool stale: !previewMode && !_file && Lyrics.trackId !== Player.trackId
     readonly property bool live: visible && !stale && lines.length > 0
     onLiveChanged: if (live && !previewMode) { jumpTimer.restart(); sync(Player.positionMs / 1000); tick() }
 
@@ -396,7 +398,7 @@ Item {
     EmptyState {
         anchors.centerIn: parent
         width: Math.min(parent.width - 32, 380)
-        visible: !root.previewMode && !root.stale && root.lines.length === 0 && Lyrics.status !== "loading"
+        visible: !root.previewMode && !root.stale && root.lines.length === 0 && (root._file || Lyrics.status !== "loading")
         icon: "title"
         shape: "flower6"
         title: !Player.hasTrack ? I18n.t("Nothing's playing")
@@ -410,7 +412,7 @@ Item {
     }
     LoadingIndicator {
         anchors.centerIn: parent
-        visible: !root.previewMode && (Lyrics.status === "loading" || (root.stale && Player.hasTrack))
+        visible: !root.previewMode && !root._file && (Lyrics.status === "loading" || (root.stale && Player.hasTrack))
     }
 
     // ── подложка под текст ──────────────────────────────────────────────────

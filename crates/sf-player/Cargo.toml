@@ -8,6 +8,7 @@ license.workspace = true
 
 [dependencies]
 mf-i18n.workspace = true
+mf-local.workspace = true
 md3-model.workspace = true
 sf-auth.workspace = true
 sf-api.workspace = true
